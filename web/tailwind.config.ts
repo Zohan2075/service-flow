@@ -10,12 +10,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: "#2094f3",
-        "background-light": "#f5f7f8",
-        "background-dark": "#101a22",
+        primary: "rgb(var(--sf-primary) / <alpha-value>)",
+        surface: "rgb(var(--sf-surface) / <alpha-value>)",
+        canvas: "rgb(var(--sf-bg) / <alpha-value>)",
       },
       fontFamily: {
-        display: ["Inter", "sans-serif"],
+        display: ["var(--font-inter)", "sans-serif"],
       },
       borderRadius: {
         DEFAULT: "0.25rem",

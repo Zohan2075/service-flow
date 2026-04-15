@@ -2,15 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
+/* Safe area for mobile bottom nav overlap */
+.pb-safe-mobile {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.5rem);
+}
+
 :root {
-  --color-primary: #2094f3;
+  --sf-primary: 32 148 243;
+  --sf-surface: 255 255 255;
+  --sf-bg: 245 247 248;
+}
+
+:root.dark {
+  --sf-surface: 15 23 42;
+  --sf-bg: 16 26 34;
 }
 
 * {
@@ -20,4 +31,8 @@
 html,
 body {
   height: 100%;
+}
+
+body {
+  min-height: 100dvh;
 }

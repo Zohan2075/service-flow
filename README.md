@@ -1,191 +1,102 @@
-# ServiceFlow 🗂️
+# ServiceFlow
 
-A full-stack service time tracking application with:
+A browser-based service time tracking app. All data lives in the browser (IndexedDB) with optional Google Drive backup.
 
-| Layer | Stack |
+| Component | Stack |
 |---|---|
-| **Backend** | Python · FastAPI · SQLAlchemy async · Alembic · Supabase (PostgreSQL) |
-| **Web** | Next.js 15 · TailwindCSS · NextAuth · TanStack Query |
-| **Mobile** | Flutter · Riverpod · go_router · TableCalendar |
-| **Auth** | JWT + Google OAuth (email/password also supported) |
+| **Web** | Next.js 15 · React 19 · TailwindCSS · Zustand |
+| **Auth** | Google Sign-In (Google Identity Services) |
+| **Storage** | IndexedDB (runtime) · JSON file (export/import) · Google Drive (backup/restore) |
 
 ---
 
-## 📁 Project Structure
+## Features
 
-```
-Service tracker/
-├── backend/          # FastAPI REST API
-├── web/              # Next.js web dashboard
-└── mobile/           # Flutter Android app
-```
-
----
-
-## 🚀 Quick Start
-
-### 1. Supabase Setup
-
-1. Create a free project at [supabase.com](https://supabase.com)
-2. Go to **Settings → Database** and copy:
-   - `SUPABASE_URL`
-   - `SUPABASE_KEY` (anon public)
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `DATABASE_URL` (connection string using `postgresql+asyncpg://...`)
-3. Go to **Authentication → Providers** and enable **Google**
-4. Add your Google OAuth credentials (from Google Cloud Console)
+- Calendar-based service time logging
+- Customizable service types with colors and Material icons
+- Two entry modes: exact start/end time range, or manual duration
+- Monthly reports with per-service-type breakdowns
+- Light / Dark / System theme
+- Export & import data as a single JSON file
+- Backup & restore via Google Drive
+- Fully offline — no backend required
 
 ---
 
-### 2. Google Cloud OAuth Setup
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a project → **APIs & Services → Credentials → Create OAuth 2.0 Client ID**
-3. Add authorized redirect URIs:
-   - `http://localhost:3000/api/auth/callback/google` (web dev)
-   - Your production URL
-4. Copy `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
-
----
-
-### 3. Backend
-
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # macOS/Linux
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your Supabase + Google credentials
-
-# Run database migrations
-alembic upgrade head
-
-# Start development server
-uvicorn app.main:app --reload --port 8000
-```
-
-API docs available at: http://localhost:8000/docs
-
----
-
-### 4. Web App
+## Quick Start
 
 ```bash
 cd web
-
-# Install dependencies
 npm install
-
-# Configure environment
-cp .env.local.example .env.local
-# Edit .env.local with your credentials
-
-# Start development server
 npm run dev
 ```
 
-Open: http://localhost:3000
+Open http://localhost:3000
 
 ---
 
-### 5. Flutter Mobile App
+## Netlify Deployment
 
-```bash
-cd mobile
+The web app is configured for static export so Netlify can publish it directly.
 
-# Get packages
-flutter pub get
+1. Connect the repository in Netlify.
+2. Netlify will read `netlify.toml` automatically.
+3. Set the production environment variable below in Netlify if you want Google sign-in and Drive backup enabled.
 
-# Run code generation (for Riverpod etc.)
-dart run build_runner build --delete-conflicting-outputs
-
-# Run on Android emulator (API URL auto-points to 10.0.2.2:8000)
-flutter run
-
-# Build release APK
-flutter build apk --release
+```env
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-> **Note:** For physical device, set `API_BASE_URL` in `lib/core/network/dio_provider.dart` to your machine's LAN IP.
+The effective Netlify settings are:
 
----
-
-## 🏛️ Database Schema
-
-```sql
-users
-  id UUID PK
-  email VARCHAR(255) UNIQUE
-  full_name VARCHAR(255)
-  avatar_url VARCHAR(1024)
-  hashed_password VARCHAR(1024)
-  google_id VARCHAR(255) UNIQUE
-  is_active BOOLEAN
-  is_verified BOOLEAN
-  created_at / updated_at TIMESTAMPTZ
-
-service_types
-  id UUID PK
-  user_id UUID FK→users
-  name VARCHAR(100)
-  description VARCHAR(500)
-  color VARCHAR(7)      -- hex #rrggbb
-  icon VARCHAR(50)      -- Material icon name
-  sort_order INT
-  is_active BOOLEAN
-  created_at / updated_at TIMESTAMPTZ
-
-time_entries
-  id UUID PK
-  user_id UUID FK→users
-  service_type_id UUID FK→service_types
-  title VARCHAR(200)
-  notes TEXT
-  location VARCHAR(255)
-  start_time TIMESTAMPTZ
-  end_time TIMESTAMPTZ
-  duration_seconds INT
-  created_at / updated_at TIMESTAMPTZ
+```text
+Base directory: web
+Build command: npm run build
+Publish directory: out
 ```
 
 ---
 
-## 🔌 API Endpoints
+## Google OAuth Setup
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/v1/auth/register` | Register with email+password |
-| POST | `/api/v1/auth/login` | Login with email+password |
-| POST | `/api/v1/auth/google` | Exchange Google ID token for JWT |
-| POST | `/api/v1/auth/refresh` | Refresh access token |
-| GET | `/api/v1/auth/me` | Get current user |
-| GET | `/api/v1/service-types` | List service types |
-| POST | `/api/v1/service-types` | Create service type |
-| PATCH | `/api/v1/service-types/:id` | Update service type |
-| DELETE | `/api/v1/service-types/:id` | Delete service type |
-| GET | `/api/v1/time-entries` | List entries (filterable) |
-| GET | `/api/v1/time-entries/calendar?month=&year=` | Calendar view grouped by day |
-| POST | `/api/v1/time-entries` | Create time entry |
-| PATCH | `/api/v1/time-entries/:id` | Update entry |
-| DELETE | `/api/v1/time-entries/:id` | Delete entry |
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Create a project → **APIs & Services → Credentials → Create OAuth 2.0 Client ID**
+3. Application type: **Web application**
+4. Authorized JavaScript origins: `http://localhost:3000` (and your production URL)
+5. Enable the **Google Drive API** under APIs & Services → Library
+6. Create a `.env.local` file in the `web/` directory:
+
+```env
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+For Netlify production, add the same variable in the Netlify site environment settings and include your Netlify domain in the authorized JavaScript origins.
 
 ---
 
-## 🎨 Theme & Colors
+## Data Model
 
-The design follows the **ServiceFlow** design system:
+All data is stored in a single JSON document:
 
-- **Primary**: `#2094f3` (blue)
+```json
+{
+  "version": 1,
+  "exported_at": "ISO 8601",
+  "profile": { "google_id", "name", "email", "image" },
+  "settings": { "theme": "light|dark|system" },
+  "service_types": [{ "id", "name", "color", "icon", ... }],
+  "time_entries": [{ "id", "title", "start_time", "end_time", "duration_seconds", ... }]
+}
+```
+
+The same format is used for local export/import and Google Drive backup/restore.
+
+---
+
+## Theme & Colors
+
+- **Primary**: `#2094f3`
 - **Background Light**: `#f5f7f8`
 - **Background Dark**: `#101a22`
-- Service types have customizable colors + Material icons
-
-Supports **Light / Dark / System** theme switching on both Web and Mobile.
+- Service types have customizable colors + Material Symbols icons
+- Supports Light / Dark / System theme switching
