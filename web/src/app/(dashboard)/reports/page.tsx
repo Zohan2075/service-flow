@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
 import { format, subMonths } from "date-fns";
-import { timeEntriesApi, serviceTypesApi, type CalendarDay } from "@/lib/api";
+import { useStore } from "@/lib/store";
+import { buildCalendarDays, computeDurationSeconds } from "@/types/data";
 import { formatDuration } from "@/lib/utils";
 
 export default function ReportsPage() {
@@ -11,15 +11,13 @@ export default function ReportsPage() {
   const month = currentDate.getMonth() + 1;
   const year = currentDate.getFullYear();
 
-  const { data: calendarData = [] } = useQuery<CalendarDay[]>({
-    queryKey: ["calendar", month, year],
-    queryFn: () => timeEntriesApi.calendar(month, year),
-  });
+  const timeEntries = useStore((s) => s.timeEntries);
+  const serviceTypes = useStore((s) => s.serviceTypes);
 
-  const { data: serviceTypes = [] } = useQuery({
-    queryKey: ["service-types"],
-    queryFn: serviceTypesApi.list,
-  });
+  const calendarData = useMemo(
+    () => buildCalendarDays(timeEntries, year, month),
+    [timeEntries, year, month]
+  );
 
   const totalSeconds = calendarData.reduce(
     (sum, d) => sum + d.total_duration_seconds,
@@ -39,7 +37,7 @@ export default function ReportsPage() {
           count: 0,
         };
       }
-      byType[entry.service_type_id].seconds += entry.duration_seconds ?? 0;
+      byType[entry.service_type_id].seconds += computeDurationSeconds(entry);
       byType[entry.service_type_id].count += 1;
     });
   });
@@ -48,7 +46,7 @@ export default function ReportsPage() {
 
   return (
     <>
-      <header className="flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+      <header className="flex items-center justify-between px-4 md:px-6 py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold">Reports</h2>
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 ml-2">
@@ -65,7 +63,7 @@ export default function ReportsPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-background-light dark:bg-background-dark">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6 space-y-6 bg-canvas">
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
@@ -74,7 +72,7 @@ export default function ReportsPage() {
             { label: "Total Entries", value: calendarData.reduce((s, d) => s + d.entries.length, 0).toString(), icon: "list_alt" },
             { label: "Avg / Day", value: calendarData.length > 0 ? formatDuration(Math.round(totalSeconds / calendarData.length)) : "—", icon: "trending_up" },
           ].map(({ label, value, icon }) => (
-            <div key={label} className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div key={label} className="bg-surface rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="flex items-center gap-2 text-slate-400 mb-2">
                 <span className="material-symbols-outlined text-base">{icon}</span>
                 <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
@@ -85,7 +83,7 @@ export default function ReportsPage() {
         </div>
 
         {/* By service type */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="bg-surface rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
           <h3 className="font-bold text-lg mb-4">By Service Type</h3>
           {sortedTypes.length === 0 ? (
             <p className="text-slate-400 text-center py-8">No data for this month</p>

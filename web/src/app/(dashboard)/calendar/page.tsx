@@ -1,11 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isToday } from "date-fns";
-import { timeEntriesApi, serviceTypesApi, type CalendarDay, type TimeEntry, type ServiceType } from "@/lib/api";
+import { useState, useMemo } from "react";
+import {
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  getWeek,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import { useStore } from "@/lib/store";
+import { computeDurationSeconds, durationDisplay } from "@/types/data";
+import type { TimeEntry, ServiceType, CalendarDay } from "@/types/data";
 import { cn, formatTime } from "@/lib/utils";
 import AddEntryModal from "@/components/entries/AddEntryModal";
+import toast from "react-hot-toast";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -13,33 +26,84 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
 
   const month = currentDate.getMonth() + 1;
   const year = currentDate.getFullYear();
 
-  const { data: calendarData = [] } = useQuery<CalendarDay[]>({
-    queryKey: ["calendar", month, year],
-    queryFn: () => timeEntriesApi.calendar(month, year),
-  });
+  const timeEntries = useStore((s) => s.timeEntries);
+  const serviceTypes = useStore((s) => s.serviceTypes);
+  const weekStartsOnSetting = useStore((s) => s.settings.weekStartsOn);
+  const deleteTimeEntry = useStore((s) => s.deleteTimeEntry);
 
-  const { data: serviceTypes = [] } = useQuery<ServiceType[]>({
-    queryKey: ["service-types"],
-    queryFn: serviceTypesApi.list,
-  });
-
-  const serviceTypeMap = Object.fromEntries(serviceTypes.map((st) => [st.id, st]));
-
-  const calendarMap: Record<string, CalendarDay> = Object.fromEntries(
-    calendarData.map((d) => [d.date, d])
+  const serviceTypeMap = useMemo(
+    () => Object.fromEntries(serviceTypes.map((st) => [st.id, st])),
+    [serviceTypes]
   );
 
+  const calendarMap: Record<string, CalendarDay> = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(
+          timeEntries.reduce<Record<string, TimeEntry[]>>((grouped, entry) => {
+            const date = entry.start_time.slice(0, 10);
+            (grouped[date] ??= []).push(entry);
+            return grouped;
+          }, {})
+        ).map(([date, entries]) => {
+          const sortedEntries = [...entries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+          const totalDurationSeconds = sortedEntries.reduce(
+            (sum, entry) => sum + computeDurationSeconds(entry),
+            0
+          );
+
+          return [
+            date,
+            {
+              date,
+              entries: sortedEntries,
+              total_duration_seconds: totalDurationSeconds,
+              total_duration_display: durationDisplay(totalDurationSeconds),
+            } satisfies CalendarDay,
+          ];
+        })
+      ),
+    [timeEntries]
+  );
+
+  const weekStartsOn = weekStartsOnSetting === "monday" ? 1 : 0;
+  const firstWeekContainsDate = weekStartsOn === 1 ? 4 : 1;
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
-  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const leadingBlanks = getDay(monthStart);
-  const trailingBlanks = 6 - getDay(monthEnd);
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn });
+  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn });
+
+  const weekdayLabels = useMemo(
+    () => (weekStartsOnSetting === "monday" ? [...DAYS.slice(1), DAYS[0]] : DAYS),
+    [weekStartsOnSetting]
+  );
+
+  const calendarWeeks = useMemo(() => {
+    const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+
+    return Array.from({ length: Math.ceil(calendarDays.length / 7) }, (_, index) => {
+      const weekDays = calendarDays.slice(index * 7, index * 7 + 7);
+
+      return {
+        weekNumber: getWeek(weekDays[0], {
+          weekStartsOn,
+          firstWeekContainsDate,
+        }),
+        days: weekDays,
+      };
+    });
+  }, [calendarEnd, calendarStart, firstWeekContainsDate, weekStartsOn]);
 
   const selectedDayData = calendarMap[format(selectedDate, "yyyy-MM-dd")];
+  const selectedWeekNumber = getWeek(selectedDate, {
+    weekStartsOn,
+    firstWeekContainsDate,
+  });
 
   const prevMonth = () =>
     setCurrentDate(new Date(year, month - 2, 1));
@@ -51,57 +115,63 @@ export default function CalendarPage() {
     setSelectedDate(now);
   };
 
+  const handleDelete = (id: string) => {
+    deleteTimeEntry(id);
+    toast.success("Entry deleted");
+  };
+
+  const handleSelectDay = (day: Date) => {
+    setSelectedDate(day);
+
+    if (!isSameMonth(day, currentDate)) {
+      setCurrentDate(startOfMonth(day));
+    }
+  };
+
   return (
     <>
       {/* Top Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-10">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold">
-              {format(currentDate, "MMMM yyyy")}
-            </h2>
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 ml-4">
-              <button
-                onClick={prevMonth}
-                className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded transition-all"
-              >
-                <span className="material-symbols-outlined text-sm">chevron_left</span>
-              </button>
-              <button
-                onClick={goToday}
-                className="px-3 text-xs font-semibold"
-              >
-                Today
-              </button>
-              <button
-                onClick={nextMonth}
-                className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded transition-all"
-              >
-                <span className="material-symbols-outlined text-sm">chevron_right</span>
-              </button>
-            </div>
+      <header className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-10">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg md:text-xl font-bold">
+            {format(currentDate, "MMMM yyyy")}
+          </h2>
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 ml-2 md:ml-4">
+            <button
+              onClick={prevMonth}
+              className="p-1 hover:bg-surface rounded transition-all"
+            >
+              <span className="material-symbols-outlined text-sm">chevron_left</span>
+            </button>
+            <button
+              onClick={goToday}
+              className="px-2 md:px-3 text-xs font-semibold"
+            >
+              Today
+            </button>
+            <button
+              onClick={nextMonth}
+              className="p-1 hover:bg-surface rounded transition-all"
+            >
+              <span className="material-symbols-outlined text-sm">chevron_right</span>
+            </button>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-            <span className="material-symbols-outlined">search</span>
-          </button>
-          <button className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors relative">
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
         </div>
       </header>
 
       {/* Calendar & Day View */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-background-light dark:bg-background-dark">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-24 md:pb-6 bg-canvas">
         {/* Calendar Grid */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="bg-surface rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
           {/* Weekday Header */}
-          <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
-            {DAYS.map((d) => (
+          <div className="grid grid-cols-[2.25rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-center border-r border-slate-100 dark:border-slate-800 py-2 md:py-3 text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Wk
+            </div>
+            {weekdayLabels.map((d) => (
               <div
                 key={d}
-                className="py-3 text-center text-xs font-bold text-slate-400 uppercase tracking-wider border-r last:border-r-0 border-slate-100 dark:border-slate-800"
+                className="py-2 md:py-3 text-center text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider border-r last:border-r-0 border-slate-100 dark:border-slate-800"
               >
                 {d}
               </div>
@@ -109,100 +179,121 @@ export default function CalendarPage() {
           </div>
 
           {/* Calendar Cells */}
-          <div className="grid grid-cols-7">
-            {/* Leading blanks */}
-            {Array.from({ length: leadingBlanks }).map((_, i) => (
+          <div>
+            {calendarWeeks.map(({ weekNumber, days }) => (
               <div
-                key={`lead-${i}`}
-                className="p-2 bg-slate-50 dark:bg-slate-800/50 border-r border-b border-slate-100 dark:border-slate-800 min-h-24 opacity-40"
-              />
-            ))}
-
-            {/* Month days */}
-            {days.map((day) => {
-              const key = format(day, "yyyy-MM-dd");
-              const dayData = calendarMap[key];
-              const isSelected = isSameDay(day, selectedDate);
-              const isTodayDay = isToday(day);
-
-              return (
-                <div
-                  key={key}
-                  onClick={() => setSelectedDate(day)}
-                  className={cn(
-                    "p-2 border-r border-b border-slate-100 dark:border-slate-800 min-h-24 cursor-pointer transition-colors",
-                    isSelected && isTodayDay
-                      ? "bg-primary/5 hover:bg-primary/10"
-                      : "hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-flex items-center justify-center size-7 rounded-full text-sm font-bold mb-2",
-                      isTodayDay
-                        ? "bg-primary text-white"
-                        : "text-slate-700 dark:text-slate-200"
-                    )}
-                  >
-                    {format(day, "d")}
-                  </span>
-
-                  {dayData?.entries.slice(0, 3).map((entry) => {
-                    const st = serviceTypeMap[entry.service_type_id];
-                    return (
-                      <div
-                        key={entry.id}
-                        className="rounded-r p-1.5 mb-1 border-l-4"
-                        style={{
-                          borderColor: st?.color ?? "#2094f3",
-                          backgroundColor: (st?.color ?? "#2094f3") + "1a",
-                        }}
-                      >
-                        <p
-                          className="text-[10px] font-bold uppercase leading-none"
-                          style={{ color: st?.color ?? "#2094f3" }}
-                        >
-                          {entry.title}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          {entry.duration_display}
-                        </p>
-                      </div>
-                    );
-                  })}
-
-                  {(dayData?.entries.length ?? 0) > 3 && (
-                    <p className="text-[10px] text-slate-400 font-medium">
-                      +{dayData!.entries.length - 3} more
-                    </p>
-                  )}
+                key={weekNumber + days[0].toISOString()}
+                className="grid grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]"
+              >
+                <div className="flex items-center justify-center border-r border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 text-[10px] md:text-xs font-bold text-slate-400">
+                  {weekNumber}
                 </div>
-              );
-            })}
+                {days.map((day) => {
+                  const key = format(day, "yyyy-MM-dd");
+                  const dayData = calendarMap[key];
+                  const isSelected = isSameDay(day, selectedDate);
+                  const isTodayDay = isToday(day);
+                  const isCurrentMonthDay = isSameMonth(day, currentDate);
 
-            {/* Trailing blanks */}
-            {Array.from({ length: trailingBlanks }).map((_, i) => (
-              <div
-                key={`trail-${i}`}
-                className="p-2 bg-slate-50 dark:bg-slate-800/50 border-r border-b border-slate-100 dark:border-slate-800 min-h-24 opacity-40"
-              />
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => handleSelectDay(day)}
+                      className={cn(
+                        "p-1.5 md:p-2 border-r border-b border-slate-100 dark:border-slate-800 min-h-14 md:min-h-24 cursor-pointer transition-colors",
+                        isSelected
+                          ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
+                          : isCurrentMonthDay
+                            ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                            : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex items-center justify-center size-6 md:size-7 rounded-full text-xs md:text-sm font-bold mb-1 md:mb-2",
+                          isTodayDay
+                            ? "bg-primary text-white"
+                            : isSelected
+                              ? "text-primary font-extrabold"
+                              : isCurrentMonthDay
+                                ? "text-slate-700 dark:text-slate-200"
+                                : "text-slate-400 dark:text-slate-500"
+                        )}
+                      >
+                        {format(day, "d")}
+                      </span>
+
+                      {/* Desktop: show entry chips */}
+                      <div className="hidden md:block">
+                        {dayData?.entries.slice(0, 3).map((entry) => {
+                          const st = serviceTypeMap[entry.service_type_id];
+                          return (
+                            <div
+                              key={entry.id}
+                              className="rounded-r p-1.5 mb-1 border-l-4"
+                              style={{
+                                borderColor: st?.color ?? "#2094f3",
+                                backgroundColor: (st?.color ?? "#2094f3") + "1a",
+                              }}
+                            >
+                              <p
+                                className="text-[10px] font-bold uppercase leading-none"
+                                style={{ color: st?.color ?? "#2094f3" }}
+                              >
+                                {entry.title}
+                              </p>
+                              <p className="text-[10px] text-slate-500 font-medium">
+                                {durationDisplay(computeDurationSeconds(entry))}
+                              </p>
+                            </div>
+                          );
+                        })}
+                        {(dayData?.entries.length ?? 0) > 3 && (
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            +{dayData!.entries.length - 3} more
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Mobile: show dot indicators */}
+                      {dayData && dayData.entries.length > 0 && (
+                        <div className="flex gap-0.5 md:hidden mt-0.5">
+                          {dayData.entries.slice(0, 4).map((entry) => {
+                            const st = serviceTypeMap[entry.service_type_id];
+                            return (
+                              <div
+                                key={entry.id}
+                                className="size-1.5 rounded-full"
+                                style={{ backgroundColor: st?.color ?? "#2094f3" }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             ))}
           </div>
         </div>
 
         {/* Daily Entries */}
-        <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold">
+        <div className="mt-6 md:mt-8">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h3 className="text-base md:text-lg font-bold">
               Daily Entries — {format(selectedDate, "MMM d")}
             </h3>
-            <span className="text-sm text-slate-500 font-medium">
-              Total: {selectedDayData?.total_duration_display ?? "0m"}
-            </span>
+            <div className="text-right">
+              <p className="text-sm text-slate-500 font-medium">
+                Total: {selectedDayData?.total_duration_display ?? "0m"}
+              </p>
+              <p className="text-xs text-slate-400 font-medium">Week {selectedWeekNumber}</p>
+            </div>
           </div>
 
           {!selectedDayData || selectedDayData.entries.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
+            <div className="text-center py-10 md:py-12 text-slate-400">
               <span className="material-symbols-outlined text-4xl mb-2 block">event_busy</span>
               <p className="font-medium">No entries for this day</p>
               <p className="text-sm">Click the + button to add one</p>
@@ -212,7 +303,13 @@ export default function CalendarPage() {
               {selectedDayData.entries.map((entry) => {
                 const st = serviceTypeMap[entry.service_type_id];
                 return (
-                  <EntryCard key={entry.id} entry={entry} serviceType={st} />
+                  <EntryCard
+                    key={entry.id}
+                    entry={entry}
+                    serviceType={st}
+                    onEdit={() => setEditingEntry(entry)}
+                    onDelete={() => handleDelete(entry.id)}
+                  />
                 );
               })}
             </div>
@@ -220,12 +317,12 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* FAB */}
+      {/* FAB — offset above mobile nav */}
       <button
         onClick={() => setShowAddModal(true)}
-        className="absolute bottom-6 right-6 md:bottom-10 md:right-10 size-16 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20"
+        className="fixed bottom-20 right-4 md:absolute md:bottom-10 md:right-10 size-14 md:size-16 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20"
       >
-        <span className="material-symbols-outlined text-3xl">add</span>
+        <span className="material-symbols-outlined text-2xl md:text-3xl">add</span>
       </button>
 
       {showAddModal && (
@@ -234,7 +331,16 @@ export default function CalendarPage() {
           serviceTypes={serviceTypes}
           onClose={() => setShowAddModal(false)}
           onSuccess={() => setShowAddModal(false)}
-          queryKeys={[["calendar", month, year]]}
+        />
+      )}
+
+      {editingEntry && (
+        <AddEntryModal
+          selectedDate={new Date(editingEntry.start_time)}
+          serviceTypes={serviceTypes}
+          entry={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onSuccess={() => setEditingEntry(null)}
         />
       )}
     </>
@@ -244,39 +350,72 @@ export default function CalendarPage() {
 function EntryCard({
   entry,
   serviceType,
+  onEdit,
+  onDelete,
 }: {
   entry: TimeEntry;
   serviceType?: ServiceType;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   return (
-    <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl flex items-center justify-between border border-slate-200 dark:border-slate-800 shadow-sm">
-      <div className="flex items-center gap-4">
-        <div
-          className="size-12 rounded-xl flex items-center justify-center"
-          style={{ backgroundColor: (serviceType?.color ?? "#2094f3") + "1a" }}
-        >
-          <span
-            className="material-symbols-outlined"
-            style={{ color: serviceType?.color ?? "#2094f3" }}
+    <div className="bg-surface p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <div
+            className="size-10 md:size-12 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: (serviceType?.color ?? "#2094f3") + "1a" }}
           >
-            {serviceType?.icon ?? "work"}
-          </span>
+            <span
+              className="material-symbols-outlined text-lg md:text-2xl"
+              style={{ color: serviceType?.color ?? "#2094f3" }}
+            >
+              {serviceType?.icon ?? "work"}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <h4 className="font-bold text-sm md:text-base truncate">{entry.title}</h4>
+            <p className="text-xs text-slate-500 font-medium truncate">
+              {entry.location ? `${entry.location} — ` : ""}
+              {formatTime(entry.start_time)}
+            </p>
+          </div>
         </div>
-        <div>
-          <h4 className="font-bold">{entry.title}</h4>
-          <p className="text-xs text-slate-500 font-medium">
-            {entry.location ? `${entry.location} — ` : ""}
-            {formatTime(entry.start_time)}
-          </p>
+        <div className="flex items-center gap-1 shrink-0 ml-2">
+          <div className="text-right mr-1">
+            <p className="font-bold text-sm md:text-base" style={{ color: serviceType?.color ?? "#2094f3" }}>
+              {durationDisplay(computeDurationSeconds(entry))}
+            </p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+              Logged
+            </p>
+          </div>
+          <button
+            onClick={onEdit}
+            className="p-1.5 text-slate-300 hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
+            title="Edit entry"
+          >
+            <span className="material-symbols-outlined text-lg">edit</span>
+          </button>
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="p-1.5 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+              title="Delete entry"
+            >
+              <span className="material-symbols-outlined text-lg">delete</span>
+            </button>
+          ) : (
+            <button
+              onClick={onDelete}
+              className="px-2.5 py-1 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Delete
+            </button>
+          )}
         </div>
-      </div>
-      <div className="text-right">
-        <p className="font-bold" style={{ color: serviceType?.color ?? "#2094f3" }}>
-          {entry.duration_display}
-        </p>
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-          Logged
-        </p>
       </div>
     </div>
   );
