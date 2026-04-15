@@ -636,7 +636,7 @@ export default function SettingsPage() {
               <span className="material-symbols-outlined text-primary">download</span>
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Export to JSON</p>
-                <p className="text-xs text-slate-400 truncate">Download a backup file to your computer</p>
+                <p className="text-xs text-slate-400 truncate">Download a backup file to your device</p>
               </div>
             </button>
 
