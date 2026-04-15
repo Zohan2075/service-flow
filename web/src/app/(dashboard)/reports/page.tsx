@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { format, subMonths } from "date-fns";
+import { subMonths } from "date-fns";
 import { useStore } from "@/lib/store";
 import { buildCalendarDays, computeDurationSeconds } from "@/types/data";
 import { formatDuration } from "@/lib/utils";
+import { useT, monthShortYear } from "@/lib/i18n";
 
 export default function ReportsPage() {
+  const { t, language } = useT();
   const [currentDate, setCurrentDate] = useState(new Date());
   const month = currentDate.getMonth() + 1;
   const year = currentDate.getFullYear();
@@ -48,18 +50,21 @@ export default function ReportsPage() {
     <>
       <header className="flex items-center justify-between px-4 md:px-6 py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold">Reports</h2>
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 ml-2">
-            <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded">
-              <span className="material-symbols-outlined text-sm">chevron_left</span>
-            </button>
-            <span className="px-3 text-sm font-semibold">
-              {format(currentDate, "MMM yyyy")}
-            </span>
-            <button onClick={() => setCurrentDate(new Date(year, month, 1))} className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded">
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">chevron_left</span>
+          </button>
+          <h2 className="text-lg md:text-xl font-bold min-w-[10rem] text-center">
+            {monthShortYear(currentDate, language)}
+          </h2>
+          <button
+            onClick={() => setCurrentDate(new Date(year, month, 1))}
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">chevron_right</span>
+          </button>
         </div>
       </header>
 
@@ -67,10 +72,10 @@ export default function ReportsPage() {
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Total Hours", value: formatDuration(totalSeconds), icon: "schedule" },
-            { label: "Days Worked", value: calendarData.length.toString(), icon: "calendar_today" },
-            { label: "Total Entries", value: calendarData.reduce((s, d) => s + d.entries.length, 0).toString(), icon: "list_alt" },
-            { label: "Avg / Day", value: calendarData.length > 0 ? formatDuration(Math.round(totalSeconds / calendarData.length)) : "—", icon: "trending_up" },
+            { label: t("reports.totalHours"), value: formatDuration(totalSeconds), icon: "schedule" },
+            { label: t("reports.daysWorked"), value: calendarData.length.toString(), icon: "calendar_today" },
+            { label: t("reports.totalEntries"), value: calendarData.reduce((s, d) => s + d.entries.length, 0).toString(), icon: "list_alt" },
+            { label: t("reports.avgDay"), value: calendarData.length > 0 ? formatDuration(Math.round(totalSeconds / calendarData.length)) : "—", icon: "trending_up" },
           ].map(({ label, value, icon }) => (
             <div key={label} className="bg-surface rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="flex items-center gap-2 text-slate-400 mb-2">
@@ -84,9 +89,9 @@ export default function ReportsPage() {
 
         {/* By service type */}
         <div className="bg-surface rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <h3 className="font-bold text-lg mb-4">By Service Type</h3>
+          <h3 className="font-bold text-lg mb-4">{t("reports.byServiceType")}</h3>
           {sortedTypes.length === 0 ? (
-            <p className="text-slate-400 text-center py-8">No data for this month</p>
+            <p className="text-slate-400 text-center py-8">{t("reports.noData")}</p>
           ) : (
             <div className="space-y-4">
               {sortedTypes.map((st) => {
@@ -99,7 +104,7 @@ export default function ReportsPage() {
                           {st.icon}
                         </span>
                         <span className="font-semibold text-sm">{st.name}</span>
-                        <span className="text-xs text-slate-400">{st.count} entries</span>
+                        <span className="text-xs text-slate-400">{st.count} {t("reports.entries")}</span>
                       </div>
                       <span className="text-sm font-bold" style={{ color: st.color }}>
                         {formatDuration(st.seconds)}

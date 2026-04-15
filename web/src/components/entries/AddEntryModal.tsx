@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { useStore } from "@/lib/store";
 import type { ServiceType, TimeEntry } from "@/types/data";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
 type EntryMode = "range" | "duration";
@@ -33,6 +34,7 @@ export default function AddEntryModal({
   const addTimeEntry = useStore((s) => s.addTimeEntry);
   const updateTimeEntry = useStore((s) => s.updateTimeEntry);
   const settings = useStore((s) => s.settings);
+  const { t } = useT();
 
   const isEditing = !!entry;
 
@@ -99,7 +101,7 @@ export default function AddEntryModal({
         // Manual duration: store seconds, set start_time to beginning of selected day
         const totalSeconds = durationHours * 3600 + durationMinutes * 60;
         if (totalSeconds <= 0) {
-          toast.error("Duration must be greater than 0");
+          toast.error(t("entry.zeroDuration"));
           setSaving(false);
           return;
         }
@@ -126,10 +128,10 @@ export default function AddEntryModal({
         }
       }
 
-      toast.success(isEditing ? "Entry updated!" : "Entry added!");
+      toast.success(isEditing ? t("entry.updated") : t("entry.added"));
       onSuccess();
     } catch {
-      toast.error(isEditing ? "Failed to update entry" : "Failed to add entry");
+      toast.error(isEditing ? t("entry.updateFailed") : t("entry.addFailed"));
     } finally {
       setSaving(false);
     }
@@ -144,7 +146,7 @@ export default function AddEntryModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-surface z-10">
           <div>
-            <h3 className="text-lg font-bold">{isEditing ? "Edit Entry" : "New Entry"}</h3>
+            <h3 className="text-lg font-bold">{isEditing ? t("entry.edit") : t("entry.new")}</h3>
             <p className="text-xs text-slate-500">{format(selectedDate, "EEEE, MMM d, yyyy")}</p>
           </div>
           <button
@@ -158,19 +160,19 @@ export default function AddEntryModal({
         <form onSubmit={handleSubmit} className="p-4 md:p-6 pb-8 md:pb-6 space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-sm font-semibold mb-1">Title *</label>
+            <label className="block text-sm font-semibold mb-1">{t("entry.title")} *</label>
             <input
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. System Maintenance"
+              placeholder={t("entry.titlePlaceholder")}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
           {/* Service Type */}
           <div>
-            <label className="block text-sm font-semibold mb-1">Service Type *</label>
+            <label className="block text-sm font-semibold mb-1">{t("entry.serviceType")} *</label>
             <div className="flex flex-wrap gap-2">
               {serviceTypes.map((st) => (
                 <button
@@ -198,7 +200,7 @@ export default function AddEntryModal({
 
           {/* Entry Mode Toggle */}
           <div>
-            <label className="block text-sm font-semibold mb-1">Time Mode</label>
+            <label className="block text-sm font-semibold mb-1">{t("entry.timeMode")}</label>
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
               <button
                 type="button"
@@ -210,7 +212,7 @@ export default function AddEntryModal({
                     : "text-slate-500"
                 )}
               >
-                Manual Duration
+                {t("entry.manualDuration")}
               </button>
               <button
                 type="button"
@@ -222,7 +224,7 @@ export default function AddEntryModal({
                     : "text-slate-500"
                 )}
               >
-                Start / End
+                {t("entry.startEnd")}
               </button>
             </div>
           </div>
@@ -231,24 +233,28 @@ export default function AddEntryModal({
           {mode === "duration" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-semibold mb-1">Hours</label>
+                <label className="block text-sm font-semibold mb-1">{t("entry.hours")}</label>
                 <input
                   type="number"
                   min={0}
                   max={23}
-                  value={durationHours}
-                  onChange={(e) => setDurationHours(Math.max(0, parseInt(e.target.value) || 0))}
+                  value={durationHours === 0 ? "" : durationHours}
+                  onChange={(e) => setDurationHours(e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value) || 0))}
+                  onBlur={(e) => { if (e.target.value === "") setDurationHours(0); }}
+                  placeholder="0"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-1">Minutes</label>
+                <label className="block text-sm font-semibold mb-1">{t("entry.minutes")}</label>
                 <input
                   type="number"
                   min={0}
                   max={59}
-                  value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                  value={durationMinutes === 0 ? "" : durationMinutes}
+                  onChange={(e) => setDurationMinutes(e.target.value === "" ? 0 : Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                  onBlur={(e) => { if (e.target.value === "") setDurationMinutes(0); }}
+                  placeholder="0"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 />
               </div>
@@ -259,7 +265,7 @@ export default function AddEntryModal({
           {mode === "range" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-semibold mb-1">Start Time</label>
+                <label className="block text-sm font-semibold mb-1">{t("entry.startTime")}</label>
                 <input
                   type="time"
                   value={startTimeStr}
@@ -268,7 +274,7 @@ export default function AddEntryModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-1">End Time</label>
+                <label className="block text-sm font-semibold mb-1">{t("entry.endTime")}</label>
                 <input
                   type="time"
                   value={endTimeStr}
@@ -281,23 +287,23 @@ export default function AddEntryModal({
 
           {/* Location */}
           <div>
-            <label className="block text-sm font-semibold mb-1">Location</label>
+            <label className="block text-sm font-semibold mb-1">{t("entry.location")}</label>
             <input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g. Server Room A"
+              placeholder={t("entry.locationPlaceholder")}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-sm font-semibold mb-1">Notes</label>
+            <label className="block text-sm font-semibold mb-1">{t("entry.notes")}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              placeholder="Optional notes..."
+              placeholder={t("entry.notesPlaceholder")}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             />
           </div>
@@ -307,7 +313,7 @@ export default function AddEntryModal({
             disabled={saving}
             className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60"
           >
-            {saving ? "Saving..." : isEditing ? "Update Entry" : "Add Entry"}
+            {saving ? t("entry.saving") : isEditing ? t("entry.update") : t("entry.add")}
           </button>
         </form>
       </div>

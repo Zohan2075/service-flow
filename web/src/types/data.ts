@@ -13,12 +13,19 @@ export interface UserProfile {
 
 export type WeekStart = "sunday" | "monday";
 
+export type Language = "en" | "es";
+
 export interface AppSettings {
   theme: "light" | "dark" | "system";
+  language: Language;
   // Custom appearance (layered on top of the theme preset)
   accentColor: string;              // hex, e.g. "#2094f3"
-  customSurface: string | null;     // hex or null = theme default
-  customBackground: string | null;  // hex or null = theme default
+  customSurfaceLight: string | null;    // hex or null = light theme default
+  customSurfaceDark: string | null;     // hex or null = dark theme default
+  customBackgroundLight: string | null; // hex or null = light theme default
+  customBackgroundDark: string | null;  // hex or null = dark theme default
+  customSurface?: string | null;        // legacy import compatibility
+  customBackground?: string | null;     // legacy import compatibility
   // Calendar layout
   weekStartsOn: WeekStart;
   // Entry creation defaults

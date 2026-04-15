@@ -115,9 +115,12 @@ function normalizeServiceTypes(serviceTypes: ServiceType[]): ServiceType[] {
 
 const INITIAL_SETTINGS: AppSettings = {
   theme: "system",
+  language: "en",
   accentColor: "#2094f3",
-  customSurface: null,
-  customBackground: null,
+  customSurfaceLight: null,
+  customSurfaceDark: null,
+  customBackgroundLight: null,
+  customBackgroundDark: null,
   weekStartsOn: "sunday",
   defaultEntryMode: "duration",
   defaultDurationHours: 1,
@@ -125,6 +128,23 @@ const INITIAL_SETTINGS: AppSettings = {
   autoSync: false,
   lastSyncedAt: null,
 };
+
+function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
+  const merged = { ...INITIAL_SETTINGS, ...(settings ?? {}) };
+  const legacySurface = settings?.customSurface ?? null;
+  const legacyBackground = settings?.customBackground ?? null;
+  const rest = { ...merged };
+  delete rest.customSurface;
+  delete rest.customBackground;
+
+  return {
+    ...rest,
+    customSurfaceLight: settings?.customSurfaceLight ?? legacySurface ?? rest.customSurfaceLight,
+    customSurfaceDark: settings?.customSurfaceDark ?? legacySurface ?? rest.customSurfaceDark,
+    customBackgroundLight: settings?.customBackgroundLight ?? legacyBackground ?? rest.customBackgroundLight,
+    customBackgroundDark: settings?.customBackgroundDark ?? legacyBackground ?? rest.customBackgroundDark,
+  };
+}
 
 export const useStore = create<AppState>()(
   persist(
@@ -140,7 +160,7 @@ export const useStore = create<AppState>()(
 
       // ── Settings / Profile ──────────────────────────────────────────────
       updateSettings: (patch) =>
-        set((s) => ({ settings: { ...s.settings, ...patch } })),
+        set((s) => ({ settings: normalizeSettings({ ...s.settings, ...patch }) })),
       updateProfile: (patch) =>
         set((s) => ({
           profile: s.profile ? { ...s.profile, ...patch } : null,
@@ -242,12 +262,12 @@ export const useStore = create<AppState>()(
 
       // ── Bulk ───────────────────────────────────────────────────────────
       importData: (file) =>
-        set({
+        set((s) => ({
           profile: file.profile,
-          settings: { ...INITIAL_SETTINGS, ...(file.settings ?? {}) },
+          settings: normalizeSettings({ ...s.settings, ...(file.settings ?? {}) }),
           serviceTypes: normalizeServiceTypes(sortServiceTypesByOrder(file.service_types)),
           timeEntries: file.time_entries,
-        }),
+        })),
 
       resetData: () =>
         set({
@@ -273,7 +293,7 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           ...p,
-          settings: { ...current.settings, ...(p.settings ?? {}) },
+          settings: normalizeSettings({ ...current.settings, ...(p.settings ?? {}) }),
           serviceTypes: normalizeServiceTypes(
             sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes)
           ),

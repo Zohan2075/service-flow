@@ -25,6 +25,7 @@ import { uploadBackup, downloadBackup } from "@/lib/drive";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
+import { useT } from "@/lib/i18n";
 import type { ServiceType } from "@/types/data";
 import toast from "react-hot-toast";
 
@@ -49,6 +50,7 @@ const SURFACE_PRESETS_DARK = ["#0f172a", "#1e293b", "#18181b", "#1a1a2e", "#1c19
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const { t, language, setLanguage } = useT();
   const { user, accessToken, isConfigured, error: googleError, requestDriveAccess, signIn } = useGoogleAuth();
   const sync = useSync();
 
@@ -98,7 +100,7 @@ export default function SettingsPage() {
       icon: newIcon,
     });
     setNewName("");
-    toast.success("Service type created!");
+    toast.success(t("settings.stCreated"));
   };
 
   // ── Export JSON ────────────────────────────────────────────────────────────
@@ -111,7 +113,7 @@ export default function SettingsPage() {
     a.download = `serviceflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("Exported successfully!");
+    toast.success(t("settings.exported"));
   };
 
   // ── Import JSON ────────────────────────────────────────────────────────────
@@ -127,9 +129,9 @@ export default function SettingsPage() {
         const parsed = JSON.parse(text);
         const backup = deserializeBackup(parsed);
         importData(backup);
-        toast.success("Data imported successfully!");
+        toast.success(t("settings.imported"));
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Invalid backup file");
+        toast.error(err instanceof Error ? err.message : t("settings.invalidBackup"));
       }
     };
     input.click();
@@ -143,9 +145,9 @@ export default function SettingsPage() {
       const backup = serializeBackup({ profile, settings, serviceTypes, timeEntries });
       await uploadBackup(token, JSON.stringify(backup, null, 2));
       updateSettings({ lastSyncedAt: new Date().toISOString() });
-      toast.success("Backed up to Google Drive!");
+      toast.success(t("settings.backedUp"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Drive backup failed");
+      toast.error(err instanceof Error ? err.message : t("settings.driveBackupFailed"));
     } finally {
       setDriveLoading(false);
     }
@@ -171,9 +173,9 @@ export default function SettingsPage() {
       const parsed = JSON.parse(text);
       const backup = deserializeBackup(parsed);
       importData(backup);
-      toast.success("Restored from Google Drive!");
+      toast.success(t("settings.restored"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Drive restore failed");
+      toast.error(err instanceof Error ? err.message : t("settings.driveRestoreFailed"));
     } finally {
       setDriveLoading(false);
     }
@@ -183,9 +185,9 @@ export default function SettingsPage() {
     setDriveLoading(true);
     try {
       await requestDriveAccess();
-      toast.success("Google Drive connected");
+      toast.success(t("settings.driveConnectedToast"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Drive connection failed");
+      toast.error(err instanceof Error ? err.message : t("settings.driveConnectionFailed"));
     } finally {
       setDriveLoading(false);
     }
@@ -195,9 +197,9 @@ export default function SettingsPage() {
     setDriveLoading(true);
     try {
       await signIn();
-      toast.success("Signed in with Google");
+      toast.success(t("settings.signedInGoogle"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Google sign-in failed");
+      toast.error(err instanceof Error ? err.message : t("settings.signInFailed"));
     } finally {
       setDriveLoading(false);
     }
@@ -210,13 +212,13 @@ export default function SettingsPage() {
       try {
         await requestDriveAccess();
         updateSettings({ autoSync: true });
-        toast.success("Auto-sync enabled");
+        toast.success(t("settings.autoSyncEnabled"));
       } catch {
-        toast.error("Drive access required for auto-sync");
+        toast.error(t("settings.driveRequired"));
       }
     } else {
       updateSettings({ autoSync: false });
-      toast.success("Auto-sync disabled");
+      toast.success(t("settings.autoSyncDisabled"));
     }
   };
 
@@ -227,16 +229,25 @@ export default function SettingsPage() {
       bio: profileBio.trim() || null,
     });
     setEditingProfile(false);
-    toast.success("Profile updated");
+    toast.success(t("settings.profileUpdated"));
   };
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   const handleReset = () => {
     resetData();
     setShowResetConfirm(false);
-    toast.success("All data cleared");
+    toast.success(t("settings.allCleared"));
   };
 
+  const activeThemeLabel = resolvedTheme === "dark" ? t("settings.dark") : t("settings.light");
+  const activeSurface = resolvedTheme === "dark" ? settings.customSurfaceDark : settings.customSurfaceLight;
+  const activeBackground = resolvedTheme === "dark" ? settings.customBackgroundDark : settings.customBackgroundLight;
+  const updateActiveSurface = (value: string | null) => {
+    updateSettings(resolvedTheme === "dark" ? { customSurfaceDark: value } : { customSurfaceLight: value });
+  };
+  const updateActiveBackground = (value: string | null) => {
+    updateSettings(resolvedTheme === "dark" ? { customBackgroundDark: value } : { customBackgroundLight: value });
+  };
   const surfacePresets = resolvedTheme === "dark" ? SURFACE_PRESETS_DARK : SURFACE_PRESETS_LIGHT;
 
   return (
@@ -273,13 +284,13 @@ export default function SettingsPage() {
                     }}
                     className="text-sm text-primary font-semibold mt-2"
                   >
-                    Edit profile
+                    {t("settings.editProfile")}
                   </button>
                 </div>
               ) : (
                 <div className="flex-1 space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Display Name</label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.displayName")}</label>
                     <input
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
@@ -288,12 +299,12 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Bio / Notes</label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.bioNotes")}</label>
                     <textarea
                       value={profileBio}
                       onChange={(e) => setProfileBio(e.target.value)}
                       rows={2}
-                      placeholder="A short note about yourself..."
+                      placeholder={t("settings.bioPlaceholder")}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm resize-none"
                     />
                   </div>
@@ -302,13 +313,13 @@ export default function SettingsPage() {
                       onClick={handleSaveProfile}
                       className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all"
                     >
-                      Save
+                      {t("settings.save")}
                     </button>
                     <button
                       onClick={() => setEditingProfile(false)}
                       className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
-                      Cancel
+                      {t("settings.cancel")}
                     </button>
                   </div>
                 </div>
@@ -319,24 +330,24 @@ export default function SettingsPage() {
 
         {/* ── Appearance ───────────────────────────────────────────────────── */}
         <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <h3 className="font-bold text-lg mb-4">Appearance</h3>
+          <h3 className="font-bold text-lg mb-4">{t("settings.appearance")}</h3>
 
           {/* Theme preset */}
           <div className="mb-5">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Theme</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.theme")}</p>
             <div className="flex gap-2 md:gap-3">
-              {(["light", "dark", "system"] as const).map((t) => (
+              {(["light", "dark", "system"] as const).map((th) => (
                 <button
-                  key={t}
-                  onClick={() => setTheme(t)}
+                  key={th}
+                  onClick={() => setTheme(th)}
                   className={cn(
                     "flex-1 py-2.5 md:py-3 rounded-xl text-sm font-semibold capitalize border-2 transition-all",
-                    theme === t
+                    theme === th
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
                   )}
                 >
-                  {t === "light" ? "☀️ Light" : t === "dark" ? "🌙 Dark" : "💻 System"}
+                  {th === "light" ? t("settings.light") : th === "dark" ? t("settings.dark") : t("settings.system")}
                 </button>
               ))}
             </div>
@@ -344,7 +355,7 @@ export default function SettingsPage() {
 
           {/* Accent color */}
           <div className="mb-5">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Accent Color</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.accentColor")}</p>
             <div className="flex gap-2 flex-wrap">
               {ACCENT_PRESETS.map((c) => (
                 <button
@@ -375,13 +386,16 @@ export default function SettingsPage() {
           {/* Custom surface */}
           <div className="mb-5">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom Surface</p>
-              {settings.customSurface && (
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                {t("settings.customSurface")}
+                <span className="ml-2 text-[10px] text-slate-400">{activeThemeLabel}</span>
+              </p>
+              {activeSurface && (
                 <button
-                  onClick={() => updateSettings({ customSurface: null })}
+                  onClick={() => updateActiveSurface(null)}
                   className="text-xs text-primary font-semibold"
                 >
-                  Reset to default
+                  {t("settings.resetDefault")}
                 </button>
               )}
             </div>
@@ -389,10 +403,10 @@ export default function SettingsPage() {
               {surfacePresets.map((c) => (
                 <button
                   key={c}
-                  onClick={() => updateSettings({ customSurface: c })}
+                  onClick={() => updateActiveSurface(c)}
                   className={cn(
                     "size-8 md:size-9 rounded-lg border-2 transition-all",
-                    settings.customSurface === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
+                    activeSurface === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
                   )}
                   style={{ backgroundColor: c }}
                 />
@@ -404,8 +418,8 @@ export default function SettingsPage() {
                 <span className="material-symbols-outlined text-sm text-slate-400">format_paint</span>
                 <input
                   type="color"
-                  value={settings.customSurface ?? (resolvedTheme === "dark" ? "#0f172a" : "#ffffff")}
-                  onChange={(e) => updateSettings({ customSurface: e.target.value })}
+                  value={activeSurface ?? (resolvedTheme === "dark" ? "#0f172a" : "#ffffff")}
+                  onChange={(e) => updateActiveSurface(e.target.value)}
                   className="sr-only"
                 />
               </label>
@@ -415,13 +429,16 @@ export default function SettingsPage() {
           {/* Custom background */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom Background</p>
-              {settings.customBackground && (
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                {t("settings.customBackground")}
+                <span className="ml-2 text-[10px] text-slate-400">{activeThemeLabel}</span>
+              </p>
+              {activeBackground && (
                 <button
-                  onClick={() => updateSettings({ customBackground: null })}
+                  onClick={() => updateActiveBackground(null)}
                   className="text-xs text-primary font-semibold"
                 >
-                  Reset to default
+                  {t("settings.resetDefault")}
                 </button>
               )}
             </div>
@@ -429,10 +446,10 @@ export default function SettingsPage() {
               {surfacePresets.map((c) => (
                 <button
                   key={c}
-                  onClick={() => updateSettings({ customBackground: c })}
+                  onClick={() => updateActiveBackground(c)}
                   className={cn(
                     "size-8 md:size-9 rounded-lg border-2 transition-all",
-                    settings.customBackground === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
+                    activeBackground === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
                   )}
                   style={{ backgroundColor: c }}
                 />
@@ -444,8 +461,8 @@ export default function SettingsPage() {
                 <span className="material-symbols-outlined text-sm text-slate-400">format_paint</span>
                 <input
                   type="color"
-                  value={settings.customBackground ?? (resolvedTheme === "dark" ? "#101a22" : "#f5f7f8")}
-                  onChange={(e) => updateSettings({ customBackground: e.target.value })}
+                  value={activeBackground ?? (resolvedTheme === "dark" ? "#101a22" : "#f5f7f8")}
+                  onChange={(e) => updateActiveBackground(e.target.value)}
                   className="sr-only"
                 />
               </label>
@@ -453,12 +470,33 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* ── Language ─────────────────────────────────────────────────────── */}
+        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <h3 className="font-bold text-lg mb-4">{t("settings.language")}</h3>
+          <div className="flex gap-2 md:gap-3">
+            {(["en", "es"] as const).map((lng) => (
+              <button
+                key={lng}
+                onClick={() => setLanguage(lng)}
+                className={cn(
+                  "flex-1 py-2.5 md:py-3 rounded-xl text-sm font-semibold border-2 transition-all",
+                  language === lng
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
+                )}
+              >
+                {lng === "en" ? t("settings.langEnglish") : t("settings.langSpanish")}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── Entry Defaults ───────────────────────────────────────────────── */}
         <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <h3 className="font-bold text-lg mb-4">Entry Defaults</h3>
+          <h3 className="font-bold text-lg mb-4">{t("settings.entryDefaults")}</h3>
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Default Mode</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.defaultMode")}</p>
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
                 <button
                   onClick={() => updateSettings({ defaultEntryMode: "duration" })}
@@ -469,7 +507,7 @@ export default function SettingsPage() {
                       : "text-slate-500"
                   )}
                 >
-                  Manual Duration
+                  {t("entry.manualDuration")}
                 </button>
                 <button
                   onClick={() => updateSettings({ defaultEntryMode: "range" })}
@@ -480,36 +518,40 @@ export default function SettingsPage() {
                       : "text-slate-500"
                   )}
                 >
-                  Start / End
+                  {t("entry.startEnd")}
                 </button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Default Hours</label>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.defaultHours")}</label>
                 <input
                   type="number"
                   min={0}
                   max={23}
-                  value={settings.defaultDurationHours}
-                  onChange={(e) => updateSettings({ defaultDurationHours: Math.max(0, parseInt(e.target.value) || 0) })}
+                  value={settings.defaultDurationHours === 0 ? "" : settings.defaultDurationHours}
+                  onChange={(e) => updateSettings({ defaultDurationHours: e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value) || 0) })}
+                  onBlur={(e) => { if (e.target.value === "") updateSettings({ defaultDurationHours: 0 }); }}
+                  placeholder="0"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Default Minutes</label>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.defaultMinutes")}</label>
                 <input
                   type="number"
                   min={0}
                   max={59}
-                  value={settings.defaultDurationMinutes}
-                  onChange={(e) => updateSettings({ defaultDurationMinutes: Math.max(0, Math.min(59, parseInt(e.target.value) || 0)) })}
+                  value={settings.defaultDurationMinutes === 0 ? "" : settings.defaultDurationMinutes}
+                  onChange={(e) => updateSettings({ defaultDurationMinutes: e.target.value === "" ? 0 : Math.max(0, Math.min(59, parseInt(e.target.value) || 0)) })}
+                  onBlur={(e) => { if (e.target.value === "") updateSettings({ defaultDurationMinutes: 0 }); }}
+                  placeholder="0"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 />
               </div>
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Week Layout</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.weekLayout")}</p>
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
                 <button
                   onClick={() => updateSettings({ weekStartsOn: "sunday" })}
@@ -520,7 +562,7 @@ export default function SettingsPage() {
                       : "text-slate-500"
                   )}
                 >
-                  Sunday to Saturday
+                  {t("settings.sunSat")}
                 </button>
                 <button
                   onClick={() => updateSettings({ weekStartsOn: "monday" })}
@@ -531,11 +573,11 @@ export default function SettingsPage() {
                       : "text-slate-500"
                   )}
                 >
-                  Monday to Sunday
+                  {t("settings.monSun")}
                 </button>
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                Week numbers in the calendar follow this layout.
+                {t("settings.weekNote")}
               </p>
             </div>
           </div>
@@ -543,10 +585,10 @@ export default function SettingsPage() {
 
         {/* ── Service Types ─────────────────────────────────────────────────── */}
         <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <h3 className="font-bold text-lg mb-4">Service Types</h3>
+          <h3 className="font-bold text-lg mb-4">{t("settings.serviceTypes")}</h3>
 
           <p className="mb-4 text-xs text-slate-400">
-            Drag the handle to reorder your service types.
+            {t("settings.dragHint")}
           </p>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleServiceTypeDragEnd}>
@@ -568,17 +610,17 @@ export default function SettingsPage() {
 
           {/* Add new */}
           <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-3">
-            <h4 className="font-semibold text-sm text-slate-500 uppercase tracking-wide">Add New</h4>
+            <h4 className="font-semibold text-sm text-slate-500 uppercase tracking-wide">{t("settings.addNew")}</h4>
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Service type name"
+              placeholder={t("settings.stName")}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
             />
 
             {/* Color picker */}
             <div>
-              <p className="text-xs font-semibold text-slate-500 mb-2">Color</p>
+              <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.color")}</p>
               <div className="flex gap-2 flex-wrap">
                 {COLORS.map((c) => (
                   <button
@@ -591,12 +633,30 @@ export default function SettingsPage() {
                     style={{ backgroundColor: c }}
                   />
                 ))}
+                <label
+                  className={cn(
+                    "size-8 rounded-full border-2 flex items-center justify-center cursor-pointer hover:border-primary transition-colors",
+                    !COLORS.includes(newColor) ? "border-slate-900 dark:border-white scale-110" : "border-dashed border-slate-300 dark:border-slate-600"
+                  )}
+                  style={!COLORS.includes(newColor) ? { backgroundColor: newColor } : undefined}
+                  title="Custom color"
+                >
+                  <span className="material-symbols-outlined text-sm" style={!COLORS.includes(newColor) ? { color: "#fff", mixBlendMode: "difference" } : { color: undefined }}>
+                    palette
+                  </span>
+                  <input
+                    type="color"
+                    value={newColor}
+                    onChange={(e) => setNewColor(e.target.value)}
+                    className="sr-only"
+                  />
+                </label>
               </div>
             </div>
 
             {/* Icon picker */}
             <div>
-              <p className="text-xs font-semibold text-slate-500 mb-2">Icon</p>
+              <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.icon")}</p>
               <div className="flex gap-2 flex-wrap">
                 {ICONS.map((ic) => (
                   <button
@@ -620,14 +680,14 @@ export default function SettingsPage() {
               disabled={!newName.trim()}
               className="w-full py-2.5 bg-primary text-white rounded-xl font-bold hover:opacity-90 disabled:opacity-50 transition-all"
             >
-              Create Service Type
+              {t("settings.createST")}
             </button>
           </div>
         </div>
 
         {/* ── Data Management ──────────────────────────────────────────────── */}
         <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <h3 className="font-bold text-lg mb-4">Data Management</h3>
+          <h3 className="font-bold text-lg mb-4">{t("settings.dataManagement")}</h3>
           <div className="space-y-3">
             <button
               onClick={handleExport}
@@ -635,8 +695,8 @@ export default function SettingsPage() {
             >
               <span className="material-symbols-outlined text-primary">download</span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Export to JSON</p>
-                <p className="text-xs text-slate-400 truncate">Download a backup file to your device</p>
+                <p className="text-sm font-semibold">{t("settings.exportJson")}</p>
+                <p className="text-xs text-slate-400 truncate">{t("settings.exportDesc")}</p>
               </div>
             </button>
 
@@ -646,8 +706,8 @@ export default function SettingsPage() {
             >
               <span className="material-symbols-outlined text-primary">upload</span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Import from JSON</p>
-                <p className="text-xs text-slate-400 truncate">Restore data from a backup file</p>
+                <p className="text-sm font-semibold">{t("settings.importJson")}</p>
+                <p className="text-xs text-slate-400 truncate">{t("settings.importDesc")}</p>
               </div>
             </button>
           </div>
@@ -655,7 +715,7 @@ export default function SettingsPage() {
 
         {/* ── Google Drive Sync ────────────────────────────────────────────── */}
         <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <h3 className="font-bold text-lg mb-4">Google Drive Sync</h3>
+          <h3 className="font-bold text-lg mb-4">{t("settings.driveSync")}</h3>
           <div className="space-y-4">
             {!isConfigured && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
@@ -679,14 +739,14 @@ export default function SettingsPage() {
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">
-                    {!user ? "Google account not signed in" : accessToken ? "Google Drive connected" : "Google Drive not connected yet"}
+                    {!user ? t("settings.notSignedIn") : accessToken ? t("settings.driveConnected") : t("settings.driveNotConnected")}
                   </p>
                   <p className="text-xs text-slate-400">
                     {!user
-                      ? "Sign in first, then connect Drive sync."
+                      ? t("settings.signInFirst")
                       : accessToken
-                        ? "Drive sync is ready for auto-sync, backup, and restore."
-                        : "Connect Drive once to enable sync, backup, and restore."}
+                        ? t("settings.driveReady")
+                        : t("settings.connectDriveOnce")}
                   </p>
                 </div>
               </div>
@@ -696,7 +756,7 @@ export default function SettingsPage() {
                   disabled={driveLoading || !isConfigured}
                   className="shrink-0 rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white hover:opacity-90 transition-all disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Sign in with Google
+                  {t("settings.signInGoogle")}
                 </button>
               ) : (
                 <button
@@ -704,7 +764,7 @@ export default function SettingsPage() {
                   disabled={driveLoading}
                   className="shrink-0 rounded-xl border-2 border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                 >
-                  {accessToken ? "Reconnect Drive" : "Connect Drive"}
+                  {accessToken ? t("settings.reconnectDrive") : t("settings.connectDrive")}
                 </button>
               )}
             </div>
@@ -721,8 +781,8 @@ export default function SettingsPage() {
                     sync
                   </span>
                   <div>
-                    <p className="text-sm font-semibold">Auto-sync</p>
-                    <p className="text-xs text-slate-400">Sync changes to Drive while the app is open</p>
+                    <p className="text-sm font-semibold">{t("settings.autoSync")}</p>
+                    <p className="text-xs text-slate-400">{t("settings.autoSyncDesc")}</p>
                   </div>
                 </div>
                 <button
@@ -755,11 +815,11 @@ export default function SettingsPage() {
                        sync.status === "idle" ? "cloud_done" : "cloud_off"}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold capitalize">{sync.status === "idle" ? "Synced" : sync.status}</p>
+                      <p className="text-xs font-semibold capitalize">{sync.status === "idle" ? t("settings.synced") : sync.status}</p>
                       {sync.error && <p className="text-xs text-red-500 truncate">{sync.error}</p>}
                       {settings.lastSyncedAt && sync.status !== "error" && (
                         <p className="text-xs text-slate-400">
-                          Last: {new Date(settings.lastSyncedAt).toLocaleString()}
+                          {t("settings.last")}: {new Date(settings.lastSyncedAt).toLocaleString()}
                         </p>
                       )}
                     </div>
@@ -769,14 +829,14 @@ export default function SettingsPage() {
                     disabled={sync.status === "syncing"}
                     className="text-xs text-primary font-semibold disabled:opacity-50 shrink-0 ml-2"
                   >
-                    Sync now
+                    {t("settings.syncNow")}
                   </button>
                 </div>
               )}
 
               {/* Manual backup/restore */}
               <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Manual</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.manual")}</p>
                 <button
                   onClick={handleDriveBackup}
                   disabled={driveLoading}
@@ -784,8 +844,8 @@ export default function SettingsPage() {
                 >
                   <span className="material-symbols-outlined text-green-500">cloud_upload</span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">Backup to Drive</p>
-                    <p className="text-xs text-slate-400 truncate">Upload current data to Google Drive</p>
+                    <p className="text-sm font-semibold">{t("settings.backupDrive")}</p>
+                    <p className="text-xs text-slate-400 truncate">{t("settings.backupDriveDesc")}</p>
                   </div>
                 </button>
 
@@ -796,8 +856,8 @@ export default function SettingsPage() {
                 >
                   <span className="material-symbols-outlined text-blue-500">cloud_download</span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">Restore from Drive</p>
-                    <p className="text-xs text-slate-400 truncate">Download and restore backup from Google Drive</p>
+                    <p className="text-sm font-semibold">{t("settings.restoreDrive")}</p>
+                    <p className="text-xs text-slate-400 truncate">{t("settings.restoreDriveDesc")}</p>
                   </div>
                 </button>
               </div>
@@ -812,7 +872,7 @@ export default function SettingsPage() {
 
         {/* ── Danger Zone ──────────────────────────────────────────────────── */}
         <div className="bg-surface rounded-2xl p-4 md:p-6 border border-red-200 dark:border-red-900/50 shadow-sm">
-          <h3 className="font-bold text-lg mb-4 text-red-500">Danger Zone</h3>
+          <h3 className="font-bold text-lg mb-4 text-red-500">{t("settings.dangerZone")}</h3>
           {!showResetConfirm ? (
             <button
               onClick={() => setShowResetConfirm(true)}
@@ -820,27 +880,27 @@ export default function SettingsPage() {
             >
               <span className="material-symbols-outlined">delete_forever</span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Reset All Data</p>
-                <p className="text-xs opacity-70 truncate">Permanently delete all service types, entries, and settings</p>
+                <p className="text-sm font-semibold">{t("settings.resetAll")}</p>
+                <p className="text-xs opacity-70 truncate">{t("settings.resetAllDesc")}</p>
               </div>
             </button>
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-red-500 font-medium">
-                Are you sure? This will permanently delete all your data. Consider exporting a backup first.
+                {t("settings.resetConfirm")}
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowResetConfirm(false)}
                   className="flex-1 py-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
-                  Cancel
+                  {t("settings.cancel")}
                 </button>
                 <button
                   onClick={handleReset}
                   className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors"
                 >
-                  Delete Everything
+                  {t("settings.deleteEverything")}
                 </button>
               </div>
             </div>

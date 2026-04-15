@@ -16,13 +16,13 @@ import {
 import { useStore } from "@/lib/store";
 import { computeDurationSeconds, durationDisplay } from "@/types/data";
 import type { TimeEntry, ServiceType, CalendarDay } from "@/types/data";
-import { cn, formatTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
 import AddEntryModal from "@/components/entries/AddEntryModal";
 import toast from "react-hot-toast";
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export default function CalendarPage() {
+  const { t, language } = useT();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
@@ -79,8 +79,8 @@ export default function CalendarPage() {
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn });
 
   const weekdayLabels = useMemo(
-    () => (weekStartsOnSetting === "monday" ? [...DAYS.slice(1), DAYS[0]] : DAYS),
-    [weekStartsOnSetting]
+    () => getWeekdayLabels(language, weekStartsOnSetting === "monday"),
+    [weekStartsOnSetting, language]
   );
 
   const calendarWeeks = useMemo(() => {
@@ -117,7 +117,7 @@ export default function CalendarPage() {
 
   const handleDelete = (id: string) => {
     deleteTimeEntry(id);
-    toast.success("Entry deleted");
+    toast.success(t("calendar.entryDeleted"));
   };
 
   const handleSelectDay = (day: Date) => {
@@ -133,29 +133,27 @@ export default function CalendarPage() {
       {/* Top Header */}
       <header className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-10">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg md:text-xl font-bold">
-            {format(currentDate, "MMMM yyyy")}
+          <button
+            onClick={prevMonth}
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">chevron_left</span>
+          </button>
+          <h2 className="text-lg md:text-xl font-bold min-w-[10rem] text-center">
+            {monthYear(currentDate, language)}
           </h2>
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 ml-2 md:ml-4">
-            <button
-              onClick={prevMonth}
-              className="p-1 hover:bg-surface rounded transition-all"
-            >
-              <span className="material-symbols-outlined text-sm">chevron_left</span>
-            </button>
-            <button
-              onClick={goToday}
-              className="px-2 md:px-3 text-xs font-semibold"
-            >
-              Today
-            </button>
-            <button
-              onClick={nextMonth}
-              className="p-1 hover:bg-surface rounded transition-all"
-            >
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-          </div>
+          <button
+            onClick={nextMonth}
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">chevron_right</span>
+          </button>
+          <button
+            onClick={goToday}
+            className="ml-2 px-3 py-1.5 text-xs font-bold bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+          >
+            {t("calendar.today")}
+          </button>
         </div>
       </header>
 
@@ -166,7 +164,7 @@ export default function CalendarPage() {
           {/* Weekday Header */}
           <div className="grid grid-cols-[2.25rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-center border-r border-slate-100 dark:border-slate-800 py-2 md:py-3 text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Wk
+              {t("calendar.wk")}
             </div>
             {weekdayLabels.map((d) => (
               <div
@@ -250,7 +248,7 @@ export default function CalendarPage() {
                         })}
                         {(dayData?.entries.length ?? 0) > 3 && (
                           <p className="text-[10px] text-slate-400 font-medium">
-                            +{dayData!.entries.length - 3} more
+                            +{dayData!.entries.length - 3} {t("calendar.more")}
                           </p>
                         )}
                       </div>
@@ -282,21 +280,21 @@ export default function CalendarPage() {
         <div className="mt-6 md:mt-8">
           <div className="flex items-center justify-between mb-3 md:mb-4">
             <h3 className="text-base md:text-lg font-bold">
-              Daily Entries — {format(selectedDate, "MMM d")}
+              {t("calendar.dailyEntries")} — {shortDate(selectedDate, language)}
             </h3>
             <div className="text-right">
               <p className="text-sm text-slate-500 font-medium">
-                Total: {selectedDayData?.total_duration_display ?? "0m"}
+                {t("calendar.total")}: {selectedDayData?.total_duration_display ?? "0m"}
               </p>
-              <p className="text-xs text-slate-400 font-medium">Week {selectedWeekNumber}</p>
+              <p className="text-xs text-slate-400 font-medium">{t("calendar.week")} {selectedWeekNumber}</p>
             </div>
           </div>
 
           {!selectedDayData || selectedDayData.entries.length === 0 ? (
             <div className="text-center py-10 md:py-12 text-slate-400">
               <span className="material-symbols-outlined text-4xl mb-2 block">event_busy</span>
-              <p className="font-medium">No entries for this day</p>
-              <p className="text-sm">Click the + button to add one</p>
+              <p className="font-medium">{t("calendar.noEntries")}</p>
+              <p className="text-sm">{t("calendar.addHint")}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -358,6 +356,7 @@ function EntryCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useT();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
@@ -377,10 +376,6 @@ function EntryCard({
           </div>
           <div className="min-w-0">
             <h4 className="font-bold text-sm md:text-base truncate">{entry.title}</h4>
-            <p className="text-xs text-slate-500 font-medium truncate">
-              {entry.location ? `${entry.location} — ` : ""}
-              {formatTime(entry.start_time)}
-            </p>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0 ml-2">
@@ -389,23 +384,23 @@ function EntryCard({
               {durationDisplay(computeDurationSeconds(entry))}
             </p>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-              Logged
+              {t("calendar.logged")}
             </p>
           </div>
           <button
             onClick={onEdit}
-            className="p-1.5 text-slate-300 hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
+            className="p-2 text-slate-400 hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
             title="Edit entry"
           >
-            <span className="material-symbols-outlined text-lg">edit</span>
+            <span className="material-symbols-outlined text-xl">edit</span>
           </button>
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="p-1.5 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+              className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
               title="Delete entry"
             >
-              <span className="material-symbols-outlined text-lg">delete</span>
+              <span className="material-symbols-outlined text-xl">delete</span>
             </button>
           ) : (
             <button

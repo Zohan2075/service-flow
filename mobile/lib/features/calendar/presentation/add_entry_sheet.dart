@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/network/dio_provider.dart';
+import '../../../core/i18n/language_notifier.dart';
+import '../../../core/i18n/translations.dart';
 import '../providers/calendar_providers.dart';
 import '../models/calendar_models.dart';
 
@@ -80,6 +82,8 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = ref.watch(languageProvider);
+    String t(String key) => tr(key, lang);
     final serviceTypesAsync = ref.watch(serviceTypesProvider);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -95,7 +99,7 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('New Entry', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                Text(t('entry.new'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                 IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
               ],
             ),
@@ -103,7 +107,7 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
 
             TextField(
               controller: _titleCtrl,
-              decoration: const InputDecoration(labelText: 'Title *'),
+              decoration: InputDecoration(labelText: '${t('entry.title')} *'),
               textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 12),
@@ -111,7 +115,7 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
             // Service type chips
             serviceTypesAsync.when(
               loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const Text('Could not load service types'),
+              error: (_, __) => Text(t('entry.serviceType')),
               data: (types) => Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -158,13 +162,13 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
 
             TextField(
               controller: _locationCtrl,
-              decoration: const InputDecoration(labelText: 'Location (optional)'),
+              decoration: InputDecoration(labelText: t('entry.location')),
             ),
             const SizedBox(height: 12),
 
             TextField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+              decoration: InputDecoration(labelText: t('entry.notes')),
               maxLines: 2,
             ),
             const SizedBox(height: 20),
@@ -180,7 +184,7 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
                       dimension: 20,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Add Entry', style: TextStyle(fontWeight: FontWeight.w700)),
+                  : Text(t('entry.add'), style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
           ],
         ),

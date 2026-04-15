@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useGoogleAuth } from "@/components/GoogleAuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/calendar", icon: "calendar_month", label: "Calendar" },
-  { href: "/reports", icon: "analytics", label: "Reports" },
-  { href: "/settings", icon: "settings", label: "Settings" },
+  { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
+  { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
+  { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
 ];
 
 export default function Sidebar() {
@@ -17,6 +18,7 @@ export default function Sidebar() {
   const router = useRouter();
   const { user, signOut } = useGoogleAuth();
   const { theme, setTheme } = useTheme();
+  const { t } = useT();
 
   const initials = user?.name
     ?.split(" ")
@@ -42,7 +44,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-4 space-y-1">
-        {navItems.map(({ href, icon, label }) => {
+        {navItems.map(({ href, icon, labelKey }) => {
           const active = pathname.startsWith(href);
           return (
             <Link
@@ -56,7 +58,7 @@ export default function Sidebar() {
               )}
             >
               <span className="material-symbols-outlined">{icon}</span>
-              {label}
+              {t(labelKey)}
             </Link>
           );
         })}

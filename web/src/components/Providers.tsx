@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { GoogleAuthProvider, useGoogleAuth } from "@/components/GoogleAuthProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { I18nProvider } from "@/lib/i18n";
 import { SyncProvider } from "@/lib/sync";
 import { Toaster } from "react-hot-toast";
 
@@ -21,15 +22,17 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <GoogleAuthProvider>
       <ThemeProvider>
-        <SyncBridge>
-          {children}
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              className: "dark:bg-slate-800 dark:text-white",
-            }}
-          />
-        </SyncBridge>
+        <I18nProvider>
+          <SyncBridge>
+            {children}
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                className: "dark:bg-slate-800 dark:text-white",
+              }}
+            />
+          </SyncBridge>
+        </I18nProvider>
       </ThemeProvider>
     </GoogleAuthProvider>
   );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/i18n/language_notifier.dart';
+import '../../../core/i18n/translations.dart';
 import '../providers/auth_providers.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -30,7 +32,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid email or password')),
+          const SnackBar(content: Text('Invalid credentials')),
         );
       }
     } finally {
@@ -55,6 +57,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = ref.watch(languageProvider);
+    String t(String key) => tr(key, lang);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -98,7 +102,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Welcome back',
+                            t('login.welcome'),
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),
@@ -110,7 +114,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           OutlinedButton.icon(
                             onPressed: _loading ? null : _signInGoogle,
                             icon: const Icon(Icons.account_circle_outlined),
-                            label: const Text('Continue with Google'),
+                            label: Text(t('login.continueGoogle')),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -124,7 +128,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             const Expanded(child: Divider()),
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('or', style: TextStyle(color: cs.onSurface.withOpacity(0.4))),
+                              child: Text(t('login.or'), style: TextStyle(color: cs.onSurface.withOpacity(0.4))),
                             ),
                             const Expanded(child: Divider()),
                           ]),
@@ -134,13 +138,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           TextField(
                             controller: _emailCtrl,
                             keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(labelText: 'Email'),
+                            decoration: InputDecoration(labelText: t('login.email')),
                           ),
                           const SizedBox(height: 12),
                           TextField(
                             controller: _passCtrl,
                             obscureText: true,
-                            decoration: const InputDecoration(labelText: 'Password'),
+                            decoration: InputDecoration(labelText: t('login.password')),
                             onSubmitted: (_) => _signInEmail(),
                           ),
                           const SizedBox(height: 20),
@@ -158,7 +162,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     dimension: 20,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                   )
-                                : const Text('Sign In', style: TextStyle(fontWeight: FontWeight.w700)),
+                                : Text(t('login.signIn'), style: const TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ],
                       ),

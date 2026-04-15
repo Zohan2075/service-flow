@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../providers/calendar_providers.dart';
 import '../models/calendar_models.dart';
+import '../../../core/i18n/language_notifier.dart';
+import '../../../core/i18n/translations.dart';
 import 'add_entry_sheet.dart';
 
 class CalendarPage extends ConsumerWidget {
@@ -44,7 +46,7 @@ class CalendarPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(DateFormat('MMMM yyyy').format(selectedMonth)),
+        title: Text('${monthName(selectedMonth.month, lang)} ${selectedMonth.year}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.today),
@@ -117,12 +119,12 @@ class CalendarPage extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Daily Entries — ${DateFormat('MMM d').format(selectedDay)}',
+                  '${t('calendar.dailyEntries')} — ${DateFormat('MMM d').format(selectedDay)}',
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 if (selectedDayData != null)
                   Text(
-                    'Total: ${selectedDayData.totalDurationDisplay}',
+                    '${t('calendar.total')}: ${selectedDayData.totalDurationDisplay}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: cs.onSurface.withOpacity(0.6),
                     ),
@@ -143,7 +145,7 @@ class CalendarPage extends ConsumerWidget {
                       children: [
                         Icon(Icons.event_busy, size: 48, color: cs.onSurface.withOpacity(0.3)),
                         const SizedBox(height: 8),
-                        Text('No entries', style: TextStyle(color: cs.onSurface.withOpacity(0.4))),
+                        Text(t('calendar.noEntries'), style: TextStyle(color: cs.onSurface.withOpacity(0.4))),
                       ],
                     ),
                   );

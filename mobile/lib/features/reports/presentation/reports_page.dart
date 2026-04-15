@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../core/i18n/language_notifier.dart';
+import '../../../core/i18n/translations.dart';
 import '../../../features/calendar/providers/calendar_providers.dart';
 
 class ReportsPage extends ConsumerWidget {
@@ -17,6 +19,8 @@ class ReportsPage extends ConsumerWidget {
     final selectedMonth = ref.watch(selectedMonthProvider);
     final calendarAsync = ref.watch(calendarDataProvider);
     final serviceTypesAsync = ref.watch(serviceTypesProvider);
+    final lang = ref.watch(languageProvider);
+    String t(String key) => tr(key, lang);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -33,7 +37,7 @@ class ReportsPage extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () {},
-            child: Text(DateFormat('MMM yyyy').format(selectedMonth),
+            child: Text('${monthName(selectedMonth.month, lang)} ${selectedMonth.year}',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
           IconButton(
@@ -85,10 +89,10 @@ class ReportsPage extends ConsumerWidget {
                 mainAxisSpacing: 10,
                 childAspectRatio: 1.7,
                 children: [
-                  _StatCard(icon: Icons.schedule, label: 'Total Hours', value: _fmt(totalSeconds)),
-                  _StatCard(icon: Icons.calendar_today, label: 'Days Worked', value: '${days.length}'),
-                  _StatCard(icon: Icons.list_alt, label: 'Entries', value: '$totalEntries'),
-                  _StatCard(icon: Icons.trending_up, label: 'Avg / Day', value: days.isEmpty ? '—' : _fmt(avgSeconds)),
+                  _StatCard(icon: Icons.schedule, label: t('reports.totalHours'), value: _fmt(totalSeconds)),
+                  _StatCard(icon: Icons.calendar_today, label: t('reports.daysWorked'), value: '${days.length}'),
+                  _StatCard(icon: Icons.list_alt, label: t('reports.totalEntries'), value: '$totalEntries'),
+                  _StatCard(icon: Icons.trending_up, label: t('reports.avgDay'), value: days.isEmpty ? '—' : _fmt(avgSeconds)),
                 ],
               ),
               const SizedBox(height: 20),
@@ -100,14 +104,14 @@ class ReportsPage extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('By Service Type',
+                      Text(t('reports.byServiceType'),
                           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 16),
                       if (sorted.isEmpty)
                         Center(
                           child: Padding(
                             padding: const EdgeInsets.all(24),
-                            child: Text('No data', style: TextStyle(color: cs.onSurface.withOpacity(0.4))),
+                            child: Text(t('reports.noData'), style: TextStyle(color: cs.onSurface.withOpacity(0.4))),
                           ),
                         )
                       else
@@ -127,7 +131,7 @@ class ReportsPage extends ConsumerWidget {
                                       Text(st.name,
                                           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                                       const SizedBox(width: 4),
-                                      Text('${st.count} entries',
+                                      Text('${st.count} ${t('reports.entries')}',
                                           style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(0.4))),
                                     ]),
                                     Text(_fmt(st.seconds),

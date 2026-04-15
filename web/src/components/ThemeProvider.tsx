@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 
 type Theme = "light" | "dark" | "system";
@@ -25,17 +25,41 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [resolved, setResolved] = useState<"light" | "dark">("light");
 
   const accentColor = useStore((s) => s.settings.accentColor);
-  const customSurface = useStore((s) => s.settings.customSurface);
-  const customBackground = useStore((s) => s.settings.customBackground);
+  const customSurfaceLight = useStore((s) => s.settings.customSurfaceLight);
+  const customSurfaceDark = useStore((s) => s.settings.customSurfaceDark);
+  const customBackgroundLight = useStore((s) => s.settings.customBackgroundLight);
+  const customBackgroundDark = useStore((s) => s.settings.customBackgroundDark);
 
-  const applyTheme = (t: Theme) => {
+  const resolveTheme = useCallback((t: Theme): "light" | "dark" => {
+    return t === "dark" || (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ? "dark"
+      : "light";
+  }, []);
+
+  const applyAppearance = useCallback((nextResolved: "light" | "dark") => {
     const root = document.documentElement;
-    const isDark =
-      t === "dark" ||
-      (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    root.classList.toggle("dark", isDark);
-    setResolved(isDark ? "dark" : "light");
-  };
+    const activeSurface = nextResolved === "dark" ? customSurfaceDark : customSurfaceLight;
+    const activeBackground = nextResolved === "dark" ? customBackgroundDark : customBackgroundLight;
+
+    root.style.setProperty("--sf-primary", hexToRgb(accentColor));
+    if (activeSurface) {
+      root.style.setProperty("--sf-surface", hexToRgb(activeSurface));
+    } else {
+      root.style.removeProperty("--sf-surface");
+    }
+    if (activeBackground) {
+      root.style.setProperty("--sf-bg", hexToRgb(activeBackground));
+    } else {
+      root.style.removeProperty("--sf-bg");
+    }
+  }, [accentColor, customBackgroundDark, customBackgroundLight, customSurfaceDark, customSurfaceLight]);
+
+  const applyTheme = useCallback((t: Theme) => {
+    const root = document.documentElement;
+    const nextResolved = resolveTheme(t);
+    root.classList.toggle("dark", nextResolved === "dark");
+    setResolved(nextResolved);
+  }, [resolveTheme]);
 
   const setTheme = (t: Theme) => {
     localStorage.setItem("sf-theme", t);
@@ -54,24 +78,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, []);
+  }, [applyTheme]);
 
-  // Apply custom appearance CSS variables
-  useEffect(() => {
-    const root = document.documentElement;
-    root.style.setProperty("--sf-primary", hexToRgb(accentColor));
-
-    if (customSurface) {
-      root.style.setProperty("--sf-surface", hexToRgb(customSurface));
-    } else {
-      root.style.removeProperty("--sf-surface");
-    }
-    if (customBackground) {
-      root.style.setProperty("--sf-bg", hexToRgb(customBackground));
-    } else {
-      root.style.removeProperty("--sf-bg");
-    }
-  }, [accentColor, customSurface, customBackground]);
+  useLayoutEffect(() => {
+    applyAppearance(resolved);
+  }, [applyAppearance, resolved]);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme: resolved }}>

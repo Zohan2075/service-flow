@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 const navItems = [
-  { href: "/calendar", icon: "calendar_month", label: "Calendar" },
-  { href: "/reports", icon: "analytics", label: "Reports" },
-  { href: "/settings", icon: "settings", label: "Settings" },
+  { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
+  { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
+  { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
 ];
 
 export default function MobileNavBar() {
   const pathname = usePathname() ?? "";
+  const { t } = useT();
 
   return (
     <nav
@@ -19,7 +21,7 @@ export default function MobileNavBar() {
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="flex items-stretch h-14">
-        {navItems.map(({ href, icon, label }) => {
+        {navItems.map(({ href, icon, labelKey }) => {
           const active = pathname.startsWith(href);
           return (
             <Link
@@ -34,7 +36,7 @@ export default function MobileNavBar() {
             >
               <span className="material-symbols-outlined text-[22px] leading-none">{icon}</span>
               <span className={cn("text-[10px] font-medium leading-none", active && "font-bold")}>
-                {label}
+                {t(labelKey)}
               </span>
             </Link>
           );
