@@ -23,6 +23,7 @@ export interface SyncState {
 
 interface SyncContextValue extends SyncState {
   syncNow: () => Promise<void>;
+  isOnline: boolean;
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -51,6 +52,9 @@ export function SyncProvider({
   const updateSettings = useStore((s) => s.updateSettings);
 
   const [state, setState] = useState<SyncState>({ status: "idle", error: null });
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
@@ -59,7 +63,20 @@ export function SyncProvider({
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
+  // Track online / offline
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
   const doSync = useCallback(async () => {
+    if (!navigator.onLine) return; // skip while offline
     if (!getTokenRef.current || syncingRef.current) return;
     syncingRef.current = true;
     setState({ status: "syncing", error: null });
@@ -92,6 +109,12 @@ export function SyncProvider({
       setState((s) => (s.status === "offline" ? s : { status: "offline", error: null }));
       return;
     }
+
+    if (!isOnline) {
+      setState({ status: "offline", error: null });
+      return;
+    }
+
     setState({ status: "idle", error: null });
 
     const unsub = useStore.subscribe((cur, prev) => {
@@ -119,10 +142,17 @@ export function SyncProvider({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoSync, getToken, doSync]);
+  }, [autoSync, getToken, isOnline, doSync]);
+
+  // Sync pending changes when coming back online
+  useEffect(() => {
+    if (isOnline && dirtyRef.current && autoSync && getToken) {
+      doSync();
+    }
+  }, [isOnline, autoSync, getToken, doSync]);
 
   return (
-    <SyncContext.Provider value={{ ...state, syncNow: doSync }}>
+    <SyncContext.Provider value={{ ...state, syncNow: doSync, isOnline }}>
       {children}
     </SyncContext.Provider>
   );

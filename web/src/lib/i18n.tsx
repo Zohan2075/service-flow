@@ -176,6 +176,10 @@ const translations = {
 
     // Sidebar
     "sidebar.signOut": "Sign out",
+
+    // Offline
+    "offline.banner": "You're offline — changes are saved locally",
+    "offline.syncPending": "Changes will sync when you're back online",
   },
   es: {
     // Nav
@@ -346,6 +350,10 @@ const translations = {
 
     // Sidebar
     "sidebar.signOut": "Cerrar sesión",
+
+    // Offline
+    "offline.banner": "Sin conexión — los cambios se guardan localmente",
+    "offline.syncPending": "Los cambios se sincronizarán cuando vuelvas a estar en línea",
   },
 } as const;
 
