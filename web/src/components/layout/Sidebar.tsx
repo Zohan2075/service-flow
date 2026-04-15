@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { usePathname, useRouter } from "next/navigation";
+import { useGoogleAuth } from "@/components/GoogleAuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import { cn } from "@/lib/utils";
 
@@ -13,19 +13,25 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const pathname = usePathname();
-  const { data: session } = useSession();
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const pathname = usePathname() ?? "";
+  const router = useRouter();
+  const { user, signOut } = useGoogleAuth();
+  const { theme, setTheme } = useTheme();
 
-  const initials = session?.user?.name
+  const initials = user?.name
     ?.split(" ")
     .map((n) => n[0])
     .join("")
     .slice(0, 2)
     .toUpperCase() ?? "SF";
 
+  const handleSignOut = () => {
+    signOut();
+    router.push("/login");
+  };
+
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
+    <aside className="hidden md:flex flex-col w-64 bg-surface border-r border-slate-200 dark:border-slate-800">
       {/* Logo */}
       <div className="p-6 flex items-center gap-3">
         <div className="bg-primary rounded-xl p-2 flex items-center justify-center text-white">
@@ -77,10 +83,10 @@ export default function Sidebar() {
 
         <div className="flex items-center gap-3 p-2 rounded-xl">
           <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-            {session?.user?.image ? (
+            {user?.image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={session.user.image}
+                src={user.image}
                 alt={initials}
                 className="size-10 rounded-full object-cover"
               />
@@ -90,14 +96,14 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">
-              {session?.user?.name ?? "User"}
+              {user?.name ?? "User"}
             </p>
             <p className="text-xs text-slate-500 truncate">
-              {session?.user?.email ?? ""}
+              {user?.email ?? ""}
             </p>
           </div>
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={handleSignOut}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             title="Sign out"
           >

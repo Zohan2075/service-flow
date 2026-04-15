@@ -1,25 +1,27 @@
 "use client";
 
-import { SessionProvider } from "next-auth/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { GoogleAuthProvider, useGoogleAuth } from "@/components/GoogleAuthProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { SyncProvider } from "@/lib/sync";
 import { Toaster } from "react-hot-toast";
-import { useState } from "react";
+
+function SyncBridge({ children }: { children: React.ReactNode }) {
+  const { accessToken, requestDriveAccess } = useGoogleAuth();
+
+  const getToken = useCallback(async () => {
+    if (accessToken) return accessToken;
+    return requestDriveAccess();
+  }, [accessToken, requestDriveAccess]);
+
+  return <SyncProvider getToken={getToken}>{children}</SyncProvider>;
+}
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { staleTime: 60_000, retry: 1 },
-        },
-      })
-  );
-
   return (
-    <SessionProvider>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
+    <GoogleAuthProvider>
+      <ThemeProvider>
+        <SyncBridge>
           {children}
           <Toaster
             position="top-right"
@@ -27,8 +29,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
               className: "dark:bg-slate-800 dark:text-white",
             }}
           />
-        </ThemeProvider>
-      </QueryClientProvider>
-    </SessionProvider>
+        </SyncBridge>
+      </ThemeProvider>
+    </GoogleAuthProvider>
   );
 }
