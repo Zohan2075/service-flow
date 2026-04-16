@@ -5,3 +5,4 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID = "239823436666-l9857mtjqou52t4b799hhrc50d5nll9p.apps.googleusercontent.com"
