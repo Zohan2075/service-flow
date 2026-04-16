@@ -65,6 +65,16 @@ function loadScript(src: string): Promise<void> {
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const SCOPES = "openid profile email https://www.googleapis.com/auth/drive.file";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+function hasDriveScope(scope: string | null | undefined) {
+  if (!scope) return false;
+  return scope.split(/\s+/).includes(DRIVE_SCOPE);
+}
+
+function getGoogleResponseError(resp: google.accounts.oauth2.TokenResponse) {
+  return resp.error_description ?? resp.error ?? null;
+}
 
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const storeProfile = useStore((s) => s.profile);
@@ -73,6 +83,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<UserProfile | null>(storeProfile);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [grantedScopes, setGrantedScopes] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tokenClient, setTokenClient] = useState<google.accounts.oauth2.TokenClient | null>(null);
@@ -165,15 +176,16 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     await new Promise<void>((resolve, reject) => {
       client.callback = async (resp) => {
         if (resp.error) {
-          const message = resp.error;
+          const message = getGoogleResponseError(resp) ?? "Google sign-in failed";
           setError(message);
-          console.error("Sign-in error:", resp.error);
+          console.error("Sign-in error:", resp);
           reject(new Error(message));
           return;
         }
 
         try {
           setAccessToken(resp.access_token);
+          setGrantedScopes(resp.scope ?? null);
           await fetchUserInfo(resp.access_token);
           resolve();
         } catch (err) {
@@ -190,7 +202,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   // Request Drive access token (reuses existing or prompts)
   const requestDriveAccess = useCallback((): Promise<string> => {
     return new Promise((resolve, reject) => {
-      if (accessToken) {
+      if (accessToken && hasDriveScope(grantedScopes)) {
         resolve(accessToken);
         return;
       }
@@ -198,11 +210,13 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         .then((client) => {
           client.callback = async (resp) => {
             if (resp.error) {
-              setError(resp.error);
-              reject(new Error(resp.error));
+              const message = getGoogleResponseError(resp) ?? "Google Drive authorization failed";
+              setError(message);
+              reject(new Error(message));
               return;
             }
             setAccessToken(resp.access_token);
+            setGrantedScopes(resp.scope ?? null);
             if (!user) {
               await fetchUserInfo(resp.access_token);
             }
@@ -217,13 +231,14 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           reject(new Error(message));
         });
     });
-  }, [accessToken, ensureTokenClient, user, fetchUserInfo]);
+  }, [accessToken, ensureTokenClient, fetchUserInfo, grantedScopes, user]);
 
   // Sign out
   const signOutHandler = useCallback(() => {
     window.google?.accounts?.id?.disableAutoSelect();
     setUser(null);
     setAccessToken(null);
+    setGrantedScopes(null);
     storeSignOut();
   }, [storeSignOut]);
 

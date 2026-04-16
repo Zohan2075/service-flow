@@ -43,6 +43,8 @@ declare namespace google.accounts.oauth2 {
   interface TokenResponse {
     access_token: string;
     error?: string;
+    error_description?: string;
+    error_uri?: string;
     expires_in: number;
     scope: string;
     token_type: string;

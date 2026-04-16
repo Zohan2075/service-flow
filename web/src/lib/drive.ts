@@ -6,13 +6,70 @@ const UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 const FILE_NAME = "serviceflow-backup.json";
 const MIME = "application/json";
 
+type GoogleApiErrorPayload = {
+  error?: {
+    message?: string;
+    errors?: Array<{
+      message?: string;
+      reason?: string;
+    }>;
+  };
+};
+
+async function parseDriveError(action: string, res: Response): Promise<Error> {
+  let apiMessage = "";
+  let reason = "";
+
+  try {
+    const payload = (await res.clone().json()) as GoogleApiErrorPayload;
+    apiMessage = payload.error?.message?.trim() ?? "";
+    reason = payload.error?.errors?.map((item) => item.reason?.trim()).filter(Boolean).join(", ") ?? "";
+  } catch {
+    try {
+      apiMessage = (await res.text()).trim();
+    } catch {
+      apiMessage = "";
+    }
+  }
+
+  const detail = `${apiMessage} ${reason}`.trim().toLowerCase();
+
+  if (res.status === 401) {
+    return new Error("Google Drive session expired. Sign in again and reconnect Drive.");
+  }
+
+  if (res.status === 403) {
+    if (
+      detail.includes("insufficient authentication scopes") ||
+      detail.includes("insufficientpermissions") ||
+      detail.includes("forbidden")
+    ) {
+      return new Error("Google Drive permission is missing. Reconnect Drive and accept the Drive access prompt again.");
+    }
+
+    if (
+      detail.includes("access not configured") ||
+      detail.includes("has not been used in project") ||
+      detail.includes("is disabled")
+    ) {
+      return new Error("Google Drive API is not enabled for this Google Cloud project. Enable it under APIs & Services > Library, then try again.");
+    }
+  }
+
+  if (apiMessage) {
+    return new Error(`${action} failed: ${apiMessage}`);
+  }
+
+  return new Error(`${action} failed: ${res.status}`);
+}
+
 async function findBackupFile(token: string): Promise<string | null> {
   const q = encodeURIComponent(`name='${FILE_NAME}' and trashed=false`);
   const res = await fetch(
     `${DRIVE_API}/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  if (!res.ok) throw new Error(`Drive list failed: ${res.status}`);
+  if (!res.ok) throw await parseDriveError("Drive list", res);
   const data = await res.json();
   return data.files?.[0]?.id ?? null;
 }
@@ -33,7 +90,7 @@ export async function uploadBackup(token: string, json: string): Promise<void> {
         body: json,
       }
     );
-    if (!res.ok) throw new Error(`Drive update failed: ${res.status}`);
+    if (!res.ok) throw await parseDriveError("Drive update", res);
   } else {
     // Create with multipart upload (metadata + content)
     const metadata = { name: FILE_NAME, mimeType: MIME };
@@ -55,7 +112,7 @@ export async function uploadBackup(token: string, json: string): Promise<void> {
       },
       body,
     });
-    if (!res.ok) throw new Error(`Drive create failed: ${res.status}`);
+    if (!res.ok) throw await parseDriveError("Drive create", res);
   }
 }
 
@@ -66,6 +123,6 @@ export async function downloadBackup(token: string): Promise<string> {
   const res = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`Drive download failed: ${res.status}`);
+  if (!res.ok) throw await parseDriveError("Drive download", res);
   return res.text();
 }
