@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   eachDayOfInterval,
   endOfMonth,
@@ -14,7 +14,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { useStore } from "@/lib/store";
-import { computeDurationSeconds, durationDisplay } from "@/types/data";
+import { calendarDateKey, computeDurationSeconds, durationDisplay } from "@/types/data";
 import type { TimeEntry, ServiceType, CalendarDay } from "@/types/data";
 import { cn } from "@/lib/utils";
 import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
@@ -33,8 +33,15 @@ export default function CalendarPage() {
 
   const timeEntries = useStore((s) => s.timeEntries);
   const serviceTypes = useStore((s) => s.serviceTypes);
+  const ensureDefaultServiceType = useStore((s) => s.ensureDefaultServiceType);
   const weekStartsOnSetting = useStore((s) => s.settings.weekStartsOn);
   const deleteTimeEntry = useStore((s) => s.deleteTimeEntry);
+
+  useEffect(() => {
+    if (serviceTypes.length === 0) {
+      ensureDefaultServiceType();
+    }
+  }, [ensureDefaultServiceType, serviceTypes.length]);
 
   const serviceTypeMap = useMemo(
     () => Object.fromEntries(serviceTypes.map((st) => [st.id, st])),
@@ -46,7 +53,7 @@ export default function CalendarPage() {
       Object.fromEntries(
         Object.entries(
           timeEntries.reduce<Record<string, TimeEntry[]>>((grouped, entry) => {
-            const date = entry.start_time.slice(0, 10);
+            const date = calendarDateKey(entry.start_time);
             (grouped[date] ??= []).push(entry);
             return grouped;
           }, {})
@@ -118,6 +125,11 @@ export default function CalendarPage() {
   const handleDelete = (id: string) => {
     deleteTimeEntry(id);
     toast.success(t("calendar.entryDeleted"));
+  };
+
+  const handleOpenAddModal = () => {
+    ensureDefaultServiceType();
+    setShowAddModal(true);
   };
 
   const handleSelectDay = (day: Date) => {
@@ -317,7 +329,7 @@ export default function CalendarPage() {
 
       {/* FAB — offset above mobile nav */}
       <button
-        onClick={() => setShowAddModal(true)}
+        onClick={handleOpenAddModal}
         className="fixed bottom-20 right-4 md:absolute md:bottom-10 md:right-10 size-14 md:size-16 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20"
       >
         <span className="material-symbols-outlined text-2xl md:text-3xl">add</span>
@@ -326,7 +338,6 @@ export default function CalendarPage() {
       {showAddModal && (
         <AddEntryModal
           selectedDate={selectedDate}
-          serviceTypes={serviceTypes}
           onClose={() => setShowAddModal(false)}
           onSuccess={() => setShowAddModal(false)}
         />
@@ -335,7 +346,6 @@ export default function CalendarPage() {
       {editingEntry && (
         <AddEntryModal
           selectedDate={new Date(editingEntry.start_time)}
-          serviceTypes={serviceTypes}
           entry={editingEntry}
           onClose={() => setEditingEntry(null)}
           onSuccess={() => setEditingEntry(null)}

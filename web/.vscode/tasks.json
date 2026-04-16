@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build web",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"next",
+				"build"
+			],
+			"isBackground": false
+		}
+	]
+}

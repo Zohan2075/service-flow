@@ -102,6 +102,15 @@ export function durationDisplay(seconds: number): string {
   return `${minutes}m`;
 }
 
+export function calendarDateKey(iso: string): string {
+  const date = new Date(iso);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 export function buildCalendarDays(
   entries: TimeEntry[],
   year: number,
@@ -111,7 +120,7 @@ export function buildCalendarDays(
   const prefix = `${year}-${String(month).padStart(2, "0")}`;
 
   for (const e of entries) {
-    const d = e.start_time.slice(0, 10); // "yyyy-MM-dd"
+    const d = calendarDateKey(e.start_time);
     if (!d.startsWith(prefix)) continue;
     (byDate[d] ??= []).push(e);
   }

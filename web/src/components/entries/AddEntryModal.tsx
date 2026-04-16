@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { useStore } from "@/lib/store";
-import type { ServiceType, TimeEntry } from "@/types/data";
+import type { TimeEntry } from "@/types/data";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import toast from "react-hot-toast";
@@ -12,7 +12,6 @@ type EntryMode = "range" | "duration";
 
 interface Props {
   selectedDate: Date;
-  serviceTypes: ServiceType[];
   onClose: () => void;
   onSuccess: () => void;
   /** If provided, modal opens in edit mode with pre-filled fields */
@@ -26,12 +25,13 @@ function extractTimeStr(iso: string): string {
 
 export default function AddEntryModal({
   selectedDate,
-  serviceTypes,
   onClose,
   onSuccess,
   entry,
 }: Props) {
   const addTimeEntry = useStore((s) => s.addTimeEntry);
+  const serviceTypes = useStore((s) => s.serviceTypes);
+  const ensureDefaultServiceType = useStore((s) => s.ensureDefaultServiceType);
   const updateTimeEntry = useStore((s) => s.updateTimeEntry);
   const settings = useStore((s) => s.settings);
   const { t } = useT();
@@ -70,9 +70,35 @@ export default function AddEntryModal({
   const [location, setLocation] = useState(entry?.location ?? "");
   const [saving, setSaving] = useState(false);
 
+  // Seed a default type if the store has none (e.g. first launch)
+  useEffect(() => {
+    if (serviceTypes.length === 0) {
+      ensureDefaultServiceType();
+    }
+  }, [ensureDefaultServiceType, serviceTypes.length]);
+
+  // Keep serviceTypeId in sync: adopt first type when current id is
+  // empty **or** no longer matches any existing service type.
+  useEffect(() => {
+    if (serviceTypes.length > 0) {
+      const valid = serviceTypes.some((st) => st.id === serviceTypeId);
+      if (!valid) {
+        setServiceTypeId(serviceTypes[0].id);
+      }
+    }
+  }, [serviceTypeId, serviceTypes]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !serviceTypeId) return;
+    if (!title.trim()) return;
+
+    // Read the LIVE store state so we never use a stale ID
+    const liveTypes = useStore.getState().serviceTypes;
+    let resolvedServiceTypeId = serviceTypeId;
+    const idStillExists = liveTypes.some((st) => st.id === resolvedServiceTypeId);
+    if (!resolvedServiceTypeId || !idStillExists) {
+      resolvedServiceTypeId = ensureDefaultServiceType();
+    }
     setSaving(true);
 
     try {
@@ -84,7 +110,7 @@ export default function AddEntryModal({
 
         const data = {
           title: title.trim(),
-          service_type_id: serviceTypeId,
+          service_type_id: resolvedServiceTypeId,
           start_time: startISO,
           end_time: endISO,
           duration_seconds: null,
@@ -108,7 +134,7 @@ export default function AddEntryModal({
 
         const data = {
           title: title.trim(),
-          service_type_id: serviceTypeId,
+          service_type_id: resolvedServiceTypeId,
           start_time: new Date(
             selectedDate.getFullYear(),
             selectedDate.getMonth(),

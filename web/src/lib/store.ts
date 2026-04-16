@@ -78,6 +78,7 @@ interface AppState {
 
   // service type actions
   addServiceType: (st: Omit<ServiceType, "id" | "created_at" | "updated_at" | "sort_order" | "is_active">) => void;
+  ensureDefaultServiceType: () => string;
   updateServiceType: (id: string, patch: Partial<ServiceType>) => void;
   moveServiceType: (id: string, direction: "up" | "down") => void;
   reorderServiceTypes: (orderedIds: string[]) => void;
@@ -111,6 +112,39 @@ function normalizeServiceTypes(serviceTypes: ServiceType[]): ServiceType[] {
       ...serviceType,
       sort_order: index,
     }));
+}
+
+function createDefaultServiceType(
+  language: AppSettings["language"],
+  color: AppSettings["accentColor"],
+  sortOrder: number
+): ServiceType {
+  const timestamp = now();
+
+  return {
+    id: uuid(),
+    name: language === "es" ? "Por defecto" : "Default",
+    description: null,
+    color,
+    icon: "category",
+    sort_order: sortOrder,
+    is_active: true,
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+}
+
+function ensureServiceTypesNotEmpty(
+  serviceTypes: ServiceType[],
+  settings: Pick<AppSettings, "language" | "accentColor">
+): ServiceType[] {
+  if (serviceTypes.length > 0) {
+    return normalizeServiceTypes(serviceTypes);
+  }
+
+  return normalizeServiceTypes([
+    createDefaultServiceType(settings.language, settings.accentColor, 0),
+  ]);
 }
 
 const INITIAL_SETTINGS: AppSettings = {
@@ -148,10 +182,10 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
 
 export const useStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       profile: null,
       settings: INITIAL_SETTINGS,
-      serviceTypes: [],
+      serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
       timeEntries: [],
 
       // ── Auth ────────────────────────────────────────────────────────────
@@ -169,7 +203,7 @@ export const useStore = create<AppState>()(
       // ── Service Types ───────────────────────────────────────────────────
       addServiceType: (st) =>
         set((s) => ({
-          serviceTypes: normalizeServiceTypes([
+          serviceTypes: ensureServiceTypesNotEmpty([
             ...s.serviceTypes,
             {
               ...st,
@@ -179,8 +213,19 @@ export const useStore = create<AppState>()(
               created_at: now(),
               updated_at: now(),
             },
-          ]),
+          ], s.settings),
         })),
+
+      ensureDefaultServiceType: () => {
+        const existing = get().serviceTypes[0];
+        if (existing) return existing.id;
+
+        set((s) => ({
+          serviceTypes: ensureServiceTypesNotEmpty(s.serviceTypes, s.settings),
+        }));
+
+        return get().serviceTypes[0]?.id ?? "";
+      },
 
       updateServiceType: (id, patch) =>
         set((s) => ({
@@ -235,18 +280,36 @@ export const useStore = create<AppState>()(
         }),
 
       deleteServiceType: (id) =>
-        set((s) => ({
-          serviceTypes: normalizeServiceTypes(s.serviceTypes.filter((st) => st.id !== id)),
-        })),
+        set((s) => {
+          if (s.serviceTypes.length <= 1) return s;
+          return {
+            serviceTypes: normalizeServiceTypes(
+              s.serviceTypes.filter((st) => st.id !== id)
+            ),
+          };
+        }),
 
       // ── Time Entries ────────────────────────────────────────────────────
       addTimeEntry: (entry) =>
-        set((s) => ({
-          timeEntries: [
-            ...s.timeEntries,
-            { ...entry, id: uuid(), created_at: now(), updated_at: now() },
-          ],
-        })),
+        set((s) => {
+          const serviceTypes = ensureServiceTypesNotEmpty(s.serviceTypes, s.settings);
+          const idExists = serviceTypes.some((st) => st.id === entry.service_type_id);
+          const serviceTypeId = idExists ? entry.service_type_id : serviceTypes[0].id;
+
+          return {
+            serviceTypes,
+            timeEntries: [
+              ...s.timeEntries,
+              {
+                ...entry,
+                service_type_id: serviceTypeId,
+                id: uuid(),
+                created_at: now(),
+                updated_at: now(),
+              },
+            ],
+          };
+        }),
 
       updateTimeEntry: (id, patch) =>
         set((s) => ({
@@ -263,9 +326,12 @@ export const useStore = create<AppState>()(
       // ── Bulk ───────────────────────────────────────────────────────────
       importData: (file) =>
         set((s) => ({
-          profile: file.profile,
           settings: normalizeSettings({ ...s.settings, ...(file.settings ?? {}) }),
-          serviceTypes: normalizeServiceTypes(sortServiceTypesByOrder(file.service_types)),
+          profile: file.profile,
+          serviceTypes: ensureServiceTypesNotEmpty(
+            sortServiceTypesByOrder(file.service_types),
+            normalizeSettings({ ...s.settings, ...(file.settings ?? {}) })
+          ),
           timeEntries: file.time_entries,
         })),
 
@@ -273,7 +339,7 @@ export const useStore = create<AppState>()(
         set({
           profile: null,
           settings: INITIAL_SETTINGS,
-          serviceTypes: [],
+          serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
           timeEntries: [],
         }),
     }),
@@ -290,12 +356,14 @@ export const useStore = create<AppState>()(
       // Deep-merge settings so new fields get their defaults when loading old data
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
+        const settings = normalizeSettings({ ...current.settings, ...(p.settings ?? {}) });
         return {
           ...current,
           ...p,
-          settings: normalizeSettings({ ...current.settings, ...(p.settings ?? {}) }),
-          serviceTypes: normalizeServiceTypes(
-            sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes)
+          settings,
+          serviceTypes: ensureServiceTypesNotEmpty(
+            sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes),
+            settings
           ),
         };
       },

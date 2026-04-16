@@ -601,6 +601,7 @@ export default function SettingsPage() {
                   <SortableServiceTypeItem
                     key={serviceType.id}
                     serviceType={serviceType}
+                    canDelete={serviceTypes.length > 1}
                     onDelete={() => deleteServiceType(serviceType.id)}
                   />
                 ))}
@@ -913,9 +914,11 @@ export default function SettingsPage() {
 
 function SortableServiceTypeItem({
   serviceType,
+  canDelete,
   onDelete,
 }: {
   serviceType: ServiceType;
+  canDelete: boolean;
   onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -960,13 +963,15 @@ function SortableServiceTypeItem({
           )}
         </div>
       </div>
-      <button
-        onClick={onDelete}
-        className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-        title="Delete"
-      >
-        <span className="material-symbols-outlined text-base">delete</span>
-      </button>
+      {canDelete && (
+        <button
+          onClick={onDelete}
+          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+          title="Delete"
+        >
+          <span className="material-symbols-outlined text-base">delete</span>
+        </button>
+      )}
     </div>
   );
 }
