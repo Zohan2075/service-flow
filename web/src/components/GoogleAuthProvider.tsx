@@ -38,10 +38,20 @@ const GoogleAuthContext = createContext<GoogleAuthContextValue | null>(null);
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
+    if (window.google?.accounts?.oauth2) {
       resolve();
       return;
     }
+
+    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+    if (existing) {
+      const handleLoad = () => resolve();
+      const handleError = () => reject(new Error(`Failed to load script: ${src}`));
+      existing.addEventListener("load", handleLoad, { once: true });
+      existing.addEventListener("error", handleError, { once: true });
+      return;
+    }
+
     const s = document.createElement("script");
     s.src = src;
     s.async = true;
@@ -73,38 +83,55 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     setUser(storeProfile);
   }, [storeProfile]);
 
-  // Load GIS script & init token client (skip if no CLIENT_ID)
-  useEffect(() => {
+  const ensureTokenClient = useCallback(async () => {
     if (!CLIENT_ID) {
-      setError("Google sign-in is not configured yet. Add NEXT_PUBLIC_GOOGLE_CLIENT_ID to web/.env.local and restart the app.");
+      const message = "Google sign-in is not configured yet. Add NEXT_PUBLIC_GOOGLE_CLIENT_ID to web/.env.local and restart the app.";
+      setError(message);
       setIsLoading(false);
-      return;
+      throw new Error(message);
     }
 
-    let mounted = true;
-    (async () => {
-      try {
-        await loadScript("https://accounts.google.com/gsi/client");
-        if (!mounted) return;
+    if (tokenClient) {
+      return tokenClient;
+    }
 
-        const tc = window.google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT_ID,
-          scope: SCOPES,
-          callback: () => {}, // overridden per call
-        });
-        setTokenClient(tc);
-        setError(null);
-      } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : "Failed to load Google sign-in");
-        }
-        console.error("Failed to load Google Identity Services", err);
-      } finally {
-        if (mounted) setIsLoading(false);
+    setIsLoading(true);
+
+    try {
+      await loadScript("https://accounts.google.com/gsi/client");
+
+      const oauth = window.google?.accounts?.oauth2;
+      if (!oauth) {
+        throw new Error("Google sign-in failed to initialize");
       }
-    })();
+
+      const tc = oauth.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: () => {},
+      });
+
+      setTokenClient(tc);
+      setError(null);
+      return tc;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load Google sign-in";
+      setError(message);
+      console.error("Failed to initialize Google Identity Services", err);
+      throw new Error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tokenClient]);
+
+  // Load GIS script & init token client (skip if no CLIENT_ID)
+  useEffect(() => {
+    let mounted = true;
+    ensureTokenClient().catch(() => {
+      if (!mounted) return;
+    });
     return () => { mounted = false; };
-  }, []);
+  }, [ensureTokenClient]);
 
   // Fetch user profile from access token
   const fetchUserInfo = useCallback(
@@ -132,17 +159,11 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
 
   // Sign in with popup → gets token + user info in one step
   const signIn = useCallback(async () => {
-    if (!tokenClient) {
-      const message = CLIENT_ID
-        ? "Google services are still loading. Please try again in a moment."
-        : "Google sign-in is not configured yet. Add NEXT_PUBLIC_GOOGLE_CLIENT_ID to web/.env.local and restart the app.";
-      setError(message);
-      throw new Error(message);
-    }
+    const client = await ensureTokenClient();
     setError(null);
 
     await new Promise<void>((resolve, reject) => {
-      tokenClient.callback = async (resp) => {
+      client.callback = async (resp) => {
         if (resp.error) {
           const message = resp.error;
           setError(message);
@@ -162,9 +183,9 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         }
       };
 
-      tokenClient.requestAccessToken({ prompt: "select_account consent" });
+      client.requestAccessToken({ prompt: "select_account consent" });
     });
-  }, [tokenClient, fetchUserInfo]);
+  }, [ensureTokenClient, fetchUserInfo]);
 
   // Request Drive access token (reuses existing or prompts)
   const requestDriveAccess = useCallback((): Promise<string> => {
@@ -173,30 +194,30 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         resolve(accessToken);
         return;
       }
-      if (!tokenClient) {
-        const msg = CLIENT_ID
-          ? "Google services not loaded yet. Please try again."
-          : "Google Client ID is not configured. Create a .env.local file with NEXT_PUBLIC_GOOGLE_CLIENT_ID and restart the dev server.";
-        setError(msg);
-        reject(new Error(msg));
-        return;
-      }
-      tokenClient.callback = async (resp) => {
-        if (resp.error) {
-          setError(resp.error);
-          reject(new Error(resp.error));
-          return;
-        }
-        setAccessToken(resp.access_token);
-        if (!user) {
-          await fetchUserInfo(resp.access_token);
-        }
-        setError(null);
-        resolve(resp.access_token);
-      };
-      tokenClient.requestAccessToken({ prompt: "consent" });
+      ensureTokenClient()
+        .then((client) => {
+          client.callback = async (resp) => {
+            if (resp.error) {
+              setError(resp.error);
+              reject(new Error(resp.error));
+              return;
+            }
+            setAccessToken(resp.access_token);
+            if (!user) {
+              await fetchUserInfo(resp.access_token);
+            }
+            setError(null);
+            resolve(resp.access_token);
+          };
+          client.requestAccessToken({ prompt: "consent" });
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : "Google services not loaded yet. Please try again.";
+          setError(message);
+          reject(new Error(message));
+        });
     });
-  }, [accessToken, tokenClient, user, fetchUserInfo]);
+  }, [accessToken, ensureTokenClient, user, fetchUserInfo]);
 
   // Sign out
   const signOutHandler = useCallback(() => {

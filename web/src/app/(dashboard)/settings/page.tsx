@@ -51,7 +51,7 @@ const SURFACE_PRESETS_DARK = ["#0f172a", "#1e293b", "#18181b", "#1a1a2e", "#1c19
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { t, language, setLanguage } = useT();
-  const { user, accessToken, isConfigured, error: googleError, requestDriveAccess, signIn } = useGoogleAuth();
+  const { user, accessToken, isLoading: googleLoading, isConfigured, error: googleError, requestDriveAccess, signIn } = useGoogleAuth();
   const sync = useSync();
 
   const serviceTypes = useStore((s) => s.serviceTypes);
@@ -194,6 +194,11 @@ export default function SettingsPage() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (googleLoading) {
+      toast(t("login.loadingGoogle"));
+      return;
+    }
+
     setDriveLoading(true);
     try {
       await signIn();
@@ -262,7 +267,7 @@ export default function SettingsPage() {
         {profile && (
           <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
             <h3 className="font-bold text-lg mb-4">Profile</h3>
-            <div className="flex items-start gap-4">
+            <div className="flex flex-col items-start gap-4 sm:flex-row">
               <div className="size-14 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg shrink-0 overflow-hidden">
                 {profile.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -273,16 +278,16 @@ export default function SettingsPage() {
               </div>
               {!editingProfile ? (
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-base truncate">{profile.displayName || profile.name}</p>
-                  <p className="text-sm text-slate-500 truncate">{profile.email}</p>
-                  {profile.bio && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{profile.bio}</p>}
+                  <p className="font-bold text-base break-words">{profile.displayName || profile.name}</p>
+                  <p className="text-sm text-slate-500 break-all">{profile.email}</p>
+                  {profile.bio && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 break-words">{profile.bio}</p>}
                   <button
                     onClick={() => {
                       setProfileName(profile.displayName ?? profile.name ?? "");
                       setProfileBio(profile.bio ?? "");
                       setEditingProfile(true);
                     }}
-                    className="text-sm text-primary font-semibold mt-2"
+                    className="mt-3 inline-flex min-h-10 items-center justify-center rounded-xl px-3 text-sm text-primary font-semibold"
                   >
                     {t("settings.editProfile")}
                   </button>
@@ -308,16 +313,16 @@ export default function SettingsPage() {
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm resize-none"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <button
                       onClick={handleSaveProfile}
-                      className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all"
+                      className="w-full sm:w-auto px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all"
                     >
                       {t("settings.save")}
                     </button>
                     <button
                       onClick={() => setEditingProfile(false)}
-                      className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      className="w-full sm:w-auto px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
                       {t("settings.cancel")}
                     </button>
@@ -730,7 +735,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 <span className={cn(
                   "material-symbols-outlined shrink-0",
@@ -755,15 +760,15 @@ export default function SettingsPage() {
                 <button
                   onClick={handleGoogleSignIn}
                   disabled={driveLoading || !isConfigured}
-                  className="shrink-0 rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white hover:opacity-90 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full sm:w-auto shrink-0 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:opacity-90 transition-all disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {t("settings.signInGoogle")}
+                  {driveLoading || googleLoading ? t("login.loadingGoogle") : t("settings.signInGoogle")}
                 </button>
               ) : (
                 <button
                   onClick={handleConnectDrive}
                   disabled={driveLoading}
-                  className="shrink-0 rounded-xl border-2 border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                  className="w-full sm:w-auto shrink-0 rounded-xl border-2 border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                 >
                   {accessToken ? t("settings.reconnectDrive") : t("settings.connectDrive")}
                 </button>
@@ -773,7 +778,7 @@ export default function SettingsPage() {
           {user ? (
             <div className="space-y-4">
               {/* Auto-sync toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className={cn(
                     "material-symbols-outlined",
@@ -803,7 +808,7 @@ export default function SettingsPage() {
 
               {/* Sync status */}
               {settings.autoSync && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex flex-col gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={cn(
                       "material-symbols-outlined text-base",
@@ -828,7 +833,7 @@ export default function SettingsPage() {
                   <button
                     onClick={() => sync.syncNow()}
                     disabled={sync.status === "syncing"}
-                    className="text-xs text-primary font-semibold disabled:opacity-50 shrink-0 ml-2"
+                    className="w-full sm:w-auto text-xs text-primary font-semibold disabled:opacity-50 shrink-0"
                   >
                     {t("settings.syncNow")}
                   </button>
