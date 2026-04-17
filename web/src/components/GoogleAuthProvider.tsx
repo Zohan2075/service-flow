@@ -6,7 +6,6 @@ import {
   useEffect,
   useState,
   useCallback,
-  useRef,
   type ReactNode,
 } from "react";
 import { useStore } from "@/lib/store";
@@ -27,8 +26,8 @@ interface GoogleAuthContextValue {
   error: string | null;
   /** Trigger Google sign-in popup (also grants Drive access) */
   signIn: () => Promise<void>;
-  /** Request Drive access token (reuses existing or prompts) */
-  requestDriveAccess: () => Promise<string>;
+  /** Request Drive access token. Interactive mode may open a popup. */
+  requestDriveAccess: (options?: { interactive?: boolean }) => Promise<string>;
   /** Sign out and clear profile */
   signOut: () => void;
 }
@@ -68,6 +67,14 @@ const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const SCOPES = "openid profile email https://www.googleapis.com/auth/drive.file";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const TOKEN_EXPIRY_BUFFER_MS = 60_000;
+const DRIVE_SESSION_STORAGE_KEY = "serviceflow-google-drive-session";
+
+type StoredDriveSession = {
+  accessToken: string;
+  grantedScopes: string | null;
+  tokenExpiresAt: number | null;
+  googleId: string | null;
+};
 
 function hasDriveScope(scope: string | null | undefined) {
   if (!scope) return false;
@@ -78,15 +85,96 @@ function getGoogleResponseError(resp: google.accounts.oauth2.TokenResponse) {
   return resp.error_description ?? resp.error ?? null;
 }
 
+function getGooglePopupError(
+  error: google.accounts.oauth2.NonOAuthError | undefined,
+  fallbackMessage: string,
+  interactive: boolean
+) {
+  const origin = typeof window !== "undefined" ? window.location.origin : "this origin";
+  const isLocalOrigin = typeof window !== "undefined"
+    ? ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    : false;
+
+  switch (error?.type) {
+    case "popup_failed_to_open":
+      return interactive
+        ? "Google sign-in popup was blocked by the browser. Allow popups for this site and try again."
+        : "Google Drive session could not be refreshed in the background. Reconnect Drive to continue syncing.";
+    case "popup_closed":
+      if (interactive && isLocalOrigin) {
+        return `Google sign-in could not complete. If Google showed redirect_uri_mismatch, add ${origin} to the OAuth client's Authorized JavaScript origins in Google Cloud Console, then try again.`;
+      }
+
+      return interactive
+        ? "Google sign-in was cancelled before it completed."
+        : "Google Drive session refresh was cancelled before it completed.";
+    default:
+      return fallbackMessage;
+  }
+}
+
 function getTokenExpiresAt(expiresIn?: number) {
   if (!expiresIn) return null;
   return Date.now() + Math.max(0, expiresIn * 1000 - TOKEN_EXPIRY_BUFFER_MS);
+}
+
+function readStoredDriveSession(expectedGoogleId?: string): StoredDriveSession | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(DRIVE_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<StoredDriveSession>;
+    if (!parsed.accessToken || typeof parsed.accessToken !== "string") {
+      window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    if (
+      expectedGoogleId &&
+      parsed.googleId &&
+      parsed.googleId !== expectedGoogleId
+    ) {
+      window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    const tokenExpiresAt =
+      typeof parsed.tokenExpiresAt === "number" ? parsed.tokenExpiresAt : null;
+
+    if (tokenExpiresAt && tokenExpiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      accessToken: parsed.accessToken,
+      grantedScopes: typeof parsed.grantedScopes === "string" ? parsed.grantedScopes : null,
+      tokenExpiresAt,
+      googleId: typeof parsed.googleId === "string" ? parsed.googleId : null,
+    };
+  } catch {
+    window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
+function writeStoredDriveSession(session: StoredDriveSession) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+function clearStoredDriveSession() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
 }
 
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const storeProfile = useStore((s) => s.profile);
   const setProfile = useStore((s) => s.setProfile);
   const storeSignOut = useStore((s) => s.signOut);
+  const storeGoogleId = storeProfile?.google_id ?? null;
 
   const [user, setUser] = useState<UserProfile | null>(storeProfile);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -95,7 +183,6 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tokenClient, setTokenClient] = useState<google.accounts.oauth2.TokenClient | null>(null);
-  const restoreAttemptedForUserRef = useRef<string | null>(null);
   const isConfigured = Boolean(CLIENT_ID);
 
   // Sync store → local reactive state
@@ -107,6 +194,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     setGrantedScopes(null);
     setTokenExpiresAt(null);
+    clearStoredDriveSession();
   }, []);
 
   const applyTokenResponse = useCallback((resp: google.accounts.oauth2.TokenResponse) => {
@@ -161,17 +249,45 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   }, [tokenClient]);
 
   const requestToken = useCallback(
-    async (prompt: "" | "consent" | "select_account consent", fallbackMessage: string) => {
+    async ({
+      prompt,
+      fallbackMessage,
+      interactive,
+    }: {
+      prompt: "none" | "" | "consent" | "select_account consent";
+      fallbackMessage: string;
+      interactive: boolean;
+    }) => {
       const client = await ensureTokenClient();
 
       return new Promise<google.accounts.oauth2.TokenResponse>((resolve, reject) => {
+        let settled = false;
+
+        const rejectWith = (message: string) => {
+          if (settled) return;
+          settled = true;
+          client.error_callback = undefined;
+          reject(new Error(message));
+        };
+
+        const resolveWith = (resp: google.accounts.oauth2.TokenResponse) => {
+          if (settled) return;
+          settled = true;
+          client.error_callback = undefined;
+          resolve(resp);
+        };
+
         client.callback = (resp) => {
           if (resp.error) {
-            reject(new Error(getGoogleResponseError(resp) ?? fallbackMessage));
+            rejectWith(getGoogleResponseError(resp) ?? fallbackMessage);
             return;
           }
 
-          resolve(resp);
+          resolveWith(resp);
+        };
+
+        client.error_callback = (error) => {
+          rejectWith(getGooglePopupError(error, fallbackMessage, interactive));
         };
 
         client.requestAccessToken({ prompt });
@@ -214,61 +330,64 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!storeProfile) {
-      restoreAttemptedForUserRef.current = null;
-      clearTokenState();
+    if (!storeGoogleId) {
       return;
     }
 
     if (hasUsableDriveToken) {
-      restoreAttemptedForUserRef.current = storeProfile.google_id;
       return;
     }
 
-    if (restoreAttemptedForUserRef.current === storeProfile.google_id) {
-      return;
-    }
+    const storedSession = readStoredDriveSession(storeGoogleId ?? undefined);
 
-    let cancelled = false;
-    restoreAttemptedForUserRef.current = storeProfile.google_id;
-    setIsLoading(true);
-
-    requestToken("", "Google session restore failed")
-      .then(async (resp) => {
-        if (cancelled) return;
-        applyTokenResponse(resp);
-        await fetchUserInfo(resp.access_token);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
+    if (!storedSession) {
+      if (accessToken || grantedScopes || tokenExpiresAt) {
         clearTokenState();
-        console.info("Silent Google session restore skipped", err);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      });
+      }
+      return;
+    }
 
-    return () => {
-      cancelled = true;
-    };
+    setAccessToken(storedSession.accessToken);
+    setGrantedScopes(storedSession.grantedScopes);
+    setTokenExpiresAt(storedSession.tokenExpiresAt);
+    setError(null);
   }, [
-    applyTokenResponse,
+    accessToken,
     clearTokenState,
-    fetchUserInfo,
+    grantedScopes,
     hasUsableDriveToken,
-    requestToken,
-    storeProfile,
+    storeGoogleId,
+    tokenExpiresAt,
   ]);
+
+  useEffect(() => {
+    if (!accessToken || !hasDriveScope(grantedScopes)) {
+      return;
+    }
+
+    if (tokenExpiresAt && tokenExpiresAt <= Date.now()) {
+      clearStoredDriveSession();
+      return;
+    }
+
+    writeStoredDriveSession({
+      accessToken,
+      grantedScopes,
+      tokenExpiresAt,
+      googleId: user?.google_id ?? storeGoogleId,
+    });
+  }, [accessToken, grantedScopes, storeGoogleId, tokenExpiresAt, user]);
 
   // Sign in with popup → gets token + user info in one step
   const signIn = useCallback(async () => {
     setError(null);
 
     try {
-      const resp = await requestToken("select_account consent", "Google sign-in failed");
+      const resp = await requestToken({
+        prompt: "select_account consent",
+        fallbackMessage: "Google sign-in failed",
+        interactive: true,
+      });
       applyTokenResponse(resp);
       await fetchUserInfo(resp.access_token);
     } catch (err) {
@@ -279,7 +398,9 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   }, [applyTokenResponse, fetchUserInfo, requestToken]);
 
   // Request Drive access token (reuses existing or prompts)
-  const requestDriveAccess = useCallback((): Promise<string> => {
+  const requestDriveAccess = useCallback((options?: { interactive?: boolean }): Promise<string> => {
+    const interactive = options?.interactive ?? true;
+
     return new Promise((resolve, reject) => {
       if (hasUsableDriveToken && accessToken) {
         resolve(accessToken);
@@ -288,16 +409,30 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
 
       const authorize = async () => {
         try {
-          let resp: google.accounts.oauth2.TokenResponse;
+          const storedSession = readStoredDriveSession(user?.google_id ?? storeGoogleId ?? undefined);
 
-          try {
-            resp = await requestToken("", "Google Drive authorization failed");
-          } catch {
-            resp = await requestToken(
-              user ? "consent" : "select_account consent",
-              "Google Drive authorization failed"
+          if (storedSession && hasDriveScope(storedSession.grantedScopes)) {
+            setAccessToken(storedSession.accessToken);
+            setGrantedScopes(storedSession.grantedScopes);
+            setTokenExpiresAt(storedSession.tokenExpiresAt);
+            setError(null);
+            resolve(storedSession.accessToken);
+            return;
+          }
+
+          if (!interactive) {
+            throw new Error(
+              user
+                ? "Google Drive session expired. Reconnect Drive to continue syncing."
+                : "Sign in with Google again to continue Drive sync."
             );
           }
+
+          const resp = await requestToken({
+            prompt: user ? "consent" : "select_account consent",
+            fallbackMessage: "Google Drive authorization failed",
+            interactive: true,
+          });
 
           applyTokenResponse(resp);
           if (!user) {
@@ -307,19 +442,20 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           resolve(resp.access_token);
         } catch (err) {
           const message = err instanceof Error ? err.message : "Google services not loaded yet. Please try again.";
-          setError(message);
+          if (interactive) {
+            setError(message);
+          }
           reject(new Error(message));
         }
       };
 
       authorize();
     });
-  }, [accessToken, applyTokenResponse, fetchUserInfo, hasUsableDriveToken, requestToken, user]);
+  }, [accessToken, applyTokenResponse, fetchUserInfo, hasUsableDriveToken, requestToken, storeGoogleId, user]);
 
   // Sign out
   const signOutHandler = useCallback(() => {
     window.google?.accounts?.id?.disableAutoSelect();
-    restoreAttemptedForUserRef.current = null;
     setUser(null);
     clearTokenState();
     storeSignOut();

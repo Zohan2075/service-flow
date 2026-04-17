@@ -43,28 +43,32 @@ const INTERVAL_MS = 5 * 60_000; // 5 min
 
 export function SyncProvider({
   getToken,
+  getInteractiveToken,
   children,
 }: {
   getToken: (() => Promise<string>) | null;
+  getInteractiveToken?: (() => Promise<string>) | null;
   children: ReactNode;
 }) {
   const autoSync = useStore((s) => s.settings.autoSync);
   const updateSettings = useStore((s) => s.updateSettings);
 
   const [state, setState] = useState<SyncState>({ status: "idle", error: null });
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  );
+  const [isOnline, setIsOnline] = useState(true);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const dirtyRef = useRef(false);
   const syncingRef = useRef(false);
   const getTokenRef = useRef(getToken);
+  const getInteractiveTokenRef = useRef(getInteractiveToken);
   getTokenRef.current = getToken;
+  getInteractiveTokenRef.current = getInteractiveToken;
 
   // Track online / offline
   useEffect(() => {
+    setIsOnline(navigator.onLine);
+
     const goOnline = () => setIsOnline(true);
     const goOffline = () => setIsOnline(false);
     window.addEventListener("online", goOnline);
@@ -75,7 +79,7 @@ export function SyncProvider({
     };
   }, []);
 
-  const runSync = useCallback(async (throwOnError = false) => {
+  const runSync = useCallback(async (throwOnError = false, interactive = false) => {
     if (!navigator.onLine) {
       setState({ status: "offline", error: null });
       if (throwOnError) {
@@ -84,11 +88,15 @@ export function SyncProvider({
       return;
     }
 
-    if (!getTokenRef.current || syncingRef.current) return;
+    const tokenProvider = interactive
+      ? getInteractiveTokenRef.current ?? getTokenRef.current
+      : getTokenRef.current;
+
+    if (!tokenProvider || syncingRef.current) return;
     syncingRef.current = true;
     setState({ status: "syncing", error: null });
     try {
-      const token = await getTokenRef.current();
+      const token = await tokenProvider();
       const store = useStore.getState();
       const backup = serializeBackup({
         profile: store.profile,
@@ -116,7 +124,7 @@ export function SyncProvider({
   }, [updateSettings]);
 
   const syncNow = useCallback(async () => {
-    await runSync(true);
+    await runSync(true, true);
   }, [runSync]);
 
   // Subscribe to store changes for dirty detection

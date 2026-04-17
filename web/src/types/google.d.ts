@@ -35,8 +35,13 @@ declare namespace google.accounts.id {
 }
 
 declare namespace google.accounts.oauth2 {
+  interface NonOAuthError {
+    type?: "popup_failed_to_open" | "popup_closed" | "unknown";
+  }
+
   interface TokenClient {
     callback: (response: TokenResponse) => void;
+    error_callback?: (error: NonOAuthError) => void;
     requestAccessToken(overrides?: { prompt?: string }): void;
   }
 
@@ -54,6 +59,7 @@ declare namespace google.accounts.oauth2 {
     client_id: string;
     scope: string;
     callback: (response: TokenResponse) => void;
+    error_callback?: (error: NonOAuthError) => void;
   }): TokenClient;
 }
 

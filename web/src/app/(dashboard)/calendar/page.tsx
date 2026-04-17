@@ -290,15 +290,24 @@ export default function CalendarPage() {
 
         {/* Daily Entries */}
         <div className="mt-6 md:mt-8">
-          <div className="flex items-center justify-between mb-3 md:mb-4">
+          <div className="flex items-center justify-between gap-3 mb-3 md:mb-4">
             <h3 className="text-base md:text-lg font-bold">
               {t("calendar.dailyEntries")} — {shortDate(selectedDate, language)}
             </h3>
-            <div className="text-right">
-              <p className="text-sm text-slate-500 font-medium">
-                {t("calendar.total")}: {selectedDayData?.total_duration_display ?? "0m"}
-              </p>
-              <p className="text-xs text-slate-400 font-medium">{t("calendar.week")} {selectedWeekNumber}</p>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="text-right">
+                <p className="text-sm text-slate-500 font-medium">
+                  {t("calendar.total")}: {selectedDayData?.total_duration_display ?? "0m"}
+                </p>
+                <p className="text-xs text-slate-400 font-medium">{t("calendar.week")} {selectedWeekNumber}</p>
+              </div>
+              <button
+                onClick={handleOpenAddModal}
+                className="hidden md:inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:scale-[1.02] hover:opacity-95 active:scale-[0.99]"
+              >
+                <span className="material-symbols-outlined text-xl">add</span>
+                <span className="whitespace-nowrap">{t("entry.add")}</span>
+              </button>
             </div>
           </div>
 
@@ -330,9 +339,9 @@ export default function CalendarPage() {
       {/* FAB — offset above mobile nav */}
       <button
         onClick={handleOpenAddModal}
-        className="fixed bottom-20 right-4 md:absolute md:bottom-10 md:right-10 size-14 md:size-16 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20"
+        className="fixed bottom-20 right-4 size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20 md:hidden"
       >
-        <span className="material-symbols-outlined text-2xl md:text-3xl">add</span>
+        <span className="material-symbols-outlined text-2xl">add</span>
       </button>
 
       {showAddModal && (
@@ -371,7 +380,7 @@ function EntryCard({
 
   return (
     <div className="bg-surface p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <div
             className="size-10 md:size-12 rounded-xl flex items-center justify-center shrink-0"
@@ -388,8 +397,8 @@ function EntryCard({
             <h4 className="font-bold text-sm md:text-base truncate">{entry.title}</h4>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0 ml-2">
-          <div className="text-right mr-1">
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 ml-2">
+          <div className="text-right min-w-[4.5rem]">
             <p className="font-bold text-sm md:text-base" style={{ color: serviceType?.color ?? "#2094f3" }}>
               {durationDisplay(computeDurationSeconds(entry))}
             </p>
@@ -399,25 +408,28 @@ function EntryCard({
           </div>
           <button
             onClick={onEdit}
-            className="p-2 text-slate-400 hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
-            title="Edit entry"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary/40 dark:hover:bg-primary/15"
+            title={t("entry.edit")}
           >
             <span className="material-symbols-outlined text-xl">edit</span>
+            <span className="hidden md:inline">{t("entry.editShort")}</span>
           </button>
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-              title="Delete entry"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:text-slate-300 dark:hover:border-red-900/60 dark:hover:bg-red-900/20"
+              title={t("entry.delete")}
             >
               <span className="material-symbols-outlined text-xl">delete</span>
+              <span className="hidden md:inline">{t("entry.delete")}</span>
             </button>
           ) : (
             <button
               onClick={onDelete}
-              className="px-2.5 py-1 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
+              className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-red-600"
             >
-              Delete
+              <span className="material-symbols-outlined text-lg">warning</span>
+              <span>{t("entry.confirmDelete")}</span>
             </button>
           )}
         </div>

@@ -21,7 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useStore, serializeBackup, deserializeBackup } from "@/lib/store";
 import { useGoogleAuth } from "@/components/GoogleAuthProvider";
-import { downloadBackup } from "@/lib/drive";
+import { downloadBackup, uploadBackup } from "@/lib/drive";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
@@ -161,15 +161,35 @@ export default function SettingsPage() {
     reorderServiceTypes(arrayMove(serviceTypes, oldIndex, newIndex).map((serviceType) => serviceType.id));
   };
 
+  const restoreBackupFromDrive = async (token: string) => {
+    const text = await downloadBackup(token);
+    const parsed = JSON.parse(text);
+    const backup = deserializeBackup(parsed);
+    importData(backup);
+  };
+
+  const uploadCurrentBackup = async (token: string, syncedAt: string) => {
+    const store = useStore.getState();
+    const backup = serializeBackup({
+      profile: store.profile,
+      settings: {
+        ...store.settings,
+        autoSync: true,
+        lastSyncedAt: syncedAt,
+      },
+      serviceTypes: store.serviceTypes,
+      timeEntries: store.timeEntries,
+    });
+
+    await uploadBackup(token, JSON.stringify(backup));
+  };
+
   // ── Drive Restore ─────────────────────────────────────────────────────────
   const handleDriveRestore = async () => {
     setDriveLoading(true);
     try {
       const token = await requestDriveAccess();
-      const text = await downloadBackup(token);
-      const parsed = JSON.parse(text);
-      const backup = deserializeBackup(parsed);
-      importData(backup);
+      await restoreBackupFromDrive(token);
       toast.success(t("settings.restored"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("settings.driveRestoreFailed"));
@@ -210,13 +230,32 @@ export default function SettingsPage() {
   // ── Toggle Auto-Sync ─────────────────────────────────────────────────────
   const handleToggleAutoSync = async () => {
     if (!settings.autoSync) {
-      // Enabling: request Drive access first
+      setDriveLoading(true);
       try {
-        await requestDriveAccess();
-        updateSettings({ autoSync: true });
-        toast.success(t("settings.autoSyncEnabled"));
-      } catch {
-        toast.error(t("settings.driveRequired"));
+        const token = await requestDriveAccess();
+        let restored = false;
+
+        try {
+          await restoreBackupFromDrive(token);
+          restored = true;
+        } catch (err) {
+          if (!(err instanceof Error) || err.message !== "No backup found on Google Drive") {
+            throw err;
+          }
+        }
+
+        const syncedAt = new Date().toISOString();
+        await uploadCurrentBackup(token, syncedAt);
+        updateSettings({ autoSync: true, lastSyncedAt: syncedAt });
+        toast.success(
+          restored
+            ? `${t("settings.restored")} ${t("settings.autoSyncEnabled")}`
+            : t("settings.autoSyncEnabled")
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t("settings.driveRequired"));
+      } finally {
+        setDriveLoading(false);
       }
     } else {
       updateSettings({ autoSync: false });

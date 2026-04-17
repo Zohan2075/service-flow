@@ -12,10 +12,15 @@ function SyncBridge({ children }: { children: React.ReactNode }) {
 
   const getToken = useCallback(async () => {
     if (accessToken) return accessToken;
-    return requestDriveAccess();
+    return requestDriveAccess({ interactive: false });
   }, [accessToken, requestDriveAccess]);
 
-  return <SyncProvider getToken={getToken}>{children}</SyncProvider>;
+  const getInteractiveToken = useCallback(async () => {
+    if (accessToken) return accessToken;
+    return requestDriveAccess({ interactive: true });
+  }, [accessToken, requestDriveAccess]);
+
+  return <SyncProvider getToken={getToken} getInteractiveToken={getInteractiveToken}>{children}</SyncProvider>;
 }
 
 export default function Providers({ children }: { children: React.ReactNode }) {

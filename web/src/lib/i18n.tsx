@@ -57,6 +57,9 @@ const translations = {
     "entry.updated": "Entry updated!",
     "entry.addFailed": "Failed to add entry",
     "entry.updateFailed": "Failed to update entry",
+    "entry.editShort": "Edit",
+    "entry.delete": "Delete",
+    "entry.confirmDelete": "Confirm",
     "entry.zeroDuration": "Duration must be greater than 0",
 
     // More text
@@ -116,9 +119,9 @@ const translations = {
     "settings.stCreated": "Service type created!",
 
     "settings.dataManagement": "Data Management",
-    "settings.exportJson": "Export to JSON",
+    "settings.exportJson": "Export",
     "settings.exportDesc": "Download a backup file to your device",
-    "settings.importJson": "Import from JSON",
+    "settings.importJson": "Import",
     "settings.importDesc": "Restore data from a backup file",
     "settings.exported": "Exported successfully!",
     "settings.imported": "Data imported successfully!",
@@ -237,6 +240,9 @@ const translations = {
     "entry.updated": "¡Entrada actualizada!",
     "entry.addFailed": "Error al agregar entrada",
     "entry.updateFailed": "Error al actualizar entrada",
+    "entry.editShort": "Editar",
+    "entry.delete": "Eliminar",
+    "entry.confirmDelete": "Confirmar",
     "entry.zeroDuration": "La duración debe ser mayor a 0",
 
     // More text

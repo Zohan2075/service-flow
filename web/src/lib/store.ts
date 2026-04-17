@@ -180,6 +180,31 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   };
 }
 
+function mergeImportedProfile(
+  currentProfile: UserProfile | null,
+  importedProfile: UserProfile | null
+): UserProfile | null {
+  if (!currentProfile) {
+    return null;
+  }
+
+  if (!importedProfile) {
+    return currentProfile;
+  }
+
+  const nextProfile: UserProfile = { ...currentProfile };
+
+  if (Object.prototype.hasOwnProperty.call(importedProfile, "displayName")) {
+    nextProfile.displayName = importedProfile.displayName ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(importedProfile, "bio")) {
+    nextProfile.bio = importedProfile.bio ?? null;
+  }
+
+  return nextProfile;
+}
+
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -327,7 +352,7 @@ export const useStore = create<AppState>()(
       importData: (file) =>
         set((s) => ({
           settings: normalizeSettings({ ...s.settings, ...(file.settings ?? {}) }),
-          profile: file.profile,
+          profile: mergeImportedProfile(s.profile, file.profile),
           serviceTypes: ensureServiceTypesNotEmpty(
             sortServiceTypesByOrder(file.service_types),
             normalizeSettings({ ...s.settings, ...(file.settings ?? {}) })
