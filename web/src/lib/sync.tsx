@@ -51,6 +51,56 @@ function getSyncComparableSettings(settings: ReturnType<typeof useStore.getState
   );
 }
 
+function getTimestampValue(value: string | null | undefined) {
+  if (!value) return 0;
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getComparableSyncSnapshot(state: {
+  profile: ReturnType<typeof useStore.getState>["profile"];
+  settings: ReturnType<typeof useStore.getState>["settings"];
+  serviceTypes: ReturnType<typeof useStore.getState>["serviceTypes"];
+  timeEntries: ReturnType<typeof useStore.getState>["timeEntries"];
+}) {
+  return {
+    profile: state.profile,
+    settings: getSyncComparableSettings(state.settings),
+    serviceTypes: state.serviceTypes,
+    timeEntries: state.timeEntries,
+  };
+}
+
+function useStoreHydrated() {
+  const [isHydrated, setIsHydrated] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return useStore.persist?.hasHydrated?.() ?? true;
+  });
+
+  useEffect(() => {
+    const persistApi = useStore.persist;
+
+    if (!persistApi?.hasHydrated || !persistApi?.onFinishHydration) {
+      setIsHydrated(true);
+      return;
+    }
+
+    setIsHydrated(persistApi.hasHydrated());
+
+    const unsubscribe = persistApi.onFinishHydration(() => {
+      setIsHydrated(true);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  return isHydrated;
+}
+
 export function SyncProvider({
   authReady,
   getToken,
@@ -63,7 +113,8 @@ export function SyncProvider({
   children: ReactNode;
 }) {
   const autoSync = useStore((s) => s.settings.autoSync);
-  const updateSettings = useStore((s) => s.updateSettings);
+  const completeSync = useStore((s) => s.completeSync);
+  const isStoreHydrated = useStoreHydrated();
 
   const [state, setState] = useState<SyncState>({ status: "idle", error: null });
   const [isOnline, setIsOnline] = useState(true);
@@ -93,9 +144,17 @@ export function SyncProvider({
     });
   }, []);
 
-  const restoreFromDrive = useCallback((backupText: string, preserveAutoSync: boolean) => {
-    const parsed = JSON.parse(backupText);
-    const backup = deserializeBackup(parsed);
+  const restoreFromBackup = useCallback((
+    backup: ReturnType<typeof deserializeBackup>,
+    {
+      preserveAutoSync,
+      lastSyncedAt,
+    }: {
+      preserveAutoSync: boolean;
+      lastSyncedAt: string | null;
+    }
+  ) => {
+    const currentSettings = useStore.getState().settings;
 
     useStore.getState().importData({
       ...backup,
@@ -103,10 +162,10 @@ export function SyncProvider({
         ? {
             ...backup.settings,
             autoSync: true,
-            lastSyncedAt: useStore.getState().settings.lastSyncedAt,
+            lastSyncedAt: lastSyncedAt ?? currentSettings.lastSyncedAt,
           }
         : backup.settings,
-    });
+    }, { source: "remote" });
   }, []);
 
   // Track online / offline
@@ -145,7 +204,7 @@ export function SyncProvider({
       const backup = createBackupPayload(syncedAt);
       await uploadBackup(token, JSON.stringify(backup));
       dirtyRef.current = false;
-      updateSettings({ lastSyncedAt: syncedAt });
+      completeSync(syncedAt);
       setState({ status: "idle", error: null });
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Sync failed");
@@ -160,7 +219,7 @@ export function SyncProvider({
     } finally {
       syncingRef.current = false;
     }
-  }, [createBackupPayload, updateSettings]);
+  }, [completeSync, createBackupPayload]);
 
   const syncNow = useCallback(async () => {
     await runSync(true, true);
@@ -172,7 +231,14 @@ export function SyncProvider({
       return;
     }
 
-    if (!authReady || !isOnline || !getToken || startupSyncCompletedRef.current || syncingRef.current) {
+    if (
+      !isStoreHydrated ||
+      !authReady ||
+      !isOnline ||
+      !getToken ||
+      startupSyncCompletedRef.current ||
+      syncingRef.current
+    ) {
       return;
     }
 
@@ -189,11 +255,12 @@ export function SyncProvider({
           throw new Error("Sign in with Google again to continue Drive sync.");
         }
 
+        const localState = useStore.getState();
+        let remoteBackup: ReturnType<typeof deserializeBackup> | null = null;
+
         try {
           const backupText = await downloadBackup(token);
-          if (!cancelled) {
-            restoreFromDrive(backupText, true);
-          }
+          remoteBackup = deserializeBackup(JSON.parse(backupText));
         } catch (error) {
           if (!isMissingDriveBackup(error)) {
             throw error;
@@ -204,9 +271,50 @@ export function SyncProvider({
           return;
         }
 
-        const syncedAt = new Date().toISOString();
-        const backup = createBackupPayload(syncedAt, true);
-        await uploadBackup(token, JSON.stringify(backup));
+        const remoteSyncedAt = remoteBackup
+          ? remoteBackup.settings.lastSyncedAt ?? remoteBackup.exported_at
+          : null;
+        const localSyncedAt = localState.settings.lastSyncedAt;
+        const remoteSnapshotMatchesLocal = remoteBackup
+          ? JSON.stringify(getComparableSyncSnapshot({
+            profile: remoteBackup.profile,
+            settings: remoteBackup.settings,
+            serviceTypes: remoteBackup.service_types,
+            timeEntries: remoteBackup.time_entries,
+          })) ===
+            JSON.stringify(getComparableSyncSnapshot(localState))
+          : false;
+        const shouldRestoreRemote =
+          Boolean(remoteBackup) &&
+          !localState.syncMetadata.hasPendingChanges &&
+          getTimestampValue(remoteSyncedAt) > getTimestampValue(localSyncedAt);
+        const shouldUploadLocal =
+          !remoteBackup ||
+          localState.syncMetadata.hasPendingChanges ||
+          getTimestampValue(localSyncedAt) > getTimestampValue(remoteSyncedAt) ||
+          (getTimestampValue(localSyncedAt) === getTimestampValue(remoteSyncedAt) && !remoteSnapshotMatchesLocal);
+
+        if (shouldRestoreRemote && remoteBackup) {
+          restoreFromBackup(remoteBackup, {
+            preserveAutoSync: true,
+            lastSyncedAt: remoteSyncedAt,
+          });
+          completeSync(remoteSyncedAt ?? new Date().toISOString(), { autoSync: true });
+        } else if (shouldUploadLocal) {
+          const syncedAt = new Date().toISOString();
+          const backup = createBackupPayload(syncedAt, true);
+          await uploadBackup(token, JSON.stringify(backup));
+
+          if (cancelled) {
+            return;
+          }
+
+          completeSync(syncedAt, { autoSync: true });
+        } else {
+          completeSync(remoteSyncedAt ?? localSyncedAt ?? new Date().toISOString(), {
+            autoSync: true,
+          });
+        }
 
         if (cancelled) {
           return;
@@ -214,7 +322,6 @@ export function SyncProvider({
 
         dirtyRef.current = false;
         startupSyncCompletedRef.current = true;
-        updateSettings({ autoSync: true, lastSyncedAt: syncedAt });
         setState({ status: "idle", error: null });
       } catch (error) {
         if (cancelled) {
@@ -233,7 +340,7 @@ export function SyncProvider({
     return () => {
       cancelled = true;
     };
-  }, [authReady, autoSync, createBackupPayload, getToken, isOnline, restoreFromDrive, updateSettings]);
+  }, [authReady, autoSync, completeSync, createBackupPayload, getToken, isOnline, isStoreHydrated, restoreFromBackup]);
 
   // Subscribe to store changes for dirty detection
   useEffect(() => {
@@ -255,12 +362,13 @@ export function SyncProvider({
       const settingsChanged =
         JSON.stringify(getSyncComparableSettings(cur.settings)) !==
         JSON.stringify(getSyncComparableSettings(prev.settings));
+      const profileChanged = JSON.stringify(cur.profile) !== JSON.stringify(prev.profile);
 
       if (
         settingsChanged ||
         cur.serviceTypes !== prev.serviceTypes ||
         cur.timeEntries !== prev.timeEntries ||
-        cur.profile !== prev.profile
+        profileChanged
       ) {
         dirtyRef.current = true;
         if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -285,6 +393,35 @@ export function SyncProvider({
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [autoSync, getToken, isOnline, runSync]);
+
+  // Best-effort flush when the app is backgrounded or the tab is closing.
+  useEffect(() => {
+    if (!autoSync || !getToken) {
+      return;
+    }
+
+    const flushPendingChanges = () => {
+      if (!dirtyRef.current || syncingRef.current || !navigator.onLine) {
+        return;
+      }
+
+      void runSync();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushPendingChanges();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", flushPendingChanges);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", flushPendingChanges);
+    };
+  }, [autoSync, getToken, runSync]);
 
   // Sync pending changes when coming back online
   useEffect(() => {

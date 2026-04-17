@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const deleteServiceType = useStore((s) => s.deleteServiceType);
   const reorderServiceTypes = useStore((s) => s.reorderServiceTypes);
   const importData = useStore((s) => s.importData);
+  const completeSync = useStore((s) => s.completeSync);
   const resetData = useStore((s) => s.resetData);
   const updateSettings = useStore((s) => s.updateSettings);
   const updateProfile = useStore((s) => s.updateProfile);
@@ -165,7 +166,7 @@ export default function SettingsPage() {
     const text = await downloadBackup(token);
     const parsed = JSON.parse(text);
     const backup = deserializeBackup(parsed);
-    importData(backup);
+    importData(backup, { source: "remote" });
   };
 
   const uploadCurrentBackup = async (token: string, syncedAt: string) => {
@@ -246,7 +247,7 @@ export default function SettingsPage() {
 
         const syncedAt = new Date().toISOString();
         await uploadCurrentBackup(token, syncedAt);
-        updateSettings({ autoSync: true, lastSyncedAt: syncedAt });
+        completeSync(syncedAt, { autoSync: true });
         toast.success(
           restored
             ? `${t("settings.restored")} ${t("settings.autoSyncEnabled")}`

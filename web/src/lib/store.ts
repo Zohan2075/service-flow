@@ -67,6 +67,7 @@ interface AppState {
   settings: AppSettings;
   serviceTypes: ServiceType[];
   timeEntries: TimeEntry[];
+  syncMetadata: SyncMetadata;
 
   // auth actions
   setProfile: (p: UserProfile | null) => void;
@@ -90,8 +91,17 @@ interface AppState {
   deleteTimeEntry: (id: string) => void;
 
   // bulk data actions (import / restore)
-  importData: (file: BackupFile) => void;
+  importData: (file: BackupFile, options?: ImportDataOptions) => void;
+  completeSync: (syncedAt: string, patch?: Partial<Pick<AppSettings, "autoSync">>) => void;
   resetData: () => void;
+}
+
+interface SyncMetadata {
+  hasPendingChanges: boolean;
+}
+
+interface ImportDataOptions {
+  source?: "local" | "remote";
 }
 
 function uuid(): string {
@@ -147,6 +157,29 @@ function ensureServiceTypesNotEmpty(
   ]);
 }
 
+const SYNC_ONLY_SETTING_KEYS = new Set<keyof AppSettings>(["autoSync", "lastSyncedAt"]);
+
+function getSyncComparableSettings(settings: AppSettings) {
+  return Object.fromEntries(
+    Object.entries(settings).filter(([key]) => !SYNC_ONLY_SETTING_KEYS.has(key as keyof AppSettings))
+  );
+}
+
+function hasSyncRelevantSettingsChange(patch: Partial<AppSettings>) {
+  return Object.keys(patch).some((key) => !SYNC_ONLY_SETTING_KEYS.has(key as keyof AppSettings));
+}
+
+function createPendingSyncMetadata(): SyncMetadata {
+  return { hasPendingChanges: true };
+}
+
+function withPendingSync<T extends object>(state: T): T & { syncMetadata: SyncMetadata } {
+  return {
+    ...state,
+    syncMetadata: createPendingSyncMetadata(),
+  };
+}
+
 const INITIAL_SETTINGS: AppSettings = {
   theme: "system",
   language: "en",
@@ -161,6 +194,10 @@ const INITIAL_SETTINGS: AppSettings = {
   defaultDurationMinutes: 0,
   autoSync: false,
   lastSyncedAt: null,
+};
+
+const INITIAL_SYNC_METADATA: SyncMetadata = {
+  hasPendingChanges: false,
 };
 
 function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
@@ -212,54 +249,100 @@ export const useStore = create<AppState>()(
       settings: INITIAL_SETTINGS,
       serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
       timeEntries: [],
+      syncMetadata: INITIAL_SYNC_METADATA,
 
       // ── Auth ────────────────────────────────────────────────────────────
-      setProfile: (p) => set({ profile: p }),
-      signOut: () => set({ profile: null }),
+      setProfile: (p) =>
+        set((s) => {
+          const isAccountSwitch =
+            p?.google_id &&
+            s.profile?.google_id &&
+            p.google_id !== s.profile.google_id;
+
+          if (isAccountSwitch) {
+            return {
+              profile: p,
+              settings: INITIAL_SETTINGS,
+              serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
+              timeEntries: [],
+              syncMetadata: INITIAL_SYNC_METADATA,
+            };
+          }
+
+          return { profile: p };
+        }),
+
+      signOut: () =>
+        set({
+          profile: null,
+          settings: INITIAL_SETTINGS,
+          serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
+          timeEntries: [],
+          syncMetadata: INITIAL_SYNC_METADATA,
+        }),
 
       // ── Settings / Profile ──────────────────────────────────────────────
       updateSettings: (patch) =>
-        set((s) => ({ settings: normalizeSettings({ ...s.settings, ...patch }) })),
+        set((s) => {
+          const nextSettings = normalizeSettings({ ...s.settings, ...patch });
+          const changed =
+            JSON.stringify(getSyncComparableSettings(nextSettings)) !==
+            JSON.stringify(getSyncComparableSettings(s.settings));
+
+          if (changed && hasSyncRelevantSettingsChange(patch)) {
+            return withPendingSync({ settings: nextSettings });
+          }
+
+          return { settings: nextSettings };
+        }),
       updateProfile: (patch) =>
         set((s) => ({
-          profile: s.profile ? { ...s.profile, ...patch } : null,
+          ...(s.profile
+            ? withPendingSync({ profile: { ...s.profile, ...patch } })
+            : { profile: null }),
         })),
 
       // ── Service Types ───────────────────────────────────────────────────
       addServiceType: (st) =>
-        set((s) => ({
-          serviceTypes: ensureServiceTypesNotEmpty([
-            ...s.serviceTypes,
-            {
-              ...st,
-              id: uuid(),
-              sort_order: s.serviceTypes.length,
-              is_active: true,
-              created_at: now(),
-              updated_at: now(),
-            },
-          ], s.settings),
-        })),
+        set((s) =>
+          withPendingSync({
+            serviceTypes: ensureServiceTypesNotEmpty([
+              ...s.serviceTypes,
+              {
+                ...st,
+                id: uuid(),
+                sort_order: s.serviceTypes.length,
+                is_active: true,
+                created_at: now(),
+                updated_at: now(),
+              },
+            ], s.settings),
+          })
+        ),
 
       ensureDefaultServiceType: () => {
         const existing = get().serviceTypes[0];
         if (existing) return existing.id;
 
-        set((s) => ({
-          serviceTypes: ensureServiceTypesNotEmpty(s.serviceTypes, s.settings),
-        }));
+        set((s) =>
+          withPendingSync({
+            serviceTypes: ensureServiceTypesNotEmpty(s.serviceTypes, s.settings),
+          })
+        );
 
         return get().serviceTypes[0]?.id ?? "";
       },
 
       updateServiceType: (id, patch) =>
-        set((s) => ({
-          serviceTypes: normalizeServiceTypes(
-            s.serviceTypes.map((st) =>
-              st.id === id ? { ...st, ...patch, updated_at: now() } : st
-            )
-          ),
-        })),
+        set((s) =>
+          withPendingSync({
+            serviceTypes: normalizeServiceTypes(
+              s.serviceTypes.map((st) =>
+                st.id === id ? { ...st, ...patch, updated_at: now() } : st
+              )
+            ),
+          })
+        ),
 
       moveServiceType: (id, direction) =>
         set((s) => {
@@ -281,7 +364,7 @@ export const useStore = create<AppState>()(
             { ...reordered[currentIndex], updated_at: now() },
           ];
 
-          return { serviceTypes: normalizeServiceTypes(reordered) };
+          return withPendingSync({ serviceTypes: normalizeServiceTypes(reordered) });
         }),
 
       reorderServiceTypes: (orderedIds) =>
@@ -300,18 +383,20 @@ export const useStore = create<AppState>()(
             .map((serviceType) => ({ ...serviceType, updated_at: now() }));
 
           return {
-            serviceTypes: normalizeServiceTypes([...reordered, ...missing]),
+            ...withPendingSync({
+              serviceTypes: normalizeServiceTypes([...reordered, ...missing]),
+            }),
           };
         }),
 
       deleteServiceType: (id) =>
         set((s) => {
           if (s.serviceTypes.length <= 1) return s;
-          return {
+          return withPendingSync({
             serviceTypes: normalizeServiceTypes(
               s.serviceTypes.filter((st) => st.id !== id)
             ),
-          };
+          });
         }),
 
       // ── Time Entries ────────────────────────────────────────────────────
@@ -321,7 +406,7 @@ export const useStore = create<AppState>()(
           const idExists = serviceTypes.some((st) => st.id === entry.service_type_id);
           const serviceTypeId = idExists ? entry.service_type_id : serviceTypes[0].id;
 
-          return {
+          return withPendingSync({
             serviceTypes,
             timeEntries: [
               ...s.timeEntries,
@@ -333,40 +418,64 @@ export const useStore = create<AppState>()(
                 updated_at: now(),
               },
             ],
-          };
+          });
         }),
 
       updateTimeEntry: (id, patch) =>
-        set((s) => ({
-          timeEntries: s.timeEntries.map((te) =>
-            te.id === id ? { ...te, ...patch, updated_at: now() } : te
-          ),
-        })),
+        set((s) =>
+          withPendingSync({
+            timeEntries: s.timeEntries.map((te) =>
+              te.id === id ? { ...te, ...patch, updated_at: now() } : te
+            ),
+          })
+        ),
 
       deleteTimeEntry: (id) =>
-        set((s) => ({
-          timeEntries: s.timeEntries.filter((te) => te.id !== id),
-        })),
+        set((s) =>
+          withPendingSync({
+            timeEntries: s.timeEntries.filter((te) => te.id !== id),
+          })
+        ),
 
       // ── Bulk ───────────────────────────────────────────────────────────
-      importData: (file) =>
+      importData: (file, options) =>
+        set((s) => {
+          const settings = normalizeSettings({ ...s.settings, ...(file.settings ?? {}) });
+
+          return {
+            settings,
+            profile: mergeImportedProfile(s.profile, file.profile),
+            serviceTypes: ensureServiceTypesNotEmpty(
+              sortServiceTypesByOrder(file.service_types),
+              settings
+            ),
+            timeEntries: file.time_entries,
+            syncMetadata:
+              options?.source === "remote"
+                ? INITIAL_SYNC_METADATA
+                : createPendingSyncMetadata(),
+          };
+        }),
+
+      completeSync: (syncedAt, patch) =>
         set((s) => ({
-          settings: normalizeSettings({ ...s.settings, ...(file.settings ?? {}) }),
-          profile: mergeImportedProfile(s.profile, file.profile),
-          serviceTypes: ensureServiceTypesNotEmpty(
-            sortServiceTypesByOrder(file.service_types),
-            normalizeSettings({ ...s.settings, ...(file.settings ?? {}) })
-          ),
-          timeEntries: file.time_entries,
+          settings: normalizeSettings({
+            ...s.settings,
+            ...(patch ?? {}),
+            lastSyncedAt: syncedAt,
+          }),
+          syncMetadata: INITIAL_SYNC_METADATA,
         })),
 
       resetData: () =>
-        set({
-          profile: null,
-          settings: INITIAL_SETTINGS,
-          serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
-          timeEntries: [],
-        }),
+        set(
+          withPendingSync({
+            profile: null,
+            settings: INITIAL_SETTINGS,
+            serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
+            timeEntries: [],
+          })
+        ),
     }),
     {
       name: "serviceflow-data",
@@ -377,6 +486,7 @@ export const useStore = create<AppState>()(
         settings: state.settings,
         serviceTypes: state.serviceTypes,
         timeEntries: state.timeEntries,
+        syncMetadata: state.syncMetadata,
       }) as unknown as AppState,
       // Deep-merge settings so new fields get their defaults when loading old data
       merge: (persisted, current) => {
@@ -390,6 +500,7 @@ export const useStore = create<AppState>()(
             sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes),
             settings
           ),
+          syncMetadata: p.syncMetadata ?? current.syncMetadata,
         };
       },
     }
