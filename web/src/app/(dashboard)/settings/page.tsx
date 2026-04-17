@@ -21,7 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useStore, serializeBackup, deserializeBackup } from "@/lib/store";
 import { useGoogleAuth } from "@/components/GoogleAuthProvider";
-import { uploadBackup, downloadBackup } from "@/lib/drive";
+import { downloadBackup } from "@/lib/drive";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
@@ -141,10 +141,7 @@ export default function SettingsPage() {
   const handleDriveBackup = async () => {
     setDriveLoading(true);
     try {
-      const token = await requestDriveAccess();
-      const backup = serializeBackup({ profile, settings, serviceTypes, timeEntries });
-      await uploadBackup(token, JSON.stringify(backup, null, 2));
-      updateSettings({ lastSyncedAt: new Date().toISOString() });
+      await sync.syncNow();
       toast.success(t("settings.backedUp"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("settings.driveBackupFailed"));
@@ -247,6 +244,23 @@ export default function SettingsPage() {
   const activeThemeLabel = resolvedTheme === "dark" ? t("settings.dark") : t("settings.light");
   const activeSurface = resolvedTheme === "dark" ? settings.customSurfaceDark : settings.customSurfaceLight;
   const activeBackground = resolvedTheme === "dark" ? settings.customBackgroundDark : settings.customBackgroundLight;
+  const isDriveBusy = driveLoading || sync.status === "syncing";
+  const showSyncStatus = settings.autoSync || Boolean(sync.error) || Boolean(settings.lastSyncedAt);
+  const syncStatusLabel =
+    sync.status === "syncing"
+      ? t("settings.syncing")
+      : sync.status === "error"
+        ? t("settings.syncError")
+        : sync.status === "offline"
+          ? t("settings.offlineShort")
+          : t("settings.synced");
+  const syncStatusSummary = sync.error
+    ? sync.error
+    : sync.status === "offline"
+      ? t("settings.offlineSyncDesc")
+      : settings.autoSync
+        ? t("settings.autoSyncStatus")
+        : t("settings.manualSyncDesc");
   const updateActiveSurface = (value: string | null) => {
     updateSettings(resolvedTheme === "dark" ? { customSurfaceDark: value } : { customSurfaceLight: value });
   };
@@ -764,15 +778,15 @@ export default function SettingsPage() {
                 >
                   {driveLoading || googleLoading ? t("login.loadingGoogle") : t("settings.signInGoogle")}
                 </button>
-              ) : (
+              ) : !accessToken ? (
                 <button
                   onClick={handleConnectDrive}
                   disabled={driveLoading}
                   className="w-full sm:w-auto shrink-0 rounded-xl border-2 border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                 >
-                  {accessToken ? t("settings.reconnectDrive") : t("settings.connectDrive")}
+                  {t("settings.connectDrive")}
                 </button>
-              )}
+              ) : null}
             </div>
 
           {user ? (
@@ -793,7 +807,7 @@ export default function SettingsPage() {
                 </div>
                 <button
                   onClick={handleToggleAutoSync}
-                  disabled={driveLoading}
+                  disabled={isDriveBusy}
                   className={cn(
                     "relative w-11 h-6 rounded-full transition-colors disabled:opacity-50",
                     settings.autoSync ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
@@ -807,8 +821,8 @@ export default function SettingsPage() {
               </div>
 
               {/* Sync status */}
-              {settings.autoSync && (
-                <div className="flex flex-col gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 sm:flex-row sm:items-center sm:justify-between">
+              {showSyncStatus && (
+                <div className="flex gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={cn(
                       "material-symbols-outlined text-base",
@@ -821,8 +835,10 @@ export default function SettingsPage() {
                        sync.status === "idle" ? "cloud_done" : "cloud_off"}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold capitalize">{sync.status === "idle" ? t("settings.synced") : sync.status}</p>
-                      {sync.error && <p className="text-xs text-red-500 truncate">{sync.error}</p>}
+                      <p className="text-xs font-semibold">{syncStatusLabel}</p>
+                      <p className={cn("text-xs", sync.error ? "text-red-500" : "text-slate-400")}>
+                        {syncStatusSummary}
+                      </p>
                       {settings.lastSyncedAt && sync.status !== "error" && (
                         <p className="text-xs text-slate-400">
                           {t("settings.last")}: {new Date(settings.lastSyncedAt).toLocaleString()}
@@ -830,13 +846,6 @@ export default function SettingsPage() {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => sync.syncNow()}
-                    disabled={sync.status === "syncing"}
-                    className="w-full sm:w-auto text-xs text-primary font-semibold disabled:opacity-50 shrink-0"
-                  >
-                    {t("settings.syncNow")}
-                  </button>
                 </div>
               )}
 
@@ -845,7 +854,7 @@ export default function SettingsPage() {
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.manual")}</p>
                 <button
                   onClick={handleDriveBackup}
-                  disabled={driveLoading}
+                  disabled={isDriveBusy}
                   className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-green-500">cloud_upload</span>
@@ -857,7 +866,7 @@ export default function SettingsPage() {
 
                 <button
                   onClick={handleDriveRestore}
-                  disabled={driveLoading}
+                  disabled={isDriveBusy}
                   className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-blue-500">cloud_download</span>

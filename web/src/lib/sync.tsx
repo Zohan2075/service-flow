@@ -75,8 +75,15 @@ export function SyncProvider({
     };
   }, []);
 
-  const doSync = useCallback(async () => {
-    if (!navigator.onLine) return; // skip while offline
+  const runSync = useCallback(async (throwOnError = false) => {
+    if (!navigator.onLine) {
+      setState({ status: "offline", error: null });
+      if (throwOnError) {
+        throw new Error("You are offline. Reconnect and try again.");
+      }
+      return;
+    }
+
     if (!getTokenRef.current || syncingRef.current) return;
     syncingRef.current = true;
     setState({ status: "syncing", error: null });
@@ -94,19 +101,28 @@ export function SyncProvider({
       updateSettings({ lastSyncedAt: new Date().toISOString() });
       setState({ status: "idle", error: null });
     } catch (err) {
+      const error = err instanceof Error ? err : new Error("Sync failed");
       setState({
         status: "error",
-        error: err instanceof Error ? err.message : "Sync failed",
+        error: error.message,
       });
+
+      if (throwOnError) {
+        throw error;
+      }
     } finally {
       syncingRef.current = false;
     }
   }, [updateSettings]);
 
+  const syncNow = useCallback(async () => {
+    await runSync(true);
+  }, [runSync]);
+
   // Subscribe to store changes for dirty detection
   useEffect(() => {
     if (!autoSync || !getToken) {
-      setState((s) => (s.status === "offline" ? s : { status: "offline", error: null }));
+      setState({ status: "idle", error: null });
       return;
     }
 
@@ -127,14 +143,18 @@ export function SyncProvider({
         dirtyRef.current = true;
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
-          if (dirtyRef.current) doSync();
+          if (dirtyRef.current) {
+            void runSync();
+          }
         }, DEBOUNCE_MS);
       }
     });
 
     // Interval sync
     intervalRef.current = setInterval(() => {
-      if (dirtyRef.current) doSync();
+      if (dirtyRef.current) {
+        void runSync();
+      }
     }, INTERVAL_MS);
 
     return () => {
@@ -142,17 +162,17 @@ export function SyncProvider({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoSync, getToken, isOnline, doSync]);
+  }, [autoSync, getToken, isOnline, runSync]);
 
   // Sync pending changes when coming back online
   useEffect(() => {
     if (isOnline && dirtyRef.current && autoSync && getToken) {
-      doSync();
+      void runSync();
     }
-  }, [isOnline, autoSync, getToken, doSync]);
+  }, [isOnline, autoSync, getToken, runSync]);
 
   return (
-    <SyncContext.Provider value={{ ...state, syncNow: doSync, isOnline }}>
+    <SyncContext.Provider value={{ ...state, syncNow, isOnline }}>
       {children}
     </SyncContext.Provider>
   );

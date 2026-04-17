@@ -2,6 +2,9 @@
 // Bump CACHE version to force update after deploy.
 
 const CACHE = "serviceflow-v1";
+const IS_LOCALHOST =
+  self.location.hostname === "localhost" ||
+  self.location.hostname === "127.0.0.1";
 
 // ─── Install ────────────────────────────────────────────────────────────────
 
@@ -14,7 +17,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+        Promise.all(
+          keys
+            .filter((k) => IS_LOCALHOST || k !== CACHE)
+            .map((k) => caches.delete(k))
+        )
       )
       .then(() => self.clients.claim())
   );
@@ -25,6 +32,8 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
+
+  if (IS_LOCALHOST) return;
 
   const url = new URL(request.url);
 

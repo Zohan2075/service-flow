@@ -5,6 +5,10 @@ import Providers from "@/components/Providers";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
+const serviceWorkerScript = process.env.NODE_ENV === "development"
+  ? `(()=>{const resetKey='serviceflow-dev-sw-reset';const cleanup=async()=>{let shouldReload=false;try{if('serviceWorker' in navigator){const registrations=await navigator.serviceWorker.getRegistrations().catch(()=>[]);if(registrations.length>0){await Promise.all(registrations.map((registration)=>registration.unregister().catch(()=>false)));shouldReload=true;}}if('caches' in window){const keys=await caches.keys().catch(()=>[]);const serviceflowKeys=keys.filter((key)=>key.startsWith('serviceflow-'));if(serviceflowKeys.length>0){await Promise.all(serviceflowKeys.map((key)=>caches.delete(key)));shouldReload=true;}}if(shouldReload&&!sessionStorage.getItem(resetKey)){sessionStorage.setItem(resetKey,'1');location.reload();return;}sessionStorage.removeItem(resetKey);}catch{sessionStorage.removeItem(resetKey);}};cleanup();})();`
+  : `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'))}`;
+
 export const metadata: Metadata = {
   title: "ServiceFlow",
   description: "Service time tracking dashboard",
@@ -35,7 +39,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon.svg" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'))}`,
+            __html: serviceWorkerScript,
           }}
         />
       </head>
