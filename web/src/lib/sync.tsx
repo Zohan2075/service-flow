@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useStore, serializeBackup } from "./store";
-import { uploadBackup } from "./drive";
+import { useStore, serializeBackup, deserializeBackup } from "./store";
+import { downloadBackup, uploadBackup } from "./drive";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,10 @@ export function useSync() {
 const DEBOUNCE_MS = 5_000;    // 5s after last change
 const INTERVAL_MS = 5 * 60_000; // 5 min
 
+function isMissingDriveBackup(error: unknown) {
+  return error instanceof Error && error.message === "No backup found on Google Drive";
+}
+
 export function SyncProvider({
   getToken,
   getInteractiveToken,
@@ -60,10 +64,42 @@ export function SyncProvider({
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const dirtyRef = useRef(false);
   const syncingRef = useRef(false);
+  const startupSyncCompletedRef = useRef(false);
   const getTokenRef = useRef(getToken);
   const getInteractiveTokenRef = useRef(getInteractiveToken);
   getTokenRef.current = getToken;
   getInteractiveTokenRef.current = getInteractiveToken;
+
+  const createBackupPayload = useCallback((syncedAt: string, forceAutoSync = false) => {
+    const store = useStore.getState();
+
+    return serializeBackup({
+      profile: store.profile,
+      settings: {
+        ...store.settings,
+        autoSync: forceAutoSync ? true : store.settings.autoSync,
+        lastSyncedAt: syncedAt,
+      },
+      serviceTypes: store.serviceTypes,
+      timeEntries: store.timeEntries,
+    });
+  }, []);
+
+  const restoreFromDrive = useCallback((backupText: string, preserveAutoSync: boolean) => {
+    const parsed = JSON.parse(backupText);
+    const backup = deserializeBackup(parsed);
+
+    useStore.getState().importData({
+      ...backup,
+      settings: preserveAutoSync
+        ? {
+            ...backup.settings,
+            autoSync: true,
+            lastSyncedAt: useStore.getState().settings.lastSyncedAt,
+          }
+        : backup.settings,
+    });
+  }, []);
 
   // Track online / offline
   useEffect(() => {
@@ -97,16 +133,11 @@ export function SyncProvider({
     setState({ status: "syncing", error: null });
     try {
       const token = await tokenProvider();
-      const store = useStore.getState();
-      const backup = serializeBackup({
-        profile: store.profile,
-        settings: store.settings,
-        serviceTypes: store.serviceTypes,
-        timeEntries: store.timeEntries,
-      });
+      const syncedAt = new Date().toISOString();
+      const backup = createBackupPayload(syncedAt);
       await uploadBackup(token, JSON.stringify(backup));
       dirtyRef.current = false;
-      updateSettings({ lastSyncedAt: new Date().toISOString() });
+      updateSettings({ lastSyncedAt: syncedAt });
       setState({ status: "idle", error: null });
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Sync failed");
@@ -121,11 +152,80 @@ export function SyncProvider({
     } finally {
       syncingRef.current = false;
     }
-  }, [updateSettings]);
+  }, [createBackupPayload, updateSettings]);
 
   const syncNow = useCallback(async () => {
     await runSync(true, true);
   }, [runSync]);
+
+  useEffect(() => {
+    if (!autoSync) {
+      startupSyncCompletedRef.current = false;
+      return;
+    }
+
+    if (!isOnline || !getToken || startupSyncCompletedRef.current || syncingRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const runStartupSync = async () => {
+      syncingRef.current = true;
+      setState({ status: "syncing", error: null });
+
+      try {
+        const token = await getTokenRef.current?.();
+
+        if (!token) {
+          throw new Error("Sign in with Google again to continue Drive sync.");
+        }
+
+        try {
+          const backupText = await downloadBackup(token);
+          if (!cancelled) {
+            restoreFromDrive(backupText, true);
+          }
+        } catch (error) {
+          if (!isMissingDriveBackup(error)) {
+            throw error;
+          }
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        const syncedAt = new Date().toISOString();
+        const backup = createBackupPayload(syncedAt, true);
+        await uploadBackup(token, JSON.stringify(backup));
+
+        if (cancelled) {
+          return;
+        }
+
+        dirtyRef.current = false;
+        startupSyncCompletedRef.current = true;
+        updateSettings({ autoSync: true, lastSyncedAt: syncedAt });
+        setState({ status: "idle", error: null });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const syncError = error instanceof Error ? error : new Error("Sync failed");
+        setState({ status: "error", error: syncError.message });
+      } finally {
+        syncingRef.current = false;
+      }
+    };
+
+    void runStartupSync();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autoSync, createBackupPayload, getToken, isOnline, restoreFromDrive, updateSettings]);
 
   // Subscribe to store changes for dirty detection
   useEffect(() => {
