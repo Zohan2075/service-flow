@@ -45,6 +45,12 @@ function isMissingDriveBackup(error: unknown) {
   return error instanceof Error && error.message === "No backup found on Google Drive";
 }
 
+function getSyncComparableSettings(settings: ReturnType<typeof useStore.getState>["settings"]) {
+  return Object.fromEntries(
+    Object.entries(settings).filter(([key]) => key !== "autoSync" && key !== "lastSyncedAt")
+  );
+}
+
 export function SyncProvider({
   getToken,
   getInteractiveToken,
@@ -243,7 +249,13 @@ export function SyncProvider({
 
     const unsub = useStore.subscribe((cur, prev) => {
       if (syncingRef.current) return;
+
+      const settingsChanged =
+        JSON.stringify(getSyncComparableSettings(cur.settings)) !==
+        JSON.stringify(getSyncComparableSettings(prev.settings));
+
       if (
+        settingsChanged ||
         cur.serviceTypes !== prev.serviceTypes ||
         cur.timeEntries !== prev.timeEntries ||
         cur.profile !== prev.profile
