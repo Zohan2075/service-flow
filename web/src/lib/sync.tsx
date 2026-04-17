@@ -52,10 +52,12 @@ function getSyncComparableSettings(settings: ReturnType<typeof useStore.getState
 }
 
 export function SyncProvider({
+  authReady,
   getToken,
   getInteractiveToken,
   children,
 }: {
+  authReady: boolean;
   getToken: (() => Promise<string>) | null;
   getInteractiveToken?: (() => Promise<string>) | null;
   children: ReactNode;
@@ -170,7 +172,7 @@ export function SyncProvider({
       return;
     }
 
-    if (!isOnline || !getToken || startupSyncCompletedRef.current || syncingRef.current) {
+    if (!authReady || !isOnline || !getToken || startupSyncCompletedRef.current || syncingRef.current) {
       return;
     }
 
@@ -231,7 +233,7 @@ export function SyncProvider({
     return () => {
       cancelled = true;
     };
-  }, [autoSync, createBackupPayload, getToken, isOnline, restoreFromDrive, updateSettings]);
+  }, [authReady, autoSync, createBackupPayload, getToken, isOnline, restoreFromDrive, updateSettings]);
 
   // Subscribe to store changes for dirty detection
   useEffect(() => {

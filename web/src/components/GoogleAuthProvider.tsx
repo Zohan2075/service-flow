@@ -20,6 +20,8 @@ interface GoogleAuthContextValue {
   accessToken: string | null;
   /** true while GIS script is loading */
   isLoading: boolean;
+  /** true once auth initialization has completed for this page load */
+  isReady: boolean;
   /** whether the app has a Google OAuth client id configured */
   isConfigured: boolean;
   /** configuration or runtime auth error to show in the UI */
@@ -118,56 +120,107 @@ function getTokenExpiresAt(expiresIn?: number) {
   return Date.now() + Math.max(0, expiresIn * 1000 - TOKEN_EXPIRY_BUFFER_MS);
 }
 
+function removeStoredDriveSessionFrom(storage: Storage | undefined) {
+  if (!storage) return;
+
+  try {
+    storage.removeItem(DRIVE_SESSION_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures and fall back to runtime auth state.
+  }
+}
+
+function parseStoredDriveSession(raw: string, expectedGoogleId?: string): StoredDriveSession | null {
+  const parsed = JSON.parse(raw) as Partial<StoredDriveSession>;
+
+  if (!parsed.accessToken || typeof parsed.accessToken !== "string") {
+    return null;
+  }
+
+  if (expectedGoogleId && parsed.googleId && parsed.googleId !== expectedGoogleId) {
+    return null;
+  }
+
+  const tokenExpiresAt =
+    typeof parsed.tokenExpiresAt === "number" ? parsed.tokenExpiresAt : null;
+
+  if (tokenExpiresAt && tokenExpiresAt <= Date.now()) {
+    return null;
+  }
+
+  return {
+    accessToken: parsed.accessToken,
+    grantedScopes: typeof parsed.grantedScopes === "string" ? parsed.grantedScopes : null,
+    tokenExpiresAt,
+    googleId: typeof parsed.googleId === "string" ? parsed.googleId : null,
+  };
+}
+
 function readStoredDriveSession(expectedGoogleId?: string): StoredDriveSession | null {
   if (typeof window === "undefined") return null;
 
+  const storageCandidates: Storage[] = [];
+
   try {
-    const raw = window.sessionStorage.getItem(DRIVE_SESSION_STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<StoredDriveSession>;
-    if (!parsed.accessToken || typeof parsed.accessToken !== "string") {
-      window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
-      return null;
-    }
-
-    if (
-      expectedGoogleId &&
-      parsed.googleId &&
-      parsed.googleId !== expectedGoogleId
-    ) {
-      window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
-      return null;
-    }
-
-    const tokenExpiresAt =
-      typeof parsed.tokenExpiresAt === "number" ? parsed.tokenExpiresAt : null;
-
-    if (tokenExpiresAt && tokenExpiresAt <= Date.now()) {
-      window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
-      return null;
-    }
-
-    return {
-      accessToken: parsed.accessToken,
-      grantedScopes: typeof parsed.grantedScopes === "string" ? parsed.grantedScopes : null,
-      tokenExpiresAt,
-      googleId: typeof parsed.googleId === "string" ? parsed.googleId : null,
-    };
+    storageCandidates.push(window.localStorage);
   } catch {
-    window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
+    // Local storage may be blocked by the browser.
+  }
+
+  try {
+    storageCandidates.push(window.sessionStorage);
+  } catch {
+    // Session storage may be blocked by the browser.
+  }
+
+  try {
+    for (const storage of storageCandidates) {
+      const raw = storage.getItem(DRIVE_SESSION_STORAGE_KEY);
+      if (!raw) {
+        continue;
+      }
+
+      const parsed = parseStoredDriveSession(raw, expectedGoogleId);
+      if (!parsed) {
+        removeStoredDriveSessionFrom(storage);
+        continue;
+      }
+
+      try {
+        window.localStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(parsed));
+      } catch {
+        // Ignore local storage write failures.
+      }
+
+      return parsed;
+    }
+
+    return null;
+  } catch {
+    removeStoredDriveSessionFrom(window.localStorage);
+    removeStoredDriveSessionFrom(window.sessionStorage);
     return null;
   }
 }
 
 function writeStoredDriveSession(session: StoredDriveSession) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(session));
+
+  try {
+    window.localStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    try {
+      window.sessionStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(session));
+    } catch {
+      // Ignore storage failures and rely on in-memory auth state.
+    }
+  }
 }
 
 function clearStoredDriveSession() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(DRIVE_SESSION_STORAGE_KEY);
+  removeStoredDriveSessionFrom(window.localStorage);
+  removeStoredDriveSessionFrom(window.sessionStorage);
 }
 
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
@@ -467,6 +520,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         user,
         accessToken,
         isLoading,
+        isReady: !isLoading,
         isConfigured,
         error,
         signIn,

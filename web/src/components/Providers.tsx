@@ -8,7 +8,7 @@ import { SyncProvider } from "@/lib/sync";
 import { Toaster } from "react-hot-toast";
 
 function SyncBridge({ children }: { children: React.ReactNode }) {
-  const { accessToken, requestDriveAccess } = useGoogleAuth();
+  const { accessToken, isReady, requestDriveAccess } = useGoogleAuth();
 
   const getToken = useCallback(async () => {
     if (accessToken) return accessToken;
@@ -20,7 +20,7 @@ function SyncBridge({ children }: { children: React.ReactNode }) {
     return requestDriveAccess({ interactive: true });
   }, [accessToken, requestDriveAccess]);
 
-  return <SyncProvider getToken={getToken} getInteractiveToken={getInteractiveToken}>{children}</SyncProvider>;
+  return <SyncProvider authReady={isReady} getToken={getToken} getInteractiveToken={getInteractiveToken}>{children}</SyncProvider>;
 }
 
 export default function Providers({ children }: { children: React.ReactNode }) {
