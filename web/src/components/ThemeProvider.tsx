@@ -21,7 +21,14 @@ function hexToRgb(hex: string): string {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system");
+  const themeSetting = useStore((s) => s.settings.theme);
+  const updateSettings = useStore((s) => s.updateSettings);
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("sf-theme") as Theme) || "system";
+    }
+    return "system";
+  });
   const [resolved, setResolved] = useState<"light" | "dark">("light");
 
   const accentColor = useStore((s) => s.settings.accentColor);
@@ -64,13 +71,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setTheme = (t: Theme) => {
     localStorage.setItem("sf-theme", t);
     setThemeState(t);
+    updateSettings({ theme: t });
     applyTheme(t);
   };
 
   useEffect(() => {
     const saved = (localStorage.getItem("sf-theme") as Theme) || "system";
-    setThemeState(saved);
-    applyTheme(saved);
+    const activeTheme = themeSetting || saved;
+    setThemeState(activeTheme);
+    applyTheme(activeTheme);
+    localStorage.setItem("sf-theme", activeTheme);
+
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
       const current = (localStorage.getItem("sf-theme") as Theme) || "system";
@@ -78,7 +89,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [applyTheme]);
+  }, [applyTheme, themeSetting]);
 
   useLayoutEffect(() => {
     applyAppearance(resolved);
