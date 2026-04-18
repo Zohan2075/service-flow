@@ -251,10 +251,17 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyTokenResponse = useCallback((resp: google.accounts.oauth2.TokenResponse) => {
+    const nextTokenExpiresAt = getTokenExpiresAt(resp.expires_in);
     setAccessToken(resp.access_token);
     setGrantedScopes(resp.scope ?? null);
-    setTokenExpiresAt(getTokenExpiresAt(resp.expires_in));
-  }, []);
+    setTokenExpiresAt(nextTokenExpiresAt);
+    writeStoredDriveSession({
+      accessToken: resp.access_token,
+      grantedScopes: resp.scope ?? null,
+      tokenExpiresAt: nextTokenExpiresAt,
+      googleId: user?.google_id ?? storeGoogleId,
+    });
+  }, [storeGoogleId, user]);
 
   const hasUsableDriveToken = Boolean(
     accessToken && hasDriveScope(grantedScopes) && (!tokenExpiresAt || tokenExpiresAt > Date.now())

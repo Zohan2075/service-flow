@@ -14,7 +14,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { useStore } from "@/lib/store";
-import { calendarDateKey, computeDurationSeconds, durationDisplay } from "@/types/data";
+import { calendarDateKey, computeDurationSeconds, durationDisplay, isUnitsEntry } from "@/types/data";
 import type { TimeEntry, ServiceType, CalendarDay } from "@/types/data";
 import { cn } from "@/lib/utils";
 import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
@@ -59,10 +59,18 @@ export default function CalendarPage() {
           }, {})
         ).map(([date, entries]) => {
           const sortedEntries = [...entries].sort((a, b) => a.start_time.localeCompare(b.start_time));
-          const totalDurationSeconds = sortedEntries.reduce(
-            (sum, entry) => sum + computeDurationSeconds(entry),
-            0
-          );
+          const totalDurationSeconds = sortedEntries
+            .filter((e) => !isUnitsEntry(e))
+            .reduce(
+              (sum, entry) => sum + computeDurationSeconds(entry),
+              0
+            );
+          const totalUnits = sortedEntries
+            .filter((e) => isUnitsEntry(e))
+            .reduce(
+              (sum, entry) => sum + (entry.units_quantity ?? 0),
+              0
+            );
 
           return [
             date,
@@ -71,6 +79,7 @@ export default function CalendarPage() {
               entries: sortedEntries,
               total_duration_seconds: totalDurationSeconds,
               total_duration_display: durationDisplay(totalDurationSeconds),
+              total_units: totalUnits,
             } satisfies CalendarDay,
           ];
         })
@@ -170,7 +179,7 @@ export default function CalendarPage() {
       </header>
 
       {/* Calendar & Day View */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-24 md:pb-6 bg-canvas">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas">
         {/* Calendar Grid */}
         <div className="bg-surface rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
           {/* Weekday Header */}
@@ -253,7 +262,9 @@ export default function CalendarPage() {
                                 {entry.title}
                               </p>
                               <p className="text-[10px] text-slate-500 font-medium">
-                                {durationDisplay(computeDurationSeconds(entry))}
+                                {isUnitsEntry(entry)
+                                  ? `${entry.units_quantity} ${t("calendar.units")}`
+                                  : durationDisplay(computeDurationSeconds(entry))}
                               </p>
                             </div>
                           );
@@ -298,6 +309,9 @@ export default function CalendarPage() {
               <div className="text-right">
                 <p className="text-sm text-slate-500 font-medium">
                   {t("calendar.total")}: {selectedDayData?.total_duration_display ?? "0m"}
+                  {(selectedDayData?.total_units ?? 0) > 0 && (
+                    <span className="ml-1">· {selectedDayData!.total_units} {t("calendar.units")}</span>
+                  )}
                 </p>
                 <p className="text-xs text-slate-400 font-medium">{t("calendar.week")} {selectedWeekNumber}</p>
               </div>
@@ -339,7 +353,7 @@ export default function CalendarPage() {
       {/* FAB — offset above mobile nav */}
       <button
         onClick={handleOpenAddModal}
-        className="fixed bottom-20 right-4 size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20 md:hidden"
+        className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20 md:hidden"
       >
         <span className="material-symbols-outlined text-2xl">add</span>
       </button>
@@ -400,10 +414,12 @@ function EntryCard({
         <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 ml-2">
           <div className="text-right min-w-[4.5rem]">
             <p className="font-bold text-sm md:text-base" style={{ color: serviceType?.color ?? "#2094f3" }}>
-              {durationDisplay(computeDurationSeconds(entry))}
+              {isUnitsEntry(entry)
+                ? `${entry.units_quantity} ${t("calendar.units")}`
+                : durationDisplay(computeDurationSeconds(entry))}
             </p>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-              {t("calendar.logged")}
+              {isUnitsEntry(entry) ? t("calendar.counted") : t("calendar.logged")}
             </p>
           </div>
           <button

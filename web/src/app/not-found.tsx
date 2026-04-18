@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export default function NotFoundPage() {
+export default function NotFound() {
   return (
     <main
       style={{

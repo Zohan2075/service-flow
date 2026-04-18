@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -21,12 +21,12 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useStore, serializeBackup, deserializeBackup } from "@/lib/store";
 import { useGoogleAuth } from "@/components/GoogleAuthProvider";
-import { downloadBackup, uploadBackup } from "@/lib/drive";
+import { downloadBackup } from "@/lib/drive";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
 import { useT } from "@/lib/i18n";
-import type { ServiceType } from "@/types/data";
+import type { GoalDefinition, ServiceType } from "@/types/data";
 import toast from "react-hot-toast";
 
 const COLORS = [
@@ -48,6 +48,17 @@ const ACCENT_PRESETS = [
 const SURFACE_PRESETS_LIGHT = ["#ffffff", "#f8fafc", "#f1f5f9", "#fefce8", "#fdf2f8", "#f0fdfa"];
 const SURFACE_PRESETS_DARK = ["#0f172a", "#1e293b", "#18181b", "#1a1a2e", "#1c1917", "#0c1524"];
 
+type GoalMetrics = Pick<GoalDefinition, "monthly_duration_seconds" | "monthly_units_quantity" | "yearly_duration_seconds" | "yearly_units_quantity">;
+
+type CombinedGoalPayload = GoalMetrics & {
+  name: string | null;
+  service_type_ids: string[];
+};
+
+type CombinedGoalDraft = CombinedGoalPayload & {
+  id: string;
+};
+
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { t, language, setLanguage } = useT();
@@ -58,8 +69,13 @@ export default function SettingsPage() {
   const profile = useStore((s) => s.profile);
   const settings = useStore((s) => s.settings);
   const timeEntries = useStore((s) => s.timeEntries);
+  const goals = useStore((s) => s.goals);
   const addServiceType = useStore((s) => s.addServiceType);
+  const addGoal = useStore((s) => s.addGoal);
   const deleteServiceType = useStore((s) => s.deleteServiceType);
+  const deleteGoal = useStore((s) => s.deleteGoal);
+  const updateServiceType = useStore((s) => s.updateServiceType);
+  const updateGoal = useStore((s) => s.updateGoal);
   const reorderServiceTypes = useStore((s) => s.reorderServiceTypes);
   const importData = useStore((s) => s.importData);
   const completeSync = useStore((s) => s.completeSync);
@@ -82,6 +98,7 @@ export default function SettingsPage() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(COLORS[0]);
   const [newIcon, setNewIcon] = useState(ICONS[0]);
+  const [combinedGoalDrafts, setCombinedGoalDrafts] = useState<CombinedGoalDraft[]>([]);
 
   const [driveLoading, setDriveLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -104,9 +121,121 @@ export default function SettingsPage() {
     toast.success(t("settings.stCreated"));
   };
 
+  const serviceGoalMap = useMemo(
+    () => new Map(
+      goals
+        .filter((goal) => goal.scope === "service" && goal.service_type_id)
+        .map((goal) => [goal.service_type_id as string, goal])
+    ),
+    [goals]
+  );
+
+  const combinedGoals = useMemo(
+    () => goals.filter((goal) => goal.scope === "combined"),
+    [goals]
+  );
+
+  const handleCreateCombinedGoalDraft = () => {
+    if (serviceTypes.length === 0) return;
+
+    setCombinedGoalDrafts((currentDrafts) => [
+      ...currentDrafts,
+      {
+        id: crypto.randomUUID(),
+        name: `${t("settings.goalDefaultName")} ${combinedGoals.length + currentDrafts.length + 1}`,
+        service_type_ids: [serviceTypes[0].id],
+        monthly_duration_seconds: null,
+        monthly_units_quantity: null,
+        yearly_duration_seconds: null,
+        yearly_units_quantity: null,
+      },
+    ]);
+  };
+
+  const handleSaveServiceGoal = (serviceTypeId: string, metrics: GoalMetrics) => {
+    const existingGoal = serviceGoalMap.get(serviceTypeId);
+
+    if (!hasAnyGoalMetrics(metrics)) {
+      if (existingGoal) {
+        deleteGoal(existingGoal.id);
+        toast.success(t("settings.goalCleared"));
+      }
+      return;
+    }
+
+    const payload = {
+      name: null,
+      scope: "service" as const,
+      service_type_id: serviceTypeId,
+      service_type_ids: [],
+      ...metrics,
+    };
+
+    if (existingGoal) {
+      updateGoal(existingGoal.id, payload);
+    } else {
+      addGoal(payload);
+    }
+
+    toast.success(t("settings.goalSaved"));
+  };
+
+  const handleClearServiceGoal = (serviceTypeId: string) => {
+    const existingGoal = serviceGoalMap.get(serviceTypeId);
+    if (!existingGoal) return;
+
+    deleteGoal(existingGoal.id);
+    toast.success(t("settings.goalCleared"));
+  };
+
+  const handleSaveCombinedGoal = (goalId: string, payload: CombinedGoalPayload, options?: { draftId?: string }) => {
+    if (payload.service_type_ids.length === 0) {
+      toast.error(t("settings.goalServicesRequired"));
+      return;
+    }
+
+    if (!hasAnyGoalMetrics(payload)) {
+      if (options?.draftId) {
+        toast.error(t("settings.goalTargetRequired"));
+        return;
+      }
+
+      deleteGoal(goalId);
+      toast.success(t("settings.goalDeleted"));
+      return;
+    }
+
+    const goalPatch = {
+      service_type_id: null,
+      ...payload,
+    };
+
+    if (options?.draftId) {
+      addGoal({
+        scope: "combined",
+        ...goalPatch,
+      });
+      setCombinedGoalDrafts((currentDrafts) => currentDrafts.filter((draft) => draft.id !== options.draftId));
+      toast.success(t("settings.goalCreated"));
+      return;
+    }
+
+    updateGoal(goalId, goalPatch);
+    toast.success(t("settings.goalSaved"));
+  };
+
+  const handleDeleteCombinedGoal = (goalId: string) => {
+    deleteGoal(goalId);
+    toast.success(t("settings.goalDeleted"));
+  };
+
+  const handleCancelCombinedGoalDraft = (draftId: string) => {
+    setCombinedGoalDrafts((currentDrafts) => currentDrafts.filter((draft) => draft.id !== draftId));
+  };
+
   // ── Export JSON ────────────────────────────────────────────────────────────
   const handleExport = () => {
-    const backup = serializeBackup({ profile, settings, serviceTypes, timeEntries });
+    const backup = serializeBackup({ profile, settings, serviceTypes, timeEntries, goals });
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -139,10 +268,23 @@ export default function SettingsPage() {
   };
 
   // ── Drive Backup ──────────────────────────────────────────────────────────
+  const ensureDriveAccess = async () => {
+    if (!isConfigured) {
+      throw new Error(t("settings.driveConfigHint"));
+    }
+
+    if (!user) {
+      await signIn();
+    }
+
+    return requestDriveAccess({ interactive: true });
+  };
+
   const handleDriveBackup = async () => {
     setDriveLoading(true);
     try {
-      await sync.syncNow();
+      const token = await ensureDriveAccess();
+      await sync.syncNow(token);
       toast.success(t("settings.backedUp"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("settings.driveBackupFailed"));
@@ -169,98 +311,18 @@ export default function SettingsPage() {
     importData(backup, { source: "remote" });
   };
 
-  const uploadCurrentBackup = async (token: string, syncedAt: string) => {
-    const store = useStore.getState();
-    const backup = serializeBackup({
-      profile: store.profile,
-      settings: {
-        ...store.settings,
-        autoSync: true,
-        lastSyncedAt: syncedAt,
-      },
-      serviceTypes: store.serviceTypes,
-      timeEntries: store.timeEntries,
-    });
-
-    await uploadBackup(token, JSON.stringify(backup));
-  };
-
   // ── Drive Restore ─────────────────────────────────────────────────────────
   const handleDriveRestore = async () => {
     setDriveLoading(true);
     try {
-      const token = await requestDriveAccess();
+      const token = await ensureDriveAccess();
       await restoreBackupFromDrive(token);
+      completeSync(new Date().toISOString());
       toast.success(t("settings.restored"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("settings.driveRestoreFailed"));
     } finally {
       setDriveLoading(false);
-    }
-  };
-
-  const handleConnectDrive = async () => {
-    setDriveLoading(true);
-    try {
-      await requestDriveAccess();
-      toast.success(t("settings.driveConnectedToast"));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("settings.driveConnectionFailed"));
-    } finally {
-      setDriveLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    if (googleLoading) {
-      toast(t("login.loadingGoogle"));
-      return;
-    }
-
-    setDriveLoading(true);
-    try {
-      await signIn();
-      toast.success(t("settings.signedInGoogle"));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("settings.signInFailed"));
-    } finally {
-      setDriveLoading(false);
-    }
-  };
-
-  // ── Toggle Auto-Sync ─────────────────────────────────────────────────────
-  const handleToggleAutoSync = async () => {
-    if (!settings.autoSync) {
-      setDriveLoading(true);
-      try {
-        const token = await requestDriveAccess();
-        let restored = false;
-
-        try {
-          await restoreBackupFromDrive(token);
-          restored = true;
-        } catch (err) {
-          if (!(err instanceof Error) || err.message !== "No backup found on Google Drive") {
-            throw err;
-          }
-        }
-
-        const syncedAt = new Date().toISOString();
-        await uploadCurrentBackup(token, syncedAt);
-        completeSync(syncedAt, { autoSync: true });
-        toast.success(
-          restored
-            ? `${t("settings.restored")} ${t("settings.autoSyncEnabled")}`
-            : t("settings.autoSyncEnabled")
-        );
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : t("settings.driveRequired"));
-      } finally {
-        setDriveLoading(false);
-      }
-    } else {
-      updateSettings({ autoSync: false });
-      toast.success(t("settings.autoSyncDisabled"));
     }
   };
 
@@ -284,23 +346,8 @@ export default function SettingsPage() {
   const activeThemeLabel = resolvedTheme === "dark" ? t("settings.dark") : t("settings.light");
   const activeSurface = resolvedTheme === "dark" ? settings.customSurfaceDark : settings.customSurfaceLight;
   const activeBackground = resolvedTheme === "dark" ? settings.customBackgroundDark : settings.customBackgroundLight;
-  const isDriveBusy = driveLoading || sync.status === "syncing";
-  const showSyncStatus = settings.autoSync || Boolean(sync.error) || Boolean(settings.lastSyncedAt);
-  const syncStatusLabel =
-    sync.status === "syncing"
-      ? t("settings.syncing")
-      : sync.status === "error"
-        ? t("settings.syncError")
-        : sync.status === "offline"
-          ? t("settings.offlineShort")
-          : t("settings.synced");
-  const syncStatusSummary = sync.error
-    ? sync.error
-    : sync.status === "offline"
-      ? t("settings.offlineSyncDesc")
-      : settings.autoSync
-        ? t("settings.autoSyncStatus")
-        : t("settings.manualSyncDesc");
+  const isDriveBusy = driveLoading || googleLoading || sync.status === "syncing";
+  const hasPendingChanges = useStore((s) => s.syncMetadata.hasPendingChanges);
   const updateActiveSurface = (value: string | null) => {
     updateSettings(resolvedTheme === "dark" ? { customSurfaceDark: value } : { customSurfaceLight: value });
   };
@@ -642,6 +689,107 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* ── Reports Display ──────────────────────────────────────────────── */}
+        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <h3 className="font-bold text-lg mb-4">{t("settings.reportsDisplay")}</h3>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold">{t("settings.showYearTotals")}</p>
+              <p className="text-xs text-slate-400">{t("settings.showYearTotalsDesc")}</p>
+            </div>
+            <button
+              onClick={() => updateSettings({ showYearTotals: !settings.showYearTotals })}
+              className={cn(
+                "relative w-11 h-6 rounded-full transition-colors shrink-0",
+                settings.showYearTotals ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
+              )}
+            >
+              <div className={cn(
+                "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
+                settings.showYearTotals ? "translate-x-[1.375rem]" : "translate-x-0.5"
+              )} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Goals ───────────────────────────────────────────────────────── */}
+        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="mb-5 space-y-2">
+            <h3 className="font-bold text-lg">{t("settings.goals")}</h3>
+            <p className="text-sm text-slate-500">{t("settings.goalsHint")}</p>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 px-4 py-3 text-xs text-slate-500">
+              {t("settings.goalsTotalsNote")}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <div>
+                <h4 className="font-semibold text-sm text-slate-500 uppercase tracking-wide">{t("settings.serviceGoals")}</h4>
+              </div>
+              <div className="space-y-3">
+                {serviceTypes.map((serviceType) => (
+                  <ServiceGoalCard
+                    key={serviceType.id}
+                    serviceType={serviceType}
+                    goal={serviceGoalMap.get(serviceType.id)}
+                    onSave={(metrics) => handleSaveServiceGoal(serviceType.id, metrics)}
+                    onClear={() => handleClearServiceGoal(serviceType.id)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-semibold text-sm text-slate-500 uppercase tracking-wide">{t("settings.combinedGoals")}</h4>
+                </div>
+                <button
+                  onClick={handleCreateCombinedGoalDraft}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:text-slate-300 dark:hover:border-primary/40 dark:hover:bg-primary/15"
+                >
+                  <span className="material-symbols-outlined text-lg">add</span>
+                  <span>{t("settings.addCombinedGoal")}</span>
+                </button>
+              </div>
+
+              {combinedGoals.length === 0 && combinedGoalDrafts.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-6 text-center text-sm text-slate-400">
+                  {t("settings.noCombinedGoals")}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {combinedGoalDrafts.map((draft) => (
+                    <CombinedGoalCard
+                      key={draft.id}
+                      serviceTypes={serviceTypes}
+                      initialName={draft.name}
+                      initialServiceTypeIds={draft.service_type_ids}
+                      initialMetrics={draft}
+                      isDraft
+                      onSave={(payload) => handleSaveCombinedGoal(draft.id, payload, { draftId: draft.id })}
+                      onDelete={() => handleCancelCombinedGoalDraft(draft.id)}
+                    />
+                  ))}
+
+                  {combinedGoals.map((goal) => (
+                    <CombinedGoalCard
+                      key={goal.id}
+                      serviceTypes={serviceTypes}
+                      initialName={goal.name}
+                      initialServiceTypeIds={goal.service_type_ids}
+                      initialMetrics={goal}
+                      onSave={(payload) => handleSaveCombinedGoal(goal.id, payload)}
+                      onDelete={() => handleDeleteCombinedGoal(goal.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* ── Service Types ─────────────────────────────────────────────────── */}
         <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
           <h3 className="font-bold text-lg mb-4">{t("settings.serviceTypes")}</h3>
@@ -662,6 +810,10 @@ export default function SettingsPage() {
                     serviceType={serviceType}
                     canDelete={serviceTypes.length > 1}
                     onDelete={() => deleteServiceType(serviceType.id)}
+                    onUpdate={(patch) => {
+                      updateServiceType(serviceType.id, patch);
+                      toast.success(t("settings.stUpdated"));
+                    }}
                   />
                 ))}
               </div>
@@ -779,7 +931,7 @@ export default function SettingsPage() {
           <div className="space-y-4">
             {!isConfigured && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
-                Add NEXT_PUBLIC_GOOGLE_CLIENT_ID to web/.env.local and restart the app to enable Google sign-in and Drive sync.
+                {t("settings.driveConfigHint")}
               </div>
             )}
 
@@ -789,7 +941,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className="flex flex-col gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/30">
               <div className="flex items-center gap-3 min-w-0">
                 <span className={cn(
                   "material-symbols-outlined shrink-0",
@@ -810,91 +962,47 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
-              {!user ? (
-                <button
-                  onClick={handleGoogleSignIn}
-                  disabled={driveLoading || !isConfigured}
-                  className="w-full sm:w-auto shrink-0 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:opacity-90 transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {driveLoading || googleLoading ? t("login.loadingGoogle") : t("settings.signInGoogle")}
-                </button>
-              ) : !accessToken ? (
-                <button
-                  onClick={handleConnectDrive}
-                  disabled={driveLoading}
-                  className="w-full sm:w-auto shrink-0 rounded-xl border-2 border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-                >
-                  {t("settings.connectDrive")}
-                </button>
-              ) : null}
             </div>
 
-          {user ? (
             <div className="space-y-4">
-              {/* Auto-sync toggle */}
-              <div className="flex flex-col gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
+              {/* Backup status */}
+              <div className="flex gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex items-center gap-2 min-w-0">
                   <span className={cn(
-                    "material-symbols-outlined",
-                    settings.autoSync ? "text-green-500" : "text-slate-400"
+                    "material-symbols-outlined text-base",
+                    sync.status === "syncing" ? "text-primary animate-spin" :
+                    sync.status === "error" ? "text-red-500" :
+                    hasPendingChanges ? "text-amber-500" : "text-green-500"
                   )}>
-                    sync
+                    {sync.status === "syncing" ? "sync" :
+                     sync.status === "error" ? "error" :
+                     hasPendingChanges ? "cloud_upload" : "cloud_done"}
                   </span>
-                  <div>
-                    <p className="text-sm font-semibold">{t("settings.autoSync")}</p>
-                    <p className="text-xs text-slate-400">{t("settings.autoSyncDesc")}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleToggleAutoSync}
-                  disabled={isDriveBusy}
-                  className={cn(
-                    "relative w-11 h-6 rounded-full transition-colors disabled:opacity-50",
-                    settings.autoSync ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
-                  )}
-                >
-                  <div className={cn(
-                    "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
-                    settings.autoSync ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                  )} />
-                </button>
-              </div>
-
-              {/* Sync status */}
-              {showSyncStatus && (
-                <div className="flex gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className={cn(
-                      "material-symbols-outlined text-base",
-                      sync.status === "syncing" ? "text-primary animate-spin" :
-                      sync.status === "error" ? "text-red-500" :
-                      sync.status === "idle" ? "text-green-500" : "text-slate-400"
-                    )}>
-                      {sync.status === "syncing" ? "sync" :
-                       sync.status === "error" ? "error" :
-                       sync.status === "idle" ? "cloud_done" : "cloud_off"}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold">{syncStatusLabel}</p>
-                      <p className={cn("text-xs", sync.error ? "text-red-500" : "text-slate-400")}>
-                        {syncStatusSummary}
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold">
+                      {sync.status === "syncing" ? t("settings.syncing") :
+                       sync.status === "error" ? t("settings.syncError") :
+                       hasPendingChanges ? t("settings.pendingBackup") :
+                       t("settings.noPendingChanges")}
+                    </p>
+                    {sync.error && (
+                      <p className="text-xs text-red-500">{sync.error}</p>
+                    )}
+                    {settings.lastSyncedAt && sync.status !== "error" && (
+                      <p className="text-xs text-slate-400">
+                        {t("settings.last")}: {new Date(settings.lastSyncedAt).toLocaleString()}
                       </p>
-                      {settings.lastSyncedAt && sync.status !== "error" && (
-                        <p className="text-xs text-slate-400">
-                          {t("settings.last")}: {new Date(settings.lastSyncedAt).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Manual backup/restore */}
               <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.manual")}</p>
                 <button
                   onClick={handleDriveBackup}
-                  disabled={isDriveBusy}
+                  disabled={isDriveBusy || !isConfigured}
                   className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-green-500">cloud_upload</span>
@@ -906,7 +1014,7 @@ export default function SettingsPage() {
 
                 <button
                   onClick={handleDriveRestore}
-                  disabled={isDriveBusy}
+                  disabled={isDriveBusy || !isConfigured}
                   className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-blue-500">cloud_download</span>
@@ -917,11 +1025,6 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 px-4 py-3 text-sm text-slate-500">
-              Use the button above to sign in, then connect Google Drive sync.
-            </div>
-          )}
           </div>
         </div>
 
@@ -966,18 +1069,384 @@ export default function SettingsPage() {
   );
 }
 
+function formatGoalHoursInput(seconds: number | null) {
+  if (!seconds) return "";
+
+  const hours = Math.round((seconds / 3600) * 100) / 100;
+  return Number.isInteger(hours) ? String(hours) : String(hours);
+}
+
+function parseGoalHoursInput(value: string) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return null;
+
+  const parsed = Number(trimmedValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.round(parsed * 3600);
+}
+
+function parseGoalUnitsInput(value: string) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return null;
+
+  const parsed = Number(trimmedValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+}
+
+function buildGoalMetrics(values: {
+  monthlyHours: string;
+  monthlyUnits: string;
+  yearlyHours: string;
+  yearlyUnits: string;
+}): GoalMetrics {
+  return {
+    monthly_duration_seconds: parseGoalHoursInput(values.monthlyHours),
+    monthly_units_quantity: parseGoalUnitsInput(values.monthlyUnits),
+    yearly_duration_seconds: parseGoalHoursInput(values.yearlyHours),
+    yearly_units_quantity: parseGoalUnitsInput(values.yearlyUnits),
+  };
+}
+
+function hasAnyGoalMetrics(metrics: GoalMetrics) {
+  return Boolean(
+    metrics.monthly_duration_seconds ||
+    metrics.monthly_units_quantity ||
+    metrics.yearly_duration_seconds ||
+    metrics.yearly_units_quantity
+  );
+}
+
+function GoalMetricFields({
+  monthlyHours,
+  monthlyUnits,
+  yearlyHours,
+  yearlyUnits,
+  setMonthlyHours,
+  setMonthlyUnits,
+  setYearlyHours,
+  setYearlyUnits,
+}: {
+  monthlyHours: string;
+  monthlyUnits: string;
+  yearlyHours: string;
+  yearlyUnits: string;
+  setMonthlyHours: (value: string) => void;
+  setMonthlyUnits: (value: string) => void;
+  setYearlyHours: (value: string) => void;
+  setYearlyUnits: (value: string) => void;
+}) {
+  const { t } = useT();
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/30 p-3 space-y-3">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyGoal")}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalHours")}</label>
+            <input
+              value={monthlyHours}
+              onChange={(e) => setMonthlyHours(e.target.value)}
+              type="number"
+              min="0"
+              step="0.25"
+              inputMode="decimal"
+              placeholder="0"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalUnits")}</label>
+            <input
+              value={monthlyUnits}
+              onChange={(e) => setMonthlyUnits(e.target.value)}
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              placeholder="0"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/30 p-3 space-y-3">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.yearlyGoal")}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalHours")}</label>
+            <input
+              value={yearlyHours}
+              onChange={(e) => setYearlyHours(e.target.value)}
+              type="number"
+              min="0"
+              step="0.25"
+              inputMode="decimal"
+              placeholder="0"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalUnits")}</label>
+            <input
+              value={yearlyUnits}
+              onChange={(e) => setYearlyUnits(e.target.value)}
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              placeholder="0"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServiceGoalCard({
+  serviceType,
+  goal,
+  onSave,
+  onClear,
+}: {
+  serviceType: ServiceType;
+  goal: GoalDefinition | undefined;
+  onSave: (metrics: GoalMetrics) => void;
+  onClear: () => void;
+}) {
+  const { t } = useT();
+  const [monthlyHours, setMonthlyHours] = useState(formatGoalHoursInput(goal?.monthly_duration_seconds ?? null));
+  const [monthlyUnits, setMonthlyUnits] = useState(goal?.monthly_units_quantity?.toString() ?? "");
+  const [yearlyHours, setYearlyHours] = useState(formatGoalHoursInput(goal?.yearly_duration_seconds ?? null));
+  const [yearlyUnits, setYearlyUnits] = useState(goal?.yearly_units_quantity?.toString() ?? "");
+
+  useEffect(() => {
+    setMonthlyHours(formatGoalHoursInput(goal?.monthly_duration_seconds ?? null));
+    setMonthlyUnits(goal?.monthly_units_quantity?.toString() ?? "");
+    setYearlyHours(formatGoalHoursInput(goal?.yearly_duration_seconds ?? null));
+    setYearlyUnits(goal?.yearly_units_quantity?.toString() ?? "");
+  }, [goal]);
+
+  const handleSave = () => {
+    onSave(buildGoalMetrics({ monthlyHours, monthlyUnits, yearlyHours, yearlyUnits }));
+  };
+
+  const handleClear = () => {
+    setMonthlyHours("");
+    setMonthlyUnits("");
+    setYearlyHours("");
+    setYearlyUnits("");
+    onClear();
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-surface p-4 space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="size-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: serviceType.color + "1a" }}
+          >
+            <span className="material-symbols-outlined text-lg" style={{ color: serviceType.color }}>
+              {serviceType.icon}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm truncate">{serviceType.name}</p>
+            <p className="text-xs text-slate-400">{t("settings.serviceGoals")}</p>
+          </div>
+        </div>
+        <div className="flex gap-2 sm:shrink-0">
+          <button
+            onClick={handleSave}
+            className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:opacity-90 transition-all"
+          >
+            {t("settings.save")}
+          </button>
+          <button
+            onClick={handleClear}
+            className="flex-1 sm:flex-none px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            {t("settings.clearGoal")}
+          </button>
+        </div>
+      </div>
+
+      <GoalMetricFields
+        monthlyHours={monthlyHours}
+        monthlyUnits={monthlyUnits}
+        yearlyHours={yearlyHours}
+        yearlyUnits={yearlyUnits}
+        setMonthlyHours={setMonthlyHours}
+        setMonthlyUnits={setMonthlyUnits}
+        setYearlyHours={setYearlyHours}
+        setYearlyUnits={setYearlyUnits}
+      />
+    </div>
+  );
+}
+
+function CombinedGoalCard({
+  serviceTypes,
+  initialName,
+  initialServiceTypeIds,
+  initialMetrics,
+  isDraft,
+  onSave,
+  onDelete,
+}: {
+  serviceTypes: ServiceType[];
+  initialName: string | null;
+  initialServiceTypeIds: string[];
+  initialMetrics: GoalMetrics;
+  isDraft?: boolean;
+  onSave: (payload: CombinedGoalPayload) => void;
+  onDelete: () => void;
+}) {
+  const { t } = useT();
+  const [name, setName] = useState(initialName ?? "");
+  const [serviceTypeIds, setServiceTypeIds] = useState(initialServiceTypeIds);
+  const [monthlyHours, setMonthlyHours] = useState(formatGoalHoursInput(initialMetrics.monthly_duration_seconds));
+  const [monthlyUnits, setMonthlyUnits] = useState(initialMetrics.monthly_units_quantity?.toString() ?? "");
+  const [yearlyHours, setYearlyHours] = useState(formatGoalHoursInput(initialMetrics.yearly_duration_seconds));
+  const [yearlyUnits, setYearlyUnits] = useState(initialMetrics.yearly_units_quantity?.toString() ?? "");
+
+  useEffect(() => {
+    setName(initialName ?? "");
+    setServiceTypeIds(initialServiceTypeIds);
+    setMonthlyHours(formatGoalHoursInput(initialMetrics.monthly_duration_seconds));
+    setMonthlyUnits(initialMetrics.monthly_units_quantity?.toString() ?? "");
+    setYearlyHours(formatGoalHoursInput(initialMetrics.yearly_duration_seconds));
+    setYearlyUnits(initialMetrics.yearly_units_quantity?.toString() ?? "");
+  }, [initialMetrics, initialName, initialServiceTypeIds]);
+
+  const toggleServiceType = (serviceTypeId: string) => {
+    setServiceTypeIds((currentServiceTypeIds) =>
+      currentServiceTypeIds.includes(serviceTypeId)
+        ? currentServiceTypeIds.filter((id) => id !== serviceTypeId)
+        : [...currentServiceTypeIds, serviceTypeId]
+    );
+  };
+
+  const handleSave = () => {
+    onSave({
+      name: name.trim() || null,
+      service_type_ids: serviceTypeIds,
+      ...buildGoalMetrics({ monthlyHours, monthlyUnits, yearlyHours, yearlyUnits }),
+    });
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-surface p-4 space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex-1 min-w-0">
+          <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalName")}</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("settings.goalNamePlaceholder")}
+            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          />
+        </div>
+        <div className="flex gap-2 sm:shrink-0">
+          <button
+            onClick={handleSave}
+            className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:opacity-90 transition-all"
+          >
+            {t("settings.save")}
+          </button>
+          <button
+            onClick={onDelete}
+            className="flex-1 sm:flex-none px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            {isDraft ? t("settings.cancel") : t("settings.deleteGoal")}
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.goalServices")}</p>
+        <div className="flex flex-wrap gap-2">
+          {serviceTypes.map((serviceType) => {
+            const selected = serviceTypeIds.includes(serviceType.id);
+            return (
+              <button
+                key={serviceType.id}
+                type="button"
+                onClick={() => toggleServiceType(serviceType.id)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-all",
+                  selected
+                    ? "border-transparent text-white shadow-sm"
+                    : "border-slate-200 dark:border-slate-700 text-slate-500"
+                )}
+                style={selected ? { backgroundColor: serviceType.color } : undefined}
+              >
+                <span className="material-symbols-outlined text-base">{serviceType.icon}</span>
+                <span>{serviceType.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <GoalMetricFields
+        monthlyHours={monthlyHours}
+        monthlyUnits={monthlyUnits}
+        yearlyHours={yearlyHours}
+        yearlyUnits={yearlyUnits}
+        setMonthlyHours={setMonthlyHours}
+        setMonthlyUnits={setMonthlyUnits}
+        setYearlyHours={setYearlyHours}
+        setYearlyUnits={setYearlyUnits}
+      />
+    </div>
+  );
+}
+
 function SortableServiceTypeItem({
   serviceType,
   canDelete,
   onDelete,
+  onUpdate,
 }: {
   serviceType: ServiceType;
   canDelete: boolean;
   onDelete: () => void;
+  onUpdate: (patch: Partial<ServiceType>) => void;
 }) {
+  const { t } = useT();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(serviceType.name);
+  const [editColor, setEditColor] = useState(serviceType.color);
+  const [editIcon, setEditIcon] = useState(serviceType.icon);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: serviceType.id,
   });
+
+  const handleSave = () => {
+    if (!editName.trim()) return;
+    onUpdate({ name: editName.trim(), color: editColor, icon: editIcon });
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditName(serviceType.name);
+    setEditColor(serviceType.color);
+    setEditIcon(serviceType.icon);
+    setEditing(false);
+  };
 
   return (
     <div
@@ -987,44 +1456,123 @@ function SortableServiceTypeItem({
         transition,
       }}
       className={cn(
-        "flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-surface",
+        "p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-surface",
         isDragging && "z-10 shadow-lg ring-2 ring-primary/20"
       )}
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <button
-          type="button"
-          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 touch-none cursor-grab active:cursor-grabbing dark:hover:bg-slate-800 dark:hover:text-slate-200"
-          title="Drag to reorder"
-          aria-label={`Drag ${serviceType.name} to reorder`}
-          {...attributes}
-          {...listeners}
-        >
-          <span className="material-symbols-outlined text-base">drag_indicator</span>
-        </button>
-        <div
-          className="size-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ backgroundColor: serviceType.color + "1a" }}
-        >
-          <span className="material-symbols-outlined text-sm" style={{ color: serviceType.color }}>
-            {serviceType.icon}
-          </span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 touch-none cursor-grab active:cursor-grabbing dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            title="Drag to reorder"
+            aria-label={`Drag ${serviceType.name} to reorder`}
+            {...attributes}
+            {...listeners}
+          >
+            <span className="material-symbols-outlined text-base">drag_indicator</span>
+          </button>
+          <div
+            className="size-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ backgroundColor: (editing ? editColor : serviceType.color) + "1a" }}
+          >
+            <span className="material-symbols-outlined text-sm" style={{ color: editing ? editColor : serviceType.color }}>
+              {editing ? editIcon : serviceType.icon}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm truncate">{serviceType.name}</p>
+            {serviceType.description && (
+              <p className="text-xs text-slate-500 truncate">{serviceType.description}</p>
+            )}
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="font-semibold text-sm truncate">{serviceType.name}</p>
-          {serviceType.description && (
-            <p className="text-xs text-slate-500 truncate">{serviceType.description}</p>
+        <div className="flex items-center gap-1">
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-primary/10 hover:text-primary"
+              title={t("settings.editST")}
+            >
+              <span className="material-symbols-outlined text-base">edit</span>
+            </button>
+          )}
+          {canDelete && !editing && (
+            <button
+              onClick={onDelete}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+              title="Delete"
+            >
+              <span className="material-symbols-outlined text-base">delete</span>
+            </button>
           )}
         </div>
       </div>
-      {canDelete && (
-        <button
-          onClick={onDelete}
-          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-          title="Delete"
-        >
-          <span className="material-symbols-outlined text-base">delete</span>
-        </button>
+
+      {editing && (
+        <div className="mt-3 space-y-3 border-t border-slate-100 dark:border-slate-800 pt-3">
+          <input
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          />
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.color")}</p>
+            <div className="flex gap-2 flex-wrap">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setEditColor(c)}
+                  className={cn(
+                    "size-7 rounded-full border-2 transition-all",
+                    editColor === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
+                  )}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+              <label className="size-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                <span className="material-symbols-outlined text-xs text-slate-400">palette</span>
+                <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="sr-only" />
+              </label>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.icon")}</p>
+            <div className="flex gap-2 flex-wrap">
+              {ICONS.map((ic) => (
+                <button
+                  key={ic}
+                  type="button"
+                  onClick={() => setEditIcon(ic)}
+                  className={cn(
+                    "size-9 rounded-xl flex items-center justify-center border-2 transition-all",
+                    editIcon === ic
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-slate-200 dark:border-slate-700 text-slate-500"
+                  )}
+                >
+                  <span className="material-symbols-outlined text-sm">{ic}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={!editName.trim()}
+              className="flex-1 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              {t("settings.save")}
+            </button>
+            <button
+              onClick={handleCancel}
+              className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              {t("settings.cancel")}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

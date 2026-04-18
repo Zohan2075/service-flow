@@ -13,12 +13,14 @@ A browser-based service time tracking app. All data lives in the browser (Indexe
 ## Features
 
 - Calendar-based service time logging
+- Time and units entry support
 - Customizable service types with colors and Material icons
-- Two entry modes: exact start/end time range, or manual duration
-- Monthly reports with per-service-type breakdowns
+- Time entry modes: exact start/end time range, or manual duration
+- Monthly and yearly reports with per-service-type breakdowns
+- Per-service and combined monthly/yearly goals in reports
 - Light / Dark / System theme
 - Export & import data as a single JSON file
-- Backup & restore via Google Drive
+- Manual backup & restore via Google Drive
 - Fully offline — no backend required
 
 ---
@@ -85,7 +87,8 @@ All data is stored in a single JSON document:
   "profile": { "google_id", "name", "email", "image" },
   "settings": { "theme": "light|dark|system" },
   "service_types": [{ "id", "name", "color", "icon", ... }],
-  "time_entries": [{ "id", "title", "start_time", "end_time", "duration_seconds", ... }]
+  "time_entries": [{ "id", "title", "start_time", "end_time", "duration_seconds", "units_quantity", ... }],
+  "goals": [{ "id", "scope", "service_type_id", "service_type_ids", ... }]
 }
 ```
 

@@ -6,6 +6,8 @@ import type {
   UserProfile,
   AppSettings,
   BackupFile,
+  GoalDefinition,
+  GoalScope,
 } from "@/types/data";
 
 // ─── IndexedDB storage adapter for Zustand ──────────────────────────────────
@@ -67,6 +69,7 @@ interface AppState {
   settings: AppSettings;
   serviceTypes: ServiceType[];
   timeEntries: TimeEntry[];
+  goals: GoalDefinition[];
   syncMetadata: SyncMetadata;
 
   // auth actions
@@ -90,9 +93,14 @@ interface AppState {
   updateTimeEntry: (id: string, patch: Partial<TimeEntry>) => void;
   deleteTimeEntry: (id: string) => void;
 
+  // goal actions
+  addGoal: (goal: Omit<GoalDefinition, "id" | "created_at" | "updated_at">) => void;
+  updateGoal: (id: string, patch: Partial<GoalDefinition>) => void;
+  deleteGoal: (id: string) => void;
+
   // bulk data actions (import / restore)
   importData: (file: BackupFile, options?: ImportDataOptions) => void;
-  completeSync: (syncedAt: string, patch?: Partial<Pick<AppSettings, "autoSync">>) => void;
+  completeSync: (syncedAt: string) => void;
   resetData: () => void;
 }
 
@@ -157,7 +165,7 @@ function ensureServiceTypesNotEmpty(
   ]);
 }
 
-const SYNC_ONLY_SETTING_KEYS = new Set<keyof AppSettings>(["autoSync", "lastSyncedAt"]);
+const SYNC_ONLY_SETTING_KEYS = new Set<keyof AppSettings>(["lastSyncedAt"]);
 
 function getSyncComparableSettings(settings: AppSettings) {
   return Object.fromEntries(
@@ -192,7 +200,7 @@ const INITIAL_SETTINGS: AppSettings = {
   defaultEntryMode: "duration",
   defaultDurationHours: 1,
   defaultDurationMinutes: 0,
-  autoSync: false,
+  showYearTotals: false,
   lastSyncedAt: null,
 };
 
@@ -201,20 +209,117 @@ const INITIAL_SYNC_METADATA: SyncMetadata = {
 };
 
 function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
-  const merged = { ...INITIAL_SETTINGS, ...(settings ?? {}) };
-  const legacySurface = settings?.customSurface ?? null;
-  const legacyBackground = settings?.customBackground ?? null;
+  // Strip legacy fields that may come from old backups
+  const input = { ...(settings ?? {}) } as Record<string, unknown>;
+  delete input.autoSync;
+
+  const merged = { ...INITIAL_SETTINGS, ...input };
+  const legacySurface = (input.customSurface as string | null) ?? null;
+  const legacyBackground = (input.customBackground as string | null) ?? null;
   const rest = { ...merged };
   delete rest.customSurface;
   delete rest.customBackground;
 
   return {
     ...rest,
-    customSurfaceLight: settings?.customSurfaceLight ?? legacySurface ?? rest.customSurfaceLight,
-    customSurfaceDark: settings?.customSurfaceDark ?? legacySurface ?? rest.customSurfaceDark,
-    customBackgroundLight: settings?.customBackgroundLight ?? legacyBackground ?? rest.customBackgroundLight,
-    customBackgroundDark: settings?.customBackgroundDark ?? legacyBackground ?? rest.customBackgroundDark,
+    customSurfaceLight: (settings?.customSurfaceLight as string | null) ?? legacySurface ?? rest.customSurfaceLight,
+    customSurfaceDark: (settings?.customSurfaceDark as string | null) ?? legacySurface ?? rest.customSurfaceDark,
+    customBackgroundLight: (settings?.customBackgroundLight as string | null) ?? legacyBackground ?? rest.customBackgroundLight,
+    customBackgroundDark: (settings?.customBackgroundDark as string | null) ?? legacyBackground ?? rest.customBackgroundDark,
   };
+}
+
+function normalizeTimeEntry(entry: TimeEntry): TimeEntry {
+  return {
+    ...entry,
+    units_quantity: entry.units_quantity ?? null,
+    units_label: entry.units_label ?? null,
+  };
+}
+
+function normalizeGoalNumber(value: unknown, options?: { integer?: boolean }) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return options?.integer ? Math.floor(value) : Math.round(value);
+}
+
+function hasGoalTargets(goal: Pick<GoalDefinition, "monthly_duration_seconds" | "monthly_units_quantity" | "yearly_duration_seconds" | "yearly_units_quantity">) {
+  return Boolean(
+    goal.monthly_duration_seconds ||
+    goal.monthly_units_quantity ||
+    goal.yearly_duration_seconds ||
+    goal.yearly_units_quantity
+  );
+}
+
+function normalizeGoal(
+  goal: Partial<GoalDefinition>,
+  validServiceTypeIds?: Set<string>
+): GoalDefinition | null {
+  const scope: GoalScope = goal.scope === "combined" ? "combined" : "service";
+  const monthly_duration_seconds = normalizeGoalNumber(goal.monthly_duration_seconds);
+  const monthly_units_quantity = normalizeGoalNumber(goal.monthly_units_quantity, { integer: true });
+  const yearly_duration_seconds = normalizeGoalNumber(goal.yearly_duration_seconds);
+  const yearly_units_quantity = normalizeGoalNumber(goal.yearly_units_quantity, { integer: true });
+
+  const baseGoal = {
+    id: typeof goal.id === "string" && goal.id ? goal.id : uuid(),
+    name: typeof goal.name === "string" ? goal.name.trim() || null : null,
+    scope,
+    monthly_duration_seconds,
+    monthly_units_quantity,
+    yearly_duration_seconds,
+    yearly_units_quantity,
+    created_at: typeof goal.created_at === "string" ? goal.created_at : now(),
+    updated_at: typeof goal.updated_at === "string" ? goal.updated_at : now(),
+  } satisfies Omit<GoalDefinition, "service_type_id" | "service_type_ids">;
+
+  if (!hasGoalTargets(baseGoal)) {
+    return null;
+  }
+
+  if (scope === "service") {
+    const serviceTypeId = typeof goal.service_type_id === "string" ? goal.service_type_id : null;
+    if (!serviceTypeId || (validServiceTypeIds && !validServiceTypeIds.has(serviceTypeId))) {
+      return null;
+    }
+
+    return {
+      ...baseGoal,
+      name: null,
+      service_type_id: serviceTypeId,
+      service_type_ids: [],
+    };
+  }
+
+  const nextServiceTypeIds = Array.isArray(goal.service_type_ids)
+    ? [...new Set(goal.service_type_ids.filter((id): id is string => typeof id === "string"))]
+    : [];
+  const filteredServiceTypeIds = validServiceTypeIds
+    ? nextServiceTypeIds.filter((id) => validServiceTypeIds.has(id))
+    : nextServiceTypeIds;
+
+  if (filteredServiceTypeIds.length === 0) {
+    return null;
+  }
+
+  return {
+    ...baseGoal,
+    service_type_id: null,
+    service_type_ids: filteredServiceTypeIds,
+  };
+}
+
+function normalizeGoals(goals: GoalDefinition[] | undefined, validServiceTypeIds?: Set<string>) {
+  return (goals ?? []).reduce<GoalDefinition[]>((normalizedGoals, goal) => {
+    const normalizedGoal = normalizeGoal(goal, validServiceTypeIds);
+    if (normalizedGoal) {
+      normalizedGoals.push(normalizedGoal);
+    }
+    return normalizedGoals;
+  }, []);
 }
 
 function mergeImportedProfile(
@@ -249,6 +354,7 @@ export const useStore = create<AppState>()(
       settings: INITIAL_SETTINGS,
       serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
       timeEntries: [],
+      goals: [],
       syncMetadata: INITIAL_SYNC_METADATA,
 
       // ── Auth ────────────────────────────────────────────────────────────
@@ -265,6 +371,7 @@ export const useStore = create<AppState>()(
               settings: INITIAL_SETTINGS,
               serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
               timeEntries: [],
+              goals: [],
               syncMetadata: INITIAL_SYNC_METADATA,
             };
           }
@@ -278,6 +385,7 @@ export const useStore = create<AppState>()(
           settings: INITIAL_SETTINGS,
           serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
           timeEntries: [],
+          goals: [],
           syncMetadata: INITIAL_SYNC_METADATA,
         }),
 
@@ -392,9 +500,23 @@ export const useStore = create<AppState>()(
       deleteServiceType: (id) =>
         set((s) => {
           if (s.serviceTypes.length <= 1) return s;
+
+          const nextServiceTypes = normalizeServiceTypes(
+            s.serviceTypes.filter((st) => st.id !== id)
+          );
+          const validServiceTypeIds = new Set(nextServiceTypes.map((serviceType) => serviceType.id));
+
           return withPendingSync({
-            serviceTypes: normalizeServiceTypes(
-              s.serviceTypes.filter((st) => st.id !== id)
+            serviceTypes: nextServiceTypes,
+            goals: normalizeGoals(
+              s.goals
+                .filter((goal) => !(goal.scope === "service" && goal.service_type_id === id))
+                .map((goal) =>
+                  goal.scope === "combined"
+                    ? { ...goal, service_type_ids: goal.service_type_ids.filter((serviceTypeId) => serviceTypeId !== id) }
+                    : goal
+                ),
+              validServiceTypeIds
             ),
           });
         }),
@@ -437,19 +559,82 @@ export const useStore = create<AppState>()(
           })
         ),
 
+      // ── Goals ───────────────────────────────────────────────────────────
+      addGoal: (goal) =>
+        set((s) => {
+          const validServiceTypeIds = new Set(s.serviceTypes.map((serviceType) => serviceType.id));
+          const normalizedGoal = normalizeGoal(
+            {
+              ...goal,
+              id: uuid(),
+              created_at: now(),
+              updated_at: now(),
+            },
+            validServiceTypeIds
+          );
+
+          if (!normalizedGoal) {
+            return { goals: s.goals };
+          }
+
+          return withPendingSync({
+            goals: [...s.goals, normalizedGoal],
+          });
+        }),
+
+      updateGoal: (id, patch) =>
+        set((s) => {
+          const currentGoal = s.goals.find((goal) => goal.id === id);
+          if (!currentGoal) {
+            return { goals: s.goals };
+          }
+
+          const validServiceTypeIds = new Set(s.serviceTypes.map((serviceType) => serviceType.id));
+          const normalizedGoal = normalizeGoal(
+            {
+              ...currentGoal,
+              ...patch,
+              id: currentGoal.id,
+              created_at: currentGoal.created_at,
+              updated_at: now(),
+            },
+            validServiceTypeIds
+          );
+
+          if (!normalizedGoal) {
+            return withPendingSync({
+              goals: s.goals.filter((goal) => goal.id !== id),
+            });
+          }
+
+          return withPendingSync({
+            goals: s.goals.map((goal) => (goal.id === id ? normalizedGoal : goal)),
+          });
+        }),
+
+      deleteGoal: (id) =>
+        set((s) =>
+          withPendingSync({
+            goals: s.goals.filter((goal) => goal.id !== id),
+          })
+        ),
+
       // ── Bulk ───────────────────────────────────────────────────────────
       importData: (file, options) =>
         set((s) => {
           const settings = normalizeSettings({ ...s.settings, ...(file.settings ?? {}) });
+          const serviceTypes = ensureServiceTypesNotEmpty(
+            sortServiceTypesByOrder(file.service_types),
+            settings
+          );
+          const validServiceTypeIds = new Set(serviceTypes.map((serviceType) => serviceType.id));
 
           return {
             settings,
             profile: mergeImportedProfile(s.profile, file.profile),
-            serviceTypes: ensureServiceTypesNotEmpty(
-              sortServiceTypesByOrder(file.service_types),
-              settings
-            ),
-            timeEntries: file.time_entries,
+            serviceTypes,
+            timeEntries: (file.time_entries ?? []).map(normalizeTimeEntry),
+            goals: normalizeGoals(file.goals, validServiceTypeIds),
             syncMetadata:
               options?.source === "remote"
                 ? INITIAL_SYNC_METADATA
@@ -457,11 +642,10 @@ export const useStore = create<AppState>()(
           };
         }),
 
-      completeSync: (syncedAt, patch) =>
+      completeSync: (syncedAt) =>
         set((s) => ({
           settings: normalizeSettings({
             ...s.settings,
-            ...(patch ?? {}),
             lastSyncedAt: syncedAt,
           }),
           syncMetadata: INITIAL_SYNC_METADATA,
@@ -474,6 +658,7 @@ export const useStore = create<AppState>()(
             settings: INITIAL_SETTINGS,
             serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
             timeEntries: [],
+            goals: [],
           })
         ),
     }),
@@ -486,20 +671,25 @@ export const useStore = create<AppState>()(
         settings: state.settings,
         serviceTypes: state.serviceTypes,
         timeEntries: state.timeEntries,
+        goals: state.goals,
         syncMetadata: state.syncMetadata,
       }) as unknown as AppState,
       // Deep-merge settings so new fields get their defaults when loading old data
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
         const settings = normalizeSettings({ ...current.settings, ...(p.settings ?? {}) });
+        const serviceTypes = ensureServiceTypesNotEmpty(
+          sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes),
+          settings
+        );
+        const validServiceTypeIds = new Set(serviceTypes.map((serviceType) => serviceType.id));
         return {
           ...current,
           ...p,
           settings,
-          serviceTypes: ensureServiceTypesNotEmpty(
-            sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes),
-            settings
-          ),
+          serviceTypes,
+          timeEntries: (p.timeEntries ?? current.timeEntries).map(normalizeTimeEntry),
+          goals: normalizeGoals(p.goals ?? current.goals, validServiceTypeIds),
           syncMetadata: p.syncMetadata ?? current.syncMetadata,
         };
       },
@@ -514,6 +704,7 @@ export function serializeBackup(state: {
   settings: AppSettings;
   serviceTypes: ServiceType[];
   timeEntries: TimeEntry[];
+  goals?: GoalDefinition[];
 }): BackupFile {
   return {
     version: 1,
@@ -522,6 +713,7 @@ export function serializeBackup(state: {
     settings: state.settings,
     service_types: state.serviceTypes,
     time_entries: state.timeEntries,
+    goals: state.goals ?? [],
   };
 }
 
@@ -535,6 +727,9 @@ export function deserializeBackup(raw: unknown): BackupFile {
   }
   if (!Array.isArray(obj.service_types) || !Array.isArray(obj.time_entries)) {
     throw new Error("Invalid backup file: missing data arrays");
+  }
+  if (Object.prototype.hasOwnProperty.call(obj, "goals") && !Array.isArray(obj.goals)) {
+    throw new Error("Invalid backup file: goals must be an array");
   }
   return obj as unknown as BackupFile;
 }

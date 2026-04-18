@@ -32,8 +32,9 @@ export interface AppSettings {
   defaultEntryMode: "range" | "duration";
   defaultDurationHours: number;
   defaultDurationMinutes: number;
-  // Sync
-  autoSync: boolean;
+  // Reports
+  showYearTotals: boolean;
+  // Sync metadata (kept for manual backup)
   lastSyncedAt: string | null;      // ISO 8601
 }
 
@@ -57,7 +58,25 @@ export interface TimeEntry {
   start_time: string;     // ISO 8601
   end_time: string | null; // ISO 8601
   duration_seconds: number | null;
+  units_quantity: number | null;
+  units_label: string | null;
   service_type_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type GoalScope = "service" | "combined";
+
+export interface GoalDefinition {
+  id: string;
+  name: string | null;
+  scope: GoalScope;
+  service_type_id: string | null;
+  service_type_ids: string[];
+  monthly_duration_seconds: number | null;
+  monthly_units_quantity: number | null;
+  yearly_duration_seconds: number | null;
+  yearly_units_quantity: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -67,6 +86,7 @@ export interface CalendarDay {
   entries: TimeEntry[];
   total_duration_seconds: number;
   total_duration_display: string;
+  total_units: number;
 }
 
 // ─── Backup file schema ──────────────────────────────────────────────────────
@@ -78,9 +98,14 @@ export interface BackupFile {
   settings: AppSettings;
   service_types: ServiceType[];
   time_entries: TimeEntry[];
+  goals?: GoalDefinition[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+export function isUnitsEntry(entry: TimeEntry): boolean {
+  return entry.units_quantity != null && entry.units_quantity > 0;
+}
 
 export function computeDurationSeconds(entry: TimeEntry): number {
   if (entry.duration_seconds != null) return entry.duration_seconds;
@@ -128,15 +153,19 @@ export function buildCalendarDays(
   return Object.entries(byDate)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, dayEntries]) => {
-      const totalSec = dayEntries.reduce(
-        (sum, e) => sum + computeDurationSeconds(e),
-        0
-      );
+      const sorted = dayEntries.sort((a, b) => a.start_time.localeCompare(b.start_time));
+      const totalSec = sorted
+        .filter((e) => !isUnitsEntry(e))
+        .reduce((sum, e) => sum + computeDurationSeconds(e), 0);
+      const totalUnits = sorted
+        .filter((e) => isUnitsEntry(e))
+        .reduce((sum, e) => sum + (e.units_quantity ?? 0), 0);
       return {
         date,
-        entries: dayEntries.sort((a, b) => a.start_time.localeCompare(b.start_time)),
+        entries: sorted,
         total_duration_seconds: totalSec,
         total_duration_display: durationDisplay(totalSec),
+        total_units: totalUnits,
       };
     });
 }
