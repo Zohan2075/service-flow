@@ -1,31 +1,39 @@
 # ServiceFlow
 
-A browser-based service time tracking app. All data lives in the browser (IndexedDB) with optional Google Drive backup.
+ServiceFlow is a service-time tracking workspace with a web app, a FastAPI backend, and a Flutter mobile client. The current day-to-day experience is centered on the web app, which stores data locally in the browser and can optionally back up to Google Drive.
 
 | Component | Stack |
 |---|---|
-| **Web** | Next.js 15 · React 19 · TailwindCSS · Zustand |
-| **Auth** | Google Sign-In (Google Identity Services) |
-| **Storage** | IndexedDB (runtime) · JSON file (export/import) · Google Drive (backup/restore) |
+| Web | Next.js 15, React 19, TailwindCSS, Zustand |
+| Backend | FastAPI, SQLAlchemy, Alembic |
+| Mobile | Flutter, Riverpod, Go Router |
+| Auth | Google Sign-In / Google Identity Services |
+| Storage | IndexedDB, JSON export/import, Google Drive backup/restore |
 
----
+## Highlights
 
-## Features
+- Calendar-based logging for both time and unit entries
+- Service types own their entry mode, so each service is either time-based or unit-based
+- Optional entry titles that fall back to the selected service type name
+- Named service goals and combined goals
+- Reusable yearly goal cycles with configurable start month, defaulting to September
+- Monthly and annual reports with clearer goal progress, percentages, and completion states
+- Shared month context between Calendar and Reports
+- English and Spanish UI
+- Light, dark, and system theme support
+- Offline-first web storage with JSON export/import and Google Drive backup/restore
 
-- Calendar-based service time logging
-- Time and units entry support
-- Customizable service types with colors and Material icons
-- Time entry modes: exact start/end time range, or manual duration
-- Monthly and yearly reports with per-service-type breakdowns
-- Per-service and combined monthly/yearly goals in reports
-- Light / Dark / System theme
-- Export & import data as a single JSON file
-- Manual backup & restore via Google Drive
-- Fully offline — no backend required
+## Repository Layout
 
----
+```text
+.
+|- web/      Next.js web app
+|- backend/  FastAPI API and migrations
+|- mobile/   Flutter mobile app
+|- netlify.toml
+```
 
-## Quick Start
+## Web Quick Start
 
 ```bash
 cd web
@@ -35,9 +43,34 @@ npm run dev
 
 Open http://localhost:3000
 
----
+To build the production export:
 
-## Netlify Deployment
+```bash
+cd web
+npm run build
+```
+
+## Backend Quick Start
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+On macOS or Linux, activate the environment with `source .venv/bin/activate`.
+
+## Mobile Quick Start
+
+```bash
+cd mobile
+flutter pub get
+flutter run
+```
+
+## Web Deployment
 
 The web app is configured for static export so Netlify can publish it directly.
 
@@ -49,7 +82,7 @@ The web app is configured for static export so Netlify can publish it directly.
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-The effective Netlify settings are:
+Effective Netlify settings:
 
 ```text
 Base directory: web
@@ -57,49 +90,28 @@ Build command: npm run build
 Publish directory: out
 ```
 
----
-
 ## Google OAuth Setup
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a project → **APIs & Services → Credentials → Create OAuth 2.0 Client ID**
-3. Application type: **Web application**
-4. Authorized JavaScript origins: `http://localhost:3000` (and your production URL)
-5. Enable the **Google Drive API** under APIs & Services → Library
-6. Create a `.env.local` file in the `web/` directory:
+2. Create a project and open APIs & Services > Credentials
+3. Create an OAuth 2.0 Client ID for a Web application
+4. Add `http://localhost:3000` and your production URL to Authorized JavaScript origins
+5. Enable the Google Drive API under APIs & Services > Library
+6. Create `web/.env.local` with:
 
 ```env
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-For Netlify production, add the same variable in the Netlify site environment settings and include your Netlify domain in the authorized JavaScript origins.
+For Netlify production, add the same variable in the site environment settings and include your deployed domain in the authorized origins.
 
----
+## Data Notes
 
-## Data Model
+The web app stores its working data in IndexedDB. Export/import and Google Drive backup use the same JSON payload containing profile, settings, service types, time entries, and goals.
 
-All data is stored in a single JSON document:
+## Donations
 
-```json
-{
-  "version": 1,
-  "exported_at": "ISO 8601",
-  "profile": { "google_id", "name", "email", "image" },
-  "settings": { "theme": "light|dark|system" },
-  "service_types": [{ "id", "name", "color", "icon", ... }],
-  "time_entries": [{ "id", "title", "start_time", "end_time", "duration_seconds", "units_quantity", ... }],
-  "goals": [{ "id", "scope", "service_type_id", "service_type_ids", ... }]
-}
-```
+If ServiceFlow is useful to you, you can support development here:
 
-The same format is used for local export/import and Google Drive backup/restore.
-
----
-
-## Theme & Colors
-
-- **Primary**: `#2094f3`
-- **Background Light**: `#f5f7f8`
-- **Background Dark**: `#101a22`
-- Service types have customizable colors + Material Symbols icons
-- Supports Light / Dark / System theme switching
+- Ko-fi: https://ko-fi.com/U7U81WJ6BY
+- In the web app: Settings > Account > Support on Ko-fi

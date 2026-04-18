@@ -25,7 +25,7 @@ import { downloadBackup } from "@/lib/drive";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
-import { useT } from "@/lib/i18n";
+import { monthShortYear, useT } from "@/lib/i18n";
 import type { GoalDefinition, ServiceType } from "@/types/data";
 import toast from "react-hot-toast";
 
@@ -48,16 +48,22 @@ const ACCENT_PRESETS = [
 const SURFACE_PRESETS_LIGHT = ["#ffffff", "#f8fafc", "#f1f5f9", "#fefce8", "#fdf2f8", "#f0fdfa"];
 const SURFACE_PRESETS_DARK = ["#0f172a", "#1e293b", "#18181b", "#1a1a2e", "#1c1917", "#0c1524"];
 
-type GoalMetrics = Pick<GoalDefinition, "monthly_duration_seconds" | "monthly_units_quantity" | "yearly_duration_seconds" | "yearly_units_quantity">;
+type GoalMetrics = Pick<GoalDefinition, "monthly_duration_seconds" | "monthly_units_quantity" | "yearly_duration_seconds" | "yearly_units_quantity" | "yearly_start_month">;
+
+type ServiceGoalPayload = GoalMetrics & {
+  name: string;
+};
 
 type CombinedGoalPayload = GoalMetrics & {
-  name: string | null;
+  name: string;
   service_type_ids: string[];
 };
 
 type CombinedGoalDraft = CombinedGoalPayload & {
   id: string;
 };
+
+type SettingsCategory = "account" | "appearance" | "entries" | "reports" | "data" | "danger";
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -70,6 +76,7 @@ export default function SettingsPage() {
   const settings = useStore((s) => s.settings);
   const timeEntries = useStore((s) => s.timeEntries);
   const goals = useStore((s) => s.goals);
+  const viewedMonth = useStore((s) => s.uiState.viewedMonth);
   const addServiceType = useStore((s) => s.addServiceType);
   const addGoal = useStore((s) => s.addGoal);
   const deleteServiceType = useStore((s) => s.deleteServiceType);
@@ -98,7 +105,9 @@ export default function SettingsPage() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(COLORS[0]);
   const [newIcon, setNewIcon] = useState(ICONS[0]);
+  const [newEntryType, setNewEntryType] = useState<ServiceType["entry_type"]>("time");
   const [combinedGoalDrafts, setCombinedGoalDrafts] = useState<CombinedGoalDraft[]>([]);
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory>("account");
 
   const [driveLoading, setDriveLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -114,12 +123,19 @@ export default function SettingsPage() {
     addServiceType({
       name: newName.trim(),
       description: null,
+      entry_type: newEntryType,
       color: newColor,
       icon: newIcon,
     });
     setNewName("");
+    setNewEntryType("time");
     toast.success(t("settings.stCreated"));
   };
+
+  const serviceTypeMap = useMemo(
+    () => new Map(serviceTypes.map((serviceType) => [serviceType.id, serviceType])),
+    [serviceTypes]
+  );
 
   const serviceGoalMap = useMemo(
     () => new Map(
@@ -148,14 +164,16 @@ export default function SettingsPage() {
         monthly_units_quantity: null,
         yearly_duration_seconds: null,
         yearly_units_quantity: null,
+        yearly_start_month: 9,
       },
     ]);
   };
 
-  const handleSaveServiceGoal = (serviceTypeId: string, metrics: GoalMetrics) => {
+  const handleSaveServiceGoal = (serviceTypeId: string, goalDraft: ServiceGoalPayload) => {
     const existingGoal = serviceGoalMap.get(serviceTypeId);
+    const serviceType = serviceTypeMap.get(serviceTypeId);
 
-    if (!hasAnyGoalMetrics(metrics)) {
+    if (!hasAnyGoalMetrics(goalDraft)) {
       if (existingGoal) {
         deleteGoal(existingGoal.id);
         toast.success(t("settings.goalCleared"));
@@ -164,11 +182,11 @@ export default function SettingsPage() {
     }
 
     const payload = {
-      name: null,
+      ...goalDraft,
+      name: goalDraft.name.trim() || serviceType?.name || t("settings.goalDefaultName"),
       scope: "service" as const,
       service_type_id: serviceTypeId,
       service_type_ids: [],
-      ...metrics,
     };
 
     if (existingGoal) {
@@ -208,6 +226,7 @@ export default function SettingsPage() {
     const goalPatch = {
       service_type_id: null,
       ...payload,
+      name: payload.name.trim() || t("settings.goalDefaultName"),
     };
 
     if (options?.draftId) {
@@ -355,18 +374,51 @@ export default function SettingsPage() {
     updateSettings(resolvedTheme === "dark" ? { customBackgroundDark: value } : { customBackgroundLight: value });
   };
   const surfacePresets = resolvedTheme === "dark" ? SURFACE_PRESETS_DARK : SURFACE_PRESETS_LIGHT;
+  const settingsCategories: Array<{ id: SettingsCategory; label: string; icon: string }> = [
+    { id: "account", label: t("settings.profile"), icon: "person" },
+    { id: "appearance", label: t("settings.appearance"), icon: "palette" },
+    { id: "entries", label: t("settings.entriesServices"), icon: "construction" },
+    { id: "reports", label: t("settings.reportsGoals"), icon: "flag" },
+    { id: "data", label: t("settings.dataBackup"), icon: "cloud_upload" },
+    { id: "danger", label: t("settings.dangerZone"), icon: "warning" },
+  ];
 
   return (
     <>
       <header className="px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-        <h2 className="text-lg md:text-xl font-bold">Settings</h2>
+        <h2 className="text-lg md:text-xl font-bold">{t("settings.title")}</h2>
       </header>
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-24 md:pb-6 space-y-4 md:space-y-6 bg-canvas">
+        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("settings.title")}</p>
+            <h3 className="text-lg font-bold">{t("settings.organizedSettingsTitle")}</h3>
+            <p className="text-sm text-slate-500">{t("settings.organizedSettingsDesc")}</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {settingsCategories.map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setActiveCategory(category.id)}
+                className={cn(
+                  "flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
+                  activeCategory === category.id
+                    ? "border-primary bg-primary/10 text-primary shadow-sm"
+                    : "border-slate-200 text-slate-600 hover:border-primary/30 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:border-primary/30 dark:hover:bg-slate-900/40"
+                )}
+              >
+                <span className="material-symbols-outlined text-xl">{category.icon}</span>
+                <span className="text-sm font-semibold">{category.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* ── Profile ──────────────────────────────────────────────────────── */}
         {profile && (
-          <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "account" && "hidden")}>
             <h3 className="font-bold text-lg mb-4">Profile</h3>
             <div className="flex flex-col items-start gap-4 sm:flex-row">
               <div className="size-14 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg shrink-0 overflow-hidden">
@@ -434,8 +486,42 @@ export default function SettingsPage() {
           </div>
         )}
 
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-2xl border border-amber-200/70 bg-gradient-to-br from-amber-50 via-surface to-rose-50/80 p-4 md:p-6 shadow-sm dark:border-amber-900/40 dark:from-amber-950/20 dark:via-surface dark:to-rose-950/20",
+            activeCategory !== "account" && "hidden"
+          )}
+        >
+          <div className="absolute -right-6 -top-6 size-24 rounded-full bg-amber-200/50 blur-2xl dark:bg-amber-500/10" />
+          <div className="absolute -left-6 bottom-0 size-20 rounded-full bg-rose-200/50 blur-2xl dark:bg-rose-500/10" />
+
+          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-2xl space-y-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 shadow-sm dark:bg-slate-900/50 dark:text-amber-300">
+                <span className="material-symbols-outlined text-sm">favorite</span>
+                {t("settings.supportBadge")}
+              </span>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold">{t("settings.supportTitle")}</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300">{t("settings.supportDesc")}</p>
+              </div>
+            </div>
+
+            <a
+              href="https://ko-fi.com/U7U81WJ6BY"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+            >
+              <span className="material-symbols-outlined text-lg">local_cafe</span>
+              <span>{t("settings.supportButton")}</span>
+              <span className="material-symbols-outlined text-lg">open_in_new</span>
+            </a>
+          </div>
+        </div>
+
         {/* ── Appearance ───────────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "appearance" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.appearance")}</h3>
 
           {/* Theme preset */}
@@ -577,7 +663,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Language ─────────────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "appearance" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.language")}</h3>
           <div className="flex gap-2 md:gap-3">
             {(["en", "es"] as const).map((lng) => (
@@ -598,7 +684,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Entry Defaults ───────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "entries" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.entryDefaults")}</h3>
           <div className="space-y-4">
             <div>
@@ -690,7 +776,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Reports Display ──────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "reports" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.reportsDisplay")}</h3>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -713,7 +799,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Goals ───────────────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "reports" && "hidden")}>
           <div className="mb-5 space-y-2">
             <h3 className="font-bold text-lg">{t("settings.goals")}</h3>
             <p className="text-sm text-slate-500">{t("settings.goalsHint")}</p>
@@ -733,7 +819,8 @@ export default function SettingsPage() {
                     key={serviceType.id}
                     serviceType={serviceType}
                     goal={serviceGoalMap.get(serviceType.id)}
-                    onSave={(metrics) => handleSaveServiceGoal(serviceType.id, metrics)}
+                    previewDate={viewedMonth}
+                    onSave={(goalDraft) => handleSaveServiceGoal(serviceType.id, goalDraft)}
                     onClear={() => handleClearServiceGoal(serviceType.id)}
                   />
                 ))}
@@ -767,6 +854,7 @@ export default function SettingsPage() {
                       initialName={draft.name}
                       initialServiceTypeIds={draft.service_type_ids}
                       initialMetrics={draft}
+                      previewDate={viewedMonth}
                       isDraft
                       onSave={(payload) => handleSaveCombinedGoal(draft.id, payload, { draftId: draft.id })}
                       onDelete={() => handleCancelCombinedGoalDraft(draft.id)}
@@ -780,6 +868,7 @@ export default function SettingsPage() {
                       initialName={goal.name}
                       initialServiceTypeIds={goal.service_type_ids}
                       initialMetrics={goal}
+                      previewDate={viewedMonth}
                       onSave={(payload) => handleSaveCombinedGoal(goal.id, payload)}
                       onDelete={() => handleDeleteCombinedGoal(goal.id)}
                     />
@@ -791,7 +880,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Service Types ─────────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "entries" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.serviceTypes")}</h3>
 
           <p className="mb-4 text-xs text-slate-400">
@@ -829,6 +918,36 @@ export default function SettingsPage() {
               placeholder={t("settings.stName")}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
             />
+
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.serviceEntryType")}</p>
+              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => setNewEntryType("time")}
+                  className={cn(
+                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
+                    newEntryType === "time"
+                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
+                      : "text-slate-500"
+                  )}
+                >
+                  {t("settings.entryTypeTime")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewEntryType("units")}
+                  className={cn(
+                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
+                    newEntryType === "units"
+                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
+                      : "text-slate-500"
+                  )}
+                >
+                  {t("settings.entryTypeUnits")}
+                </button>
+              </div>
+            </div>
 
             {/* Color picker */}
             <div>
@@ -898,7 +1017,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Data Management ──────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "data" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.dataManagement")}</h3>
           <div className="space-y-3">
             <button
@@ -926,7 +1045,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Google Drive Sync ────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "data" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.driveSync")}</h3>
           <div className="space-y-4">
             {!isConfigured && (
@@ -1029,7 +1148,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Danger Zone ──────────────────────────────────────────────────── */}
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-red-200 dark:border-red-900/50 shadow-sm">
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-red-200 dark:border-red-900/50 shadow-sm", activeCategory !== "danger" && "hidden")}>
           <h3 className="font-bold text-lg mb-4 text-red-500">{t("settings.dangerZone")}</h3>
           {!showResetConfirm ? (
             <button
@@ -1105,12 +1224,14 @@ function buildGoalMetrics(values: {
   monthlyUnits: string;
   yearlyHours: string;
   yearlyUnits: string;
+  yearlyStartMonth: number;
 }): GoalMetrics {
   return {
     monthly_duration_seconds: parseGoalHoursInput(values.monthlyHours),
     monthly_units_quantity: parseGoalUnitsInput(values.monthlyUnits),
     yearly_duration_seconds: parseGoalHoursInput(values.yearlyHours),
     yearly_units_quantity: parseGoalUnitsInput(values.yearlyUnits),
+    yearly_start_month: values.yearlyStartMonth,
   };
 }
 
@@ -1123,26 +1244,49 @@ function hasAnyGoalMetrics(metrics: GoalMetrics) {
   );
 }
 
+function formatGoalCyclePreview(startMonth: number, previewDate: Date, language: "en" | "es") {
+  const referenceMonth = previewDate.getMonth() + 1;
+  const referenceYear = previewDate.getFullYear();
+  const cycleStartYear = referenceMonth < startMonth ? referenceYear - 1 : referenceYear;
+  const cycleStart = new Date(cycleStartYear, startMonth - 1, 1);
+  const cycleEnd = new Date(cycleStartYear + 1, startMonth - 1, 0);
+
+  return `${monthShortYear(cycleStart, language)} - ${monthShortYear(cycleEnd, language)}`;
+}
+
 function GoalMetricFields({
   monthlyHours,
   monthlyUnits,
   yearlyHours,
   yearlyUnits,
+  yearlyStartMonth,
+  cyclePreview,
   setMonthlyHours,
   setMonthlyUnits,
   setYearlyHours,
   setYearlyUnits,
+  setYearlyStartMonth,
 }: {
   monthlyHours: string;
   monthlyUnits: string;
   yearlyHours: string;
   yearlyUnits: string;
+  yearlyStartMonth: number;
+  cyclePreview: string;
   setMonthlyHours: (value: string) => void;
   setMonthlyUnits: (value: string) => void;
   setYearlyHours: (value: string) => void;
   setYearlyUnits: (value: string) => void;
+  setYearlyStartMonth: (value: number) => void;
 }) {
-  const { t } = useT();
+  const { t, language } = useT();
+  const monthOptions = useMemo(
+    () => Array.from({ length: 12 }, (_, index) => ({
+      value: index + 1,
+      label: monthShortYear(new Date(2026, index, 1), language).split(" ")[0],
+    })),
+    [language]
+  );
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -1180,6 +1324,23 @@ function GoalMetricFields({
 
       <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/30 p-3 space-y-3">
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.yearlyGoal")}</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="sm:w-44">
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalCycleStart")}</label>
+            <select
+              value={yearlyStartMonth}
+              onChange={(e) => setYearlyStartMonth(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            >
+              {monthOptions.map((monthOption) => (
+                <option key={monthOption.value} value={monthOption.value}>{monthOption.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="rounded-xl bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
+            {cyclePreview}
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalHours")}</label>
@@ -1216,36 +1377,50 @@ function GoalMetricFields({
 function ServiceGoalCard({
   serviceType,
   goal,
+  previewDate,
   onSave,
   onClear,
 }: {
   serviceType: ServiceType;
   goal: GoalDefinition | undefined;
-  onSave: (metrics: GoalMetrics) => void;
+  previewDate: Date;
+  onSave: (payload: ServiceGoalPayload) => void;
   onClear: () => void;
 }) {
-  const { t } = useT();
+  const { t, language } = useT();
+  const defaultGoalName = `${serviceType.name} ${t("settings.goalDefaultName")}`;
+  const [name, setName] = useState(goal?.name ?? defaultGoalName);
   const [monthlyHours, setMonthlyHours] = useState(formatGoalHoursInput(goal?.monthly_duration_seconds ?? null));
   const [monthlyUnits, setMonthlyUnits] = useState(goal?.monthly_units_quantity?.toString() ?? "");
   const [yearlyHours, setYearlyHours] = useState(formatGoalHoursInput(goal?.yearly_duration_seconds ?? null));
   const [yearlyUnits, setYearlyUnits] = useState(goal?.yearly_units_quantity?.toString() ?? "");
+  const [yearlyStartMonth, setYearlyStartMonth] = useState(goal?.yearly_start_month ?? 9);
 
   useEffect(() => {
+    setName(goal?.name ?? defaultGoalName);
     setMonthlyHours(formatGoalHoursInput(goal?.monthly_duration_seconds ?? null));
     setMonthlyUnits(goal?.monthly_units_quantity?.toString() ?? "");
     setYearlyHours(formatGoalHoursInput(goal?.yearly_duration_seconds ?? null));
     setYearlyUnits(goal?.yearly_units_quantity?.toString() ?? "");
-  }, [goal]);
+    setYearlyStartMonth(goal?.yearly_start_month ?? 9);
+  }, [defaultGoalName, goal]);
+
+  const cyclePreview = formatGoalCyclePreview(yearlyStartMonth, previewDate, language);
 
   const handleSave = () => {
-    onSave(buildGoalMetrics({ monthlyHours, monthlyUnits, yearlyHours, yearlyUnits }));
+    onSave({
+      name,
+      ...buildGoalMetrics({ monthlyHours, monthlyUnits, yearlyHours, yearlyUnits, yearlyStartMonth }),
+    });
   };
 
   const handleClear = () => {
+    setName(defaultGoalName);
     setMonthlyHours("");
     setMonthlyUnits("");
     setYearlyHours("");
     setYearlyUnits("");
+    setYearlyStartMonth(9);
     onClear();
   };
 
@@ -1282,15 +1457,28 @@ function ServiceGoalCard({
         </div>
       </div>
 
+      <div>
+        <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalName")}</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={defaultGoalName}
+          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+        />
+      </div>
+
       <GoalMetricFields
         monthlyHours={monthlyHours}
         monthlyUnits={monthlyUnits}
         yearlyHours={yearlyHours}
         yearlyUnits={yearlyUnits}
+        yearlyStartMonth={yearlyStartMonth}
+        cyclePreview={cyclePreview}
         setMonthlyHours={setMonthlyHours}
         setMonthlyUnits={setMonthlyUnits}
         setYearlyHours={setYearlyHours}
         setYearlyUnits={setYearlyUnits}
+        setYearlyStartMonth={setYearlyStartMonth}
       />
     </div>
   );
@@ -1301,34 +1489,40 @@ function CombinedGoalCard({
   initialName,
   initialServiceTypeIds,
   initialMetrics,
+  previewDate,
   isDraft,
   onSave,
   onDelete,
 }: {
   serviceTypes: ServiceType[];
-  initialName: string | null;
+  initialName: string;
   initialServiceTypeIds: string[];
   initialMetrics: GoalMetrics;
+  previewDate: Date;
   isDraft?: boolean;
   onSave: (payload: CombinedGoalPayload) => void;
   onDelete: () => void;
 }) {
-  const { t } = useT();
-  const [name, setName] = useState(initialName ?? "");
+  const { t, language } = useT();
+  const [name, setName] = useState(initialName);
   const [serviceTypeIds, setServiceTypeIds] = useState(initialServiceTypeIds);
   const [monthlyHours, setMonthlyHours] = useState(formatGoalHoursInput(initialMetrics.monthly_duration_seconds));
   const [monthlyUnits, setMonthlyUnits] = useState(initialMetrics.monthly_units_quantity?.toString() ?? "");
   const [yearlyHours, setYearlyHours] = useState(formatGoalHoursInput(initialMetrics.yearly_duration_seconds));
   const [yearlyUnits, setYearlyUnits] = useState(initialMetrics.yearly_units_quantity?.toString() ?? "");
+  const [yearlyStartMonth, setYearlyStartMonth] = useState(initialMetrics.yearly_start_month ?? 9);
 
   useEffect(() => {
-    setName(initialName ?? "");
+    setName(initialName);
     setServiceTypeIds(initialServiceTypeIds);
     setMonthlyHours(formatGoalHoursInput(initialMetrics.monthly_duration_seconds));
     setMonthlyUnits(initialMetrics.monthly_units_quantity?.toString() ?? "");
     setYearlyHours(formatGoalHoursInput(initialMetrics.yearly_duration_seconds));
     setYearlyUnits(initialMetrics.yearly_units_quantity?.toString() ?? "");
+    setYearlyStartMonth(initialMetrics.yearly_start_month ?? 9);
   }, [initialMetrics, initialName, initialServiceTypeIds]);
+
+  const cyclePreview = formatGoalCyclePreview(yearlyStartMonth, previewDate, language);
 
   const toggleServiceType = (serviceTypeId: string) => {
     setServiceTypeIds((currentServiceTypeIds) =>
@@ -1340,9 +1534,9 @@ function CombinedGoalCard({
 
   const handleSave = () => {
     onSave({
-      name: name.trim() || null,
+      name,
       service_type_ids: serviceTypeIds,
-      ...buildGoalMetrics({ monthlyHours, monthlyUnits, yearlyHours, yearlyUnits }),
+      ...buildGoalMetrics({ monthlyHours, monthlyUnits, yearlyHours, yearlyUnits, yearlyStartMonth }),
     });
   };
 
@@ -1405,10 +1599,13 @@ function CombinedGoalCard({
         monthlyUnits={monthlyUnits}
         yearlyHours={yearlyHours}
         yearlyUnits={yearlyUnits}
+        yearlyStartMonth={yearlyStartMonth}
+        cyclePreview={cyclePreview}
         setMonthlyHours={setMonthlyHours}
         setMonthlyUnits={setMonthlyUnits}
         setYearlyHours={setYearlyHours}
         setYearlyUnits={setYearlyUnits}
+        setYearlyStartMonth={setYearlyStartMonth}
       />
     </div>
   );
@@ -1430,6 +1627,7 @@ function SortableServiceTypeItem({
   const [editName, setEditName] = useState(serviceType.name);
   const [editColor, setEditColor] = useState(serviceType.color);
   const [editIcon, setEditIcon] = useState(serviceType.icon);
+  const [editEntryType, setEditEntryType] = useState<ServiceType["entry_type"]>(serviceType.entry_type);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: serviceType.id,
@@ -1437,7 +1635,7 @@ function SortableServiceTypeItem({
 
   const handleSave = () => {
     if (!editName.trim()) return;
-    onUpdate({ name: editName.trim(), color: editColor, icon: editIcon });
+    onUpdate({ name: editName.trim(), color: editColor, icon: editIcon, entry_type: editEntryType });
     setEditing(false);
   };
 
@@ -1445,6 +1643,7 @@ function SortableServiceTypeItem({
     setEditName(serviceType.name);
     setEditColor(serviceType.color);
     setEditIcon(serviceType.icon);
+    setEditEntryType(serviceType.entry_type);
     setEditing(false);
   };
 
@@ -1482,9 +1681,14 @@ function SortableServiceTypeItem({
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-sm truncate">{serviceType.name}</p>
-            {serviceType.description && (
-              <p className="text-xs text-slate-500 truncate">{serviceType.description}</p>
-            )}
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                {serviceType.entry_type === "time" ? t("settings.entryTypeTime") : t("settings.entryTypeUnits")}
+              </span>
+              {serviceType.description && (
+                <p className="text-xs text-slate-500 truncate">{serviceType.description}</p>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -1516,6 +1720,35 @@ function SortableServiceTypeItem({
             onChange={(e) => setEditName(e.target.value)}
             className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
           />
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.serviceEntryType")}</p>
+            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+              <button
+                type="button"
+                onClick={() => setEditEntryType("time")}
+                className={cn(
+                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
+                  editEntryType === "time"
+                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-500"
+                )}
+              >
+                {t("settings.entryTypeTime")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditEntryType("units")}
+                className={cn(
+                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
+                  editEntryType === "units"
+                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-500"
+                )}
+              >
+                {t("settings.entryTypeUnits")}
+              </button>
+            </div>
+          </div>
           <div>
             <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.color")}</p>
             <div className="flex gap-2 flex-wrap">

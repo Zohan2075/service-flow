@@ -23,13 +23,15 @@ import toast from "react-hot-toast";
 
 export default function CalendarPage() {
   const { t, language } = useT();
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
 
-  const month = currentDate.getMonth() + 1;
-  const year = currentDate.getFullYear();
+  const currentDate = useStore((s) => s.uiState.viewedMonth);
+  const setViewedMonth = useStore((s) => s.setViewedMonth);
+  const goToPreviousViewedMonth = useStore((s) => s.goToPreviousViewedMonth);
+  const goToNextViewedMonth = useStore((s) => s.goToNextViewedMonth);
+  const goToToday = useStore((s) => s.goToToday);
 
   const timeEntries = useStore((s) => s.timeEntries);
   const serviceTypes = useStore((s) => s.serviceTypes);
@@ -42,6 +44,21 @@ export default function CalendarPage() {
       ensureDefaultServiceType();
     }
   }, [ensureDefaultServiceType, serviceTypes.length]);
+
+  useEffect(() => {
+    if (isSameMonth(selectedDate, currentDate)) {
+      return;
+    }
+
+    const lastDayOfMonth = endOfMonth(currentDate).getDate();
+    setSelectedDate(
+      new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        Math.min(selectedDate.getDate(), lastDayOfMonth)
+      )
+    );
+  }, [currentDate, selectedDate]);
 
   const serviceTypeMap = useMemo(
     () => Object.fromEntries(serviceTypes.map((st) => [st.id, st])),
@@ -121,13 +138,9 @@ export default function CalendarPage() {
     firstWeekContainsDate,
   });
 
-  const prevMonth = () =>
-    setCurrentDate(new Date(year, month - 2, 1));
-  const nextMonth = () =>
-    setCurrentDate(new Date(year, month, 1));
   const goToday = () => {
     const now = new Date();
-    setCurrentDate(now);
+    goToToday();
     setSelectedDate(now);
   };
 
@@ -145,7 +158,7 @@ export default function CalendarPage() {
     setSelectedDate(day);
 
     if (!isSameMonth(day, currentDate)) {
-      setCurrentDate(startOfMonth(day));
+      setViewedMonth(startOfMonth(day));
     }
   };
 
@@ -155,7 +168,7 @@ export default function CalendarPage() {
       <header className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-10">
         <div className="flex items-center gap-2">
           <button
-            onClick={prevMonth}
+            onClick={goToPreviousViewedMonth}
             className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
             <span className="material-symbols-outlined text-base">chevron_left</span>
@@ -164,7 +177,7 @@ export default function CalendarPage() {
             {monthYear(currentDate, language)}
           </h2>
           <button
-            onClick={nextMonth}
+            onClick={goToNextViewedMonth}
             className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
             <span className="material-symbols-outlined text-base">chevron_right</span>

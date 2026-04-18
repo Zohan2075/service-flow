@@ -42,6 +42,7 @@ export interface ServiceType {
   id: string;
   name: string;
   description: string | null;
+  entry_type: "time" | "units";
   color: string;          // hex, e.g. "#2094f3"
   icon: string;           // Material Symbols name, e.g. "build"
   sort_order: number;
@@ -69,7 +70,7 @@ export type GoalScope = "service" | "combined";
 
 export interface GoalDefinition {
   id: string;
-  name: string | null;
+  name: string;
   scope: GoalScope;
   service_type_id: string | null;
   service_type_ids: string[];
@@ -77,6 +78,7 @@ export interface GoalDefinition {
   monthly_units_quantity: number | null;
   yearly_duration_seconds: number | null;
   yearly_units_quantity: number | null;
+  yearly_start_month: number;
   created_at: string;
   updated_at: string;
 }

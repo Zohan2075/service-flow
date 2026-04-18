@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { addMonths, startOfMonth } from "date-fns";
 import type {
   ServiceType,
   TimeEntry,
@@ -71,6 +72,7 @@ interface AppState {
   timeEntries: TimeEntry[];
   goals: GoalDefinition[];
   syncMetadata: SyncMetadata;
+  uiState: UiState;
 
   // auth actions
   setProfile: (p: UserProfile | null) => void;
@@ -98,6 +100,12 @@ interface AppState {
   updateGoal: (id: string, patch: Partial<GoalDefinition>) => void;
   deleteGoal: (id: string) => void;
 
+  // transient navigation state
+  setViewedMonth: (date: Date) => void;
+  goToPreviousViewedMonth: () => void;
+  goToNextViewedMonth: () => void;
+  goToToday: () => void;
+
   // bulk data actions (import / restore)
   importData: (file: BackupFile, options?: ImportDataOptions) => void;
   completeSync: (syncedAt: string) => void;
@@ -106,6 +114,10 @@ interface AppState {
 
 interface SyncMetadata {
   hasPendingChanges: boolean;
+}
+
+interface UiState {
+  viewedMonth: Date;
 }
 
 interface ImportDataOptions {
@@ -124,10 +136,15 @@ function sortServiceTypesByOrder(serviceTypes: ServiceType[]): ServiceType[] {
   return [...serviceTypes].sort((a, b) => a.sort_order - b.sort_order);
 }
 
+function normalizeEntryType(entryType: unknown): ServiceType["entry_type"] {
+  return entryType === "units" ? "units" : "time";
+}
+
 function normalizeServiceTypes(serviceTypes: ServiceType[]): ServiceType[] {
   return [...serviceTypes]
     .map((serviceType, index) => ({
       ...serviceType,
+      entry_type: normalizeEntryType(serviceType.entry_type),
       sort_order: index,
     }));
 }
@@ -143,6 +160,7 @@ function createDefaultServiceType(
     id: uuid(),
     name: language === "es" ? "Por defecto" : "Default",
     description: null,
+    entry_type: "time",
     color,
     icon: "category",
     sort_order: sortOrder,
@@ -200,12 +218,16 @@ const INITIAL_SETTINGS: AppSettings = {
   defaultEntryMode: "duration",
   defaultDurationHours: 1,
   defaultDurationMinutes: 0,
-  showYearTotals: false,
+  showYearTotals: true,
   lastSyncedAt: null,
 };
 
 const INITIAL_SYNC_METADATA: SyncMetadata = {
   hasPendingChanges: false,
+};
+
+const INITIAL_UI_STATE: UiState = {
+  viewedMonth: startOfMonth(new Date()),
 };
 
 function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
@@ -237,12 +259,35 @@ function normalizeTimeEntry(entry: TimeEntry): TimeEntry {
   };
 }
 
+function resolveEntryTitle(title: unknown, serviceTypeId: string, serviceTypes: ServiceType[]) {
+  const trimmedTitle = typeof title === "string" ? title.trim() : "";
+
+  if (trimmedTitle) {
+    return trimmedTitle;
+  }
+
+  return serviceTypes.find((serviceType) => serviceType.id === serviceTypeId)?.name ?? "Entry";
+}
+
+function normalizeViewedMonth(date: Date) {
+  return startOfMonth(date);
+}
+
 function normalizeGoalNumber(value: unknown, options?: { integer?: boolean }) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return null;
   }
 
   return options?.integer ? Math.floor(value) : Math.round(value);
+}
+
+function normalizeGoalStartMonth(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 9;
+  }
+
+  const month = Math.floor(value);
+  return month >= 1 && month <= 12 ? month : 9;
 }
 
 function hasGoalTargets(goal: Pick<GoalDefinition, "monthly_duration_seconds" | "monthly_units_quantity" | "yearly_duration_seconds" | "yearly_units_quantity">) {
@@ -256,22 +301,25 @@ function hasGoalTargets(goal: Pick<GoalDefinition, "monthly_duration_seconds" | 
 
 function normalizeGoal(
   goal: Partial<GoalDefinition>,
-  validServiceTypeIds?: Set<string>
+  serviceTypeMap?: Map<string, ServiceType>
 ): GoalDefinition | null {
   const scope: GoalScope = goal.scope === "combined" ? "combined" : "service";
   const monthly_duration_seconds = normalizeGoalNumber(goal.monthly_duration_seconds);
   const monthly_units_quantity = normalizeGoalNumber(goal.monthly_units_quantity, { integer: true });
   const yearly_duration_seconds = normalizeGoalNumber(goal.yearly_duration_seconds);
   const yearly_units_quantity = normalizeGoalNumber(goal.yearly_units_quantity, { integer: true });
+  const yearly_start_month = normalizeGoalStartMonth(goal.yearly_start_month);
+  const normalizedName = typeof goal.name === "string" ? goal.name.trim() : "";
 
   const baseGoal = {
     id: typeof goal.id === "string" && goal.id ? goal.id : uuid(),
-    name: typeof goal.name === "string" ? goal.name.trim() || null : null,
+    name: normalizedName || "Goal",
     scope,
     monthly_duration_seconds,
     monthly_units_quantity,
     yearly_duration_seconds,
     yearly_units_quantity,
+    yearly_start_month,
     created_at: typeof goal.created_at === "string" ? goal.created_at : now(),
     updated_at: typeof goal.updated_at === "string" ? goal.updated_at : now(),
   } satisfies Omit<GoalDefinition, "service_type_id" | "service_type_ids">;
@@ -282,13 +330,15 @@ function normalizeGoal(
 
   if (scope === "service") {
     const serviceTypeId = typeof goal.service_type_id === "string" ? goal.service_type_id : null;
-    if (!serviceTypeId || (validServiceTypeIds && !validServiceTypeIds.has(serviceTypeId))) {
+    const serviceType = serviceTypeId ? serviceTypeMap?.get(serviceTypeId) : undefined;
+
+    if (!serviceTypeId || (serviceTypeMap && !serviceType)) {
       return null;
     }
 
     return {
       ...baseGoal,
-      name: null,
+      name: normalizedName || serviceType?.name || baseGoal.name,
       service_type_id: serviceTypeId,
       service_type_ids: [],
     };
@@ -297,8 +347,8 @@ function normalizeGoal(
   const nextServiceTypeIds = Array.isArray(goal.service_type_ids)
     ? [...new Set(goal.service_type_ids.filter((id): id is string => typeof id === "string"))]
     : [];
-  const filteredServiceTypeIds = validServiceTypeIds
-    ? nextServiceTypeIds.filter((id) => validServiceTypeIds.has(id))
+  const filteredServiceTypeIds = serviceTypeMap
+    ? nextServiceTypeIds.filter((id) => serviceTypeMap.has(id))
     : nextServiceTypeIds;
 
   if (filteredServiceTypeIds.length === 0) {
@@ -312,9 +362,9 @@ function normalizeGoal(
   };
 }
 
-function normalizeGoals(goals: GoalDefinition[] | undefined, validServiceTypeIds?: Set<string>) {
+function normalizeGoals(goals: GoalDefinition[] | undefined, serviceTypeMap?: Map<string, ServiceType>) {
   return (goals ?? []).reduce<GoalDefinition[]>((normalizedGoals, goal) => {
-    const normalizedGoal = normalizeGoal(goal, validServiceTypeIds);
+    const normalizedGoal = normalizeGoal(goal, serviceTypeMap);
     if (normalizedGoal) {
       normalizedGoals.push(normalizedGoal);
     }
@@ -356,6 +406,7 @@ export const useStore = create<AppState>()(
       timeEntries: [],
       goals: [],
       syncMetadata: INITIAL_SYNC_METADATA,
+      uiState: INITIAL_UI_STATE,
 
       // ── Auth ────────────────────────────────────────────────────────────
       setProfile: (p) =>
@@ -373,6 +424,7 @@ export const useStore = create<AppState>()(
               timeEntries: [],
               goals: [],
               syncMetadata: INITIAL_SYNC_METADATA,
+              uiState: INITIAL_UI_STATE,
             };
           }
 
@@ -387,6 +439,7 @@ export const useStore = create<AppState>()(
           timeEntries: [],
           goals: [],
           syncMetadata: INITIAL_SYNC_METADATA,
+          uiState: INITIAL_UI_STATE,
         }),
 
       // ── Settings / Profile ──────────────────────────────────────────────
@@ -418,6 +471,7 @@ export const useStore = create<AppState>()(
               ...s.serviceTypes,
               {
                 ...st,
+                entry_type: normalizeEntryType(st.entry_type),
                 id: uuid(),
                 sort_order: s.serviceTypes.length,
                 is_active: true,
@@ -504,7 +558,7 @@ export const useStore = create<AppState>()(
           const nextServiceTypes = normalizeServiceTypes(
             s.serviceTypes.filter((st) => st.id !== id)
           );
-          const validServiceTypeIds = new Set(nextServiceTypes.map((serviceType) => serviceType.id));
+          const nextServiceTypeMap = new Map(nextServiceTypes.map((serviceType) => [serviceType.id, serviceType]));
 
           return withPendingSync({
             serviceTypes: nextServiceTypes,
@@ -516,7 +570,7 @@ export const useStore = create<AppState>()(
                     ? { ...goal, service_type_ids: goal.service_type_ids.filter((serviceTypeId) => serviceTypeId !== id) }
                     : goal
                 ),
-              validServiceTypeIds
+              nextServiceTypeMap
             ),
           });
         }),
@@ -527,6 +581,7 @@ export const useStore = create<AppState>()(
           const serviceTypes = ensureServiceTypesNotEmpty(s.serviceTypes, s.settings);
           const idExists = serviceTypes.some((st) => st.id === entry.service_type_id);
           const serviceTypeId = idExists ? entry.service_type_id : serviceTypes[0].id;
+          const title = resolveEntryTitle(entry.title, serviceTypeId, serviceTypes);
 
           return withPendingSync({
             serviceTypes,
@@ -534,6 +589,7 @@ export const useStore = create<AppState>()(
               ...s.timeEntries,
               {
                 ...entry,
+                title,
                 service_type_id: serviceTypeId,
                 id: uuid(),
                 created_at: now(),
@@ -544,13 +600,33 @@ export const useStore = create<AppState>()(
         }),
 
       updateTimeEntry: (id, patch) =>
-        set((s) =>
-          withPendingSync({
-            timeEntries: s.timeEntries.map((te) =>
-              te.id === id ? { ...te, ...patch, updated_at: now() } : te
-            ),
-          })
-        ),
+        set((s) => {
+          const serviceTypes = ensureServiceTypesNotEmpty(s.serviceTypes, s.settings);
+
+          return withPendingSync({
+            serviceTypes,
+            timeEntries: s.timeEntries.map((timeEntry) => {
+              if (timeEntry.id !== id) {
+                return timeEntry;
+              }
+
+              const requestedServiceTypeId = typeof patch.service_type_id === "string"
+                ? patch.service_type_id
+                : timeEntry.service_type_id;
+              const nextServiceTypeId = serviceTypes.some((serviceType) => serviceType.id === requestedServiceTypeId)
+                ? requestedServiceTypeId
+                : serviceTypes[0].id;
+
+              return {
+                ...timeEntry,
+                ...patch,
+                title: resolveEntryTitle(patch.title ?? timeEntry.title, nextServiceTypeId, serviceTypes),
+                service_type_id: nextServiceTypeId,
+                updated_at: now(),
+              };
+            }),
+          });
+        }),
 
       deleteTimeEntry: (id) =>
         set((s) =>
@@ -562,7 +638,7 @@ export const useStore = create<AppState>()(
       // ── Goals ───────────────────────────────────────────────────────────
       addGoal: (goal) =>
         set((s) => {
-          const validServiceTypeIds = new Set(s.serviceTypes.map((serviceType) => serviceType.id));
+          const serviceTypeMap = new Map(s.serviceTypes.map((serviceType) => [serviceType.id, serviceType]));
           const normalizedGoal = normalizeGoal(
             {
               ...goal,
@@ -570,7 +646,7 @@ export const useStore = create<AppState>()(
               created_at: now(),
               updated_at: now(),
             },
-            validServiceTypeIds
+            serviceTypeMap
           );
 
           if (!normalizedGoal) {
@@ -589,7 +665,7 @@ export const useStore = create<AppState>()(
             return { goals: s.goals };
           }
 
-          const validServiceTypeIds = new Set(s.serviceTypes.map((serviceType) => serviceType.id));
+          const serviceTypeMap = new Map(s.serviceTypes.map((serviceType) => [serviceType.id, serviceType]));
           const normalizedGoal = normalizeGoal(
             {
               ...currentGoal,
@@ -598,7 +674,7 @@ export const useStore = create<AppState>()(
               created_at: currentGoal.created_at,
               updated_at: now(),
             },
-            validServiceTypeIds
+            serviceTypeMap
           );
 
           if (!normalizedGoal) {
@@ -619,6 +695,35 @@ export const useStore = create<AppState>()(
           })
         ),
 
+      // ── Transient Month Navigation ────────────────────────────────────
+      setViewedMonth: (date) =>
+        set({
+          uiState: {
+            viewedMonth: normalizeViewedMonth(date),
+          },
+        }),
+
+      goToPreviousViewedMonth: () =>
+        set((s) => ({
+          uiState: {
+            viewedMonth: addMonths(s.uiState.viewedMonth, -1),
+          },
+        })),
+
+      goToNextViewedMonth: () =>
+        set((s) => ({
+          uiState: {
+            viewedMonth: addMonths(s.uiState.viewedMonth, 1),
+          },
+        })),
+
+      goToToday: () =>
+        set({
+          uiState: {
+            viewedMonth: startOfMonth(new Date()),
+          },
+        }),
+
       // ── Bulk ───────────────────────────────────────────────────────────
       importData: (file, options) =>
         set((s) => {
@@ -627,14 +732,14 @@ export const useStore = create<AppState>()(
             sortServiceTypesByOrder(file.service_types),
             settings
           );
-          const validServiceTypeIds = new Set(serviceTypes.map((serviceType) => serviceType.id));
+          const serviceTypeMap = new Map(serviceTypes.map((serviceType) => [serviceType.id, serviceType]));
 
           return {
             settings,
             profile: mergeImportedProfile(s.profile, file.profile),
             serviceTypes,
             timeEntries: (file.time_entries ?? []).map(normalizeTimeEntry),
-            goals: normalizeGoals(file.goals, validServiceTypeIds),
+            goals: normalizeGoals(file.goals, serviceTypeMap),
             syncMetadata:
               options?.source === "remote"
                 ? INITIAL_SYNC_METADATA
@@ -659,6 +764,7 @@ export const useStore = create<AppState>()(
             serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
             timeEntries: [],
             goals: [],
+            uiState: INITIAL_UI_STATE,
           })
         ),
     }),
@@ -682,15 +788,16 @@ export const useStore = create<AppState>()(
           sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes),
           settings
         );
-        const validServiceTypeIds = new Set(serviceTypes.map((serviceType) => serviceType.id));
+        const serviceTypeMap = new Map(serviceTypes.map((serviceType) => [serviceType.id, serviceType]));
         return {
           ...current,
           ...p,
           settings,
           serviceTypes,
           timeEntries: (p.timeEntries ?? current.timeEntries).map(normalizeTimeEntry),
-          goals: normalizeGoals(p.goals ?? current.goals, validServiceTypeIds),
+          goals: normalizeGoals(p.goals ?? current.goals, serviceTypeMap),
           syncMetadata: p.syncMetadata ?? current.syncMetadata,
+          uiState: current.uiState,
         };
       },
     }

@@ -38,10 +38,8 @@ export default function AddEntryModal({
   const { t } = useT();
 
   const isEditing = !!entry;
-
-  // Determine initial entry type and time mode for editing
-  const initialEntryType: EntryType = entry
-    ? (entry.units_quantity != null && entry.units_quantity > 0) ? "units" : "time"
+  const storedEntryType: EntryType = entry && entry.units_quantity != null && entry.units_quantity > 0
+    ? "units"
     : "time";
 
   const initialTimeMode: TimeMode = entry
@@ -50,7 +48,6 @@ export default function AddEntryModal({
 
   const [title, setTitle] = useState(entry?.title ?? "");
   const [serviceTypeId, setServiceTypeId] = useState(entry?.service_type_id ?? serviceTypes[0]?.id ?? "");
-  const [entryType, setEntryType] = useState<EntryType>(initialEntryType);
   const [mode, setMode] = useState<TimeMode>(initialTimeMode);
 
   // Range mode fields
@@ -97,9 +94,34 @@ export default function AddEntryModal({
     }
   }, [serviceTypeId, serviceTypes]);
 
+  const compatibleServiceTypes = serviceTypes.filter(
+    (serviceType) => !isEditing || serviceType.entry_type === storedEntryType || serviceType.id === entry?.service_type_id
+  );
+
+  useEffect(() => {
+    if (compatibleServiceTypes.length === 0) return;
+
+    const valid = compatibleServiceTypes.some((serviceType) => serviceType.id === serviceTypeId);
+    if (!valid) {
+      setServiceTypeId(compatibleServiceTypes[0].id);
+    }
+  }, [compatibleServiceTypes, serviceTypeId]);
+
+  const selectedServiceType = compatibleServiceTypes.find((serviceType) => serviceType.id === serviceTypeId)
+    ?? serviceTypes.find((serviceType) => serviceType.id === serviceTypeId)
+    ?? serviceTypes[0];
+  const effectiveEntryType: EntryType = isEditing
+    ? storedEntryType
+    : selectedServiceType?.entry_type ?? "time";
+  const showsMismatchNotice = Boolean(
+    isEditing &&
+    selectedServiceType &&
+    selectedServiceType.id === entry?.service_type_id &&
+    selectedServiceType.entry_type !== storedEntryType
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
 
     // Read the LIVE store state so we never use a stale ID
     const liveTypes = useStore.getState().serviceTypes;
@@ -108,10 +130,15 @@ export default function AddEntryModal({
     if (!resolvedServiceTypeId || !idStillExists) {
       resolvedServiceTypeId = ensureDefaultServiceType();
     }
+    const resolvedTitle =
+      title.trim() ||
+      liveTypes.find((serviceType) => serviceType.id === resolvedServiceTypeId)?.name ||
+      selectedServiceType?.name ||
+      "Entry";
     setSaving(true);
 
     try {
-      if (entryType === "units") {
+      if (effectiveEntryType === "units") {
         // Units mode
         if (unitsQuantity <= 0) {
           toast.error(t("entry.zeroQuantity"));
@@ -120,7 +147,7 @@ export default function AddEntryModal({
         }
 
         const data = {
-          title: title.trim(),
+          title: resolvedTitle,
           service_type_id: resolvedServiceTypeId,
           start_time: new Date(
             selectedDate.getFullYear(),
@@ -148,7 +175,7 @@ export default function AddEntryModal({
         const endISO = new Date(`${dateStr}T${endTimeStr}:00`).toISOString();
 
         const data = {
-          title: title.trim(),
+          title: resolvedTitle,
           service_type_id: resolvedServiceTypeId,
           start_time: startISO,
           end_time: endISO,
@@ -174,7 +201,7 @@ export default function AddEntryModal({
         }
 
         const data = {
-          title: title.trim(),
+          title: resolvedTitle,
           service_type_id: resolvedServiceTypeId,
           start_time: new Date(
             selectedDate.getFullYear(),
@@ -229,21 +256,21 @@ export default function AddEntryModal({
         <form onSubmit={handleSubmit} className="p-4 md:p-6 pb-8 md:pb-6 space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-sm font-semibold mb-1">{t("entry.title")} *</label>
+            <label className="block text-sm font-semibold mb-1">{t("entry.title")}</label>
             <input
-              required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t("entry.titlePlaceholder")}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
             />
+            <p className="mt-1 text-xs text-slate-400">{t("entry.titleOptionalHint")}</p>
           </div>
 
           {/* Service Type */}
           <div>
             <label className="block text-sm font-semibold mb-1">{t("entry.serviceType")} *</label>
             <div className="flex flex-wrap gap-2">
-              {serviceTypes.map((st) => (
+              {compatibleServiceTypes.map((st) => (
                 <button
                   key={st.id}
                   type="button"
@@ -267,39 +294,33 @@ export default function AddEntryModal({
             </div>
           </div>
 
-          {/* Entry Type Toggle */}
-          <div>
-            <label className="block text-sm font-semibold mb-1">{t("entry.entryType")}</label>
-            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-              <button
-                type="button"
-                onClick={() => setEntryType("time")}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">{t("entry.entryType")}</p>
+                <p className="text-xs text-slate-400">{effectiveEntryType === "time" ? t("entry.timeMode") : t("entry.unitsMode")}</p>
+              </div>
+              <span
                 className={cn(
-                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                  entryType === "time"
-                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500"
+                  "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
+                  effectiveEntryType === "time"
+                    ? "bg-primary/10 text-primary"
+                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
                 )}
               >
-                {t("entry.timeMode")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEntryType("units")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                  entryType === "units"
-                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500"
-                )}
-              >
-                {t("entry.unitsMode")}
-              </button>
+                {effectiveEntryType === "time" ? t("entry.timeMode") : t("entry.unitsMode")}
+              </span>
             </div>
           </div>
 
+          {showsMismatchNotice && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+              {t("entry.serviceTypeMismatch")}
+            </div>
+          )}
+
           {/* Time sub-mode toggle (only in time mode) */}
-          {entryType === "time" && (
+          {effectiveEntryType === "time" && (
           <div>
             <label className="block text-sm font-semibold mb-1">{t("entry.timeSubMode")}</label>
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
@@ -332,7 +353,7 @@ export default function AddEntryModal({
           )}
 
           {/* Manual Duration (default) */}
-          {entryType === "time" && mode === "duration" && (
+          {effectiveEntryType === "time" && mode === "duration" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold mb-1">{t("entry.hours")}</label>
@@ -364,7 +385,7 @@ export default function AddEntryModal({
           )}
 
           {/* Time Range (time-only inputs) */}
-          {entryType === "time" && mode === "range" && (
+          {effectiveEntryType === "time" && mode === "range" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold mb-1">{t("entry.startTime")}</label>
@@ -388,7 +409,7 @@ export default function AddEntryModal({
           )}
 
           {/* Units Mode fields */}
-          {entryType === "units" && (
+          {effectiveEntryType === "units" && (
             <div>
               <label className="block text-sm font-semibold mb-1">{t("entry.quantity")}</label>
               <input
