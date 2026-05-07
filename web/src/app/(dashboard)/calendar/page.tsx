@@ -36,6 +36,7 @@ export default function CalendarPage() {
   const timeEntries = useStore((s) => s.timeEntries);
   const serviceTypes = useStore((s) => s.serviceTypes);
   const ensureDefaultServiceType = useStore((s) => s.ensureDefaultServiceType);
+  const planModeEnabled = useStore((s) => s.settings.planModeEnabled);
   const weekStartsOnSetting = useStore((s) => s.settings.weekStartsOn);
   const deleteTimeEntry = useStore((s) => s.deleteTimeEntry);
 
@@ -65,7 +66,7 @@ export default function CalendarPage() {
     [serviceTypes]
   );
 
-  const calendarMap: Record<string, CalendarDay> = useMemo(
+  const rawCalendarMap: Record<string, CalendarDay> = useMemo(
     () =>
       Object.fromEntries(
         Object.entries(
@@ -118,6 +119,25 @@ export default function CalendarPage() {
       ),
     [timeEntries]
   );
+
+  const calendarMap: Record<string, CalendarDay> = useMemo(() => {
+    if (planModeEnabled) {
+      return rawCalendarMap;
+    }
+
+    return Object.fromEntries(
+      Object.entries(rawCalendarMap).map(([date, day]) => [
+        date,
+        {
+          ...day,
+          entries: day.entries.filter((entry) => !isPlannedEntry(entry)),
+          planned_duration_seconds: 0,
+          planned_duration_display: "0m",
+          planned_units: 0,
+        } satisfies CalendarDay,
+      ])
+    );
+  }, [planModeEnabled, rawCalendarMap]);
 
   const weekStartsOn = weekStartsOnSetting === "monday" ? 1 : 0;
   const firstWeekContainsDate = weekStartsOn === 1 ? 4 : 1;
@@ -203,31 +223,36 @@ export default function CalendarPage() {
   return (
     <>
       {/* Top Header */}
-      <header className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-10">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={goToPreviousViewedMonth}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <span className="material-symbols-outlined text-base">chevron_left</span>
-          </button>
-          <h2 className="text-lg md:text-xl font-bold min-w-[10rem] text-center">
-            {monthYear(currentDate, language)}
-          </h2>
-          <button
-            onClick={goToNextViewedMonth}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <span className="material-symbols-outlined text-base">chevron_right</span>
-          </button>
-          <button
-            onClick={goToday}
-            className="ml-2 px-3 py-1.5 text-xs font-bold bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-          >
-            {t("calendar.today")}
-          </button>
-          <div className="ml-1 flex flex-wrap items-center gap-2">
-            <div className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+      <header className="border-b border-slate-200 bg-surface/80 px-4 py-3 backdrop-blur-md dark:border-slate-800 md:px-6 md:py-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
+              <button
+                onClick={goToPreviousViewedMonth}
+                className="rounded-lg p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <span className="material-symbols-outlined text-base">chevron_left</span>
+              </button>
+              <h2 className="min-w-0 flex-1 text-center text-base font-bold sm:min-w-[10rem] md:text-xl">
+                <span className="block truncate">{monthYear(currentDate, language)}</span>
+              </h2>
+              <button
+                onClick={goToNextViewedMonth}
+                className="rounded-lg p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <span className="material-symbols-outlined text-base">chevron_right</span>
+              </button>
+            </div>
+            <button
+              onClick={goToday}
+              className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+            >
+              {t("calendar.today")}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
               <span className="text-slate-500 dark:text-slate-400">{t("calendar.monthTotal")}</span>
               <span className="ml-2 font-bold text-primary">{durationDisplay(monthlyTotals.totalDurationSeconds)}</span>
               {monthlyTotals.totalUnits > 0 && (
@@ -235,7 +260,7 @@ export default function CalendarPage() {
               )}
             </div>
             {(monthlyTotals.plannedDurationSeconds > 0 || monthlyTotals.plannedUnits > 0) && (
-              <div className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                 <span>{t("calendar.monthPlanned")}</span>
                 {monthlyTotals.plannedDurationSeconds > 0 && (
                   <span className="ml-2 font-bold">{durationDisplay(monthlyTotals.plannedDurationSeconds)}</span>
@@ -254,14 +279,14 @@ export default function CalendarPage() {
         {/* Calendar Grid */}
         <div className="bg-surface rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
           {/* Weekday Header */}
-          <div className="grid grid-cols-[2.25rem_repeat(7,minmax(0,1fr))] border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-center border-r border-slate-100 dark:border-slate-800 py-2 md:py-3 text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800 md:grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]">
+            <div className="hidden items-center justify-center border-r border-slate-100 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 md:flex md:py-3 md:text-xs">
               {t("calendar.wk")}
             </div>
             {weekdayLabels.map((d) => (
               <div
                 key={d}
-                className="py-2 md:py-3 text-center text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider border-r last:border-r-0 border-slate-100 dark:border-slate-800"
+                className="border-r border-slate-100 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 last:border-r-0 dark:border-slate-800 md:py-3 md:text-xs"
               >
                 {d}
               </div>
@@ -273,9 +298,9 @@ export default function CalendarPage() {
             {calendarWeeks.map(({ weekNumber, days }) => (
               <div
                 key={weekNumber + days[0].toISOString()}
-                className="grid grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]"
+                className="grid grid-cols-7 md:grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]"
               >
-                <div className="flex items-center justify-center border-r border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 text-[10px] md:text-xs font-bold text-slate-400">
+                <div className="hidden items-center justify-center border-r border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-400 dark:border-slate-800 dark:bg-slate-800/50 md:flex md:text-xs">
                   {weekNumber}
                 </div>
                 {days.map((day) => {
@@ -293,7 +318,7 @@ export default function CalendarPage() {
                       key={key}
                       onClick={() => handleSelectDay(day)}
                       className={cn(
-                        "p-1.5 md:p-2 border-r border-b border-slate-100 dark:border-slate-800 min-h-14 md:min-h-24 cursor-pointer transition-colors",
+                        "min-h-[4.5rem] cursor-pointer border-r border-b border-slate-100 p-1.5 transition-colors dark:border-slate-800 sm:min-h-[5.25rem] md:min-h-24 md:p-2",
                         isSelected
                           ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
                           : isCurrentMonthDay
@@ -384,12 +409,12 @@ export default function CalendarPage() {
 
         {/* Daily Entries */}
         <div className="mt-6 md:mt-8">
-          <div className="flex items-center justify-between gap-3 mb-3 md:mb-4">
-            <h3 className="text-base md:text-lg font-bold">
+          <div className="mb-3 flex flex-col gap-3 md:mb-4 sm:flex-row sm:items-start sm:justify-between">
+            <h3 className="text-base font-bold md:text-lg">
               {t("calendar.dailyEntries")} — {shortDate(selectedDate, language)}
             </h3>
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="text-right">
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
+              <div className="rounded-2xl bg-slate-100/80 px-3 py-2 text-left dark:bg-slate-900/40 sm:bg-transparent sm:px-0 sm:py-0 sm:text-right">
                 <p className="text-sm text-slate-500 font-medium">
                   {t("calendar.total")}: {selectedDayData?.total_duration_display ?? "0m"}
                   {(selectedDayData?.total_units ?? 0) > 0 && (
@@ -485,13 +510,13 @@ function EntryCard({
   const isPlanned = isPlannedEntry(entry);
 
   return (
-    <div className={cn(
+      <div className={cn(
       "bg-surface p-4 rounded-2xl border shadow-sm",
       isPlanned
         ? "border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/10"
         : "border-slate-200 dark:border-slate-800"
     )}>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <div
             className="size-10 md:size-12 rounded-xl flex items-center justify-center shrink-0"
@@ -515,7 +540,7 @@ function EntryCard({
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 ml-2">
+        <div className="ml-0 flex w-full flex-wrap items-center gap-2 sm:ml-2 sm:w-auto sm:justify-end shrink-0">
           <div className="text-right min-w-[4.5rem]">
             <p className="font-bold text-sm md:text-base" style={{ color: isPlanned ? "#d97706" : serviceType?.color ?? "#2094f3" }}>
               {isUnitsEntry(entry)
@@ -532,25 +557,25 @@ function EntryCard({
           </div>
           <button
             onClick={onEdit}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary/40 dark:hover:bg-primary/15"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary/40 dark:hover:bg-primary/15 sm:flex-initial"
             title={t("entry.edit")}
           >
             <span className="material-symbols-outlined text-xl">edit</span>
-            <span className="hidden md:inline">{t("entry.editShort")}</span>
+            <span>{t("entry.editShort")}</span>
           </button>
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:text-slate-300 dark:hover:border-red-900/60 dark:hover:bg-red-900/20"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:text-slate-300 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 sm:flex-initial"
               title={t("entry.delete")}
             >
               <span className="material-symbols-outlined text-xl">delete</span>
-              <span className="hidden md:inline">{t("entry.delete")}</span>
+              <span>{t("entry.delete")}</span>
             </button>
           ) : (
             <button
               onClick={onDelete}
-              className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-red-600"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-red-600 sm:flex-initial"
             >
               <span className="material-symbols-outlined text-lg">warning</span>
               <span>{t("entry.confirmDelete")}</span>

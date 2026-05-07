@@ -528,12 +528,12 @@ export default function SettingsPage() {
         {profile && (
           <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "account" && "hidden")}>
             <h3 className="font-bold text-lg mb-4">Profile</h3>
-            <div className="flex flex-col items-start gap-4 sm:flex-row">
-              <div className="space-y-3">
-                <div className="size-20 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
+            <div className="flex flex-col gap-5 md:flex-row">
+              <div className="flex w-full flex-col items-center gap-3 md:w-auto md:items-start">
+                <div className="flex size-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-primary/20 text-lg font-bold text-primary shrink-0 dark:border-slate-700 md:size-24">
                   {previewProfileAvatar ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewProfileAvatar} alt="" className="size-20 rounded-full object-cover" />
+                    <img src={previewProfileAvatar} alt="" className="size-full rounded-full object-cover" />
                   ) : (
                     profile.name?.slice(0, 2).toUpperCase()
                   )}
@@ -548,12 +548,12 @@ export default function SettingsPage() {
                       className="sr-only"
                       onChange={handleProfileImageSelected}
                     />
-                    <div className="flex flex-col gap-2 sm:flex-row">
+                    <div className="flex w-full flex-col gap-2 sm:flex-row">
                       <button
                         type="button"
                         onClick={() => profileImageInputRef.current?.click()}
                         disabled={processingProfileImage}
-                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 sm:w-auto"
                       >
                         {processingProfileImage
                           ? t("settings.profilePhotoProcessing")
@@ -565,17 +565,17 @@ export default function SettingsPage() {
                         type="button"
                         onClick={handleResetProfileImage}
                         disabled={!profileCustomImage}
-                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 sm:w-auto"
                       >
                         {t("settings.resetPhoto")}
                       </button>
                     </div>
-                    <p className="max-w-xs text-xs text-slate-400">{t("settings.profilePhotoHint")}</p>
+                    <p className="max-w-xs text-center text-xs text-slate-400 md:text-left">{t("settings.profilePhotoHint")}</p>
                   </div>
                 )}
               </div>
               {!editingProfile ? (
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1 text-center md:text-left">
                   <p className="font-bold text-base break-words">{profile.displayName || profile.name}</p>
                   <p className="text-sm text-slate-500 break-all">{profile.email}</p>
                   {profile.bio && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 break-words">{profile.bio}</p>}
@@ -584,13 +584,13 @@ export default function SettingsPage() {
                   </p>
                   <button
                     onClick={handleStartProfileEdit}
-                    className="mt-3 inline-flex min-h-10 items-center justify-center rounded-xl px-3 text-sm text-primary font-semibold"
+                    className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-xl px-3 text-sm font-semibold text-primary md:w-auto"
                   >
                     {t("settings.editProfile")}
                   </button>
                 </div>
               ) : (
-                <div className="flex-1 space-y-3">
+                <div className="w-full flex-1 space-y-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.displayName")}</label>
                     <input
@@ -636,10 +636,10 @@ export default function SettingsPage() {
             activeCategory !== "account" && "hidden"
           )}
         >
-          <div className="absolute -right-6 -top-6 size-24 rounded-full bg-amber-200/50 blur-2xl dark:bg-amber-500/10" />
-          <div className="absolute -left-6 bottom-0 size-20 rounded-full bg-rose-200/50 blur-2xl dark:bg-rose-500/10" />
+          <div className="absolute -right-4 -top-4 size-20 rounded-full bg-amber-200/50 blur-2xl dark:bg-amber-500/10 md:-right-6 md:-top-6 md:size-24" />
+          <div className="absolute -left-4 bottom-0 size-16 rounded-full bg-rose-200/50 blur-2xl dark:bg-rose-500/10 md:-left-6 md:size-20" />
 
-          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl space-y-2">
               <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 shadow-sm dark:bg-slate-900/50 dark:text-amber-300">
                 <span className="material-symbols-outlined text-sm">favorite</span>
@@ -655,7 +655,7 @@ export default function SettingsPage() {
               href="https://ko-fi.com/U7U81WJ6BY"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90 sm:w-auto"
             >
               <span className="material-symbols-outlined text-lg">local_cafe</span>
               <span>{t("settings.supportButton")}</span>
@@ -671,7 +671,7 @@ export default function SettingsPage() {
           {/* Theme preset */}
           <div className="mb-5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.theme")}</p>
-            <div className="flex gap-2 md:gap-3">
+            <div className="grid grid-cols-1 gap-2 md:gap-3 sm:grid-cols-3">
               {(["light", "dark", "system"] as const).map((th) => (
                 <button
                   key={th}
@@ -810,7 +810,7 @@ export default function SettingsPage() {
         <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "language" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.language")}</h3>
           <p className="mb-4 text-sm text-slate-500">{t("settings.languageDesc")}</p>
-          <div className="flex gap-2 md:gap-3">
+          <div className="grid grid-cols-1 gap-2 md:gap-3 sm:grid-cols-2">
             {(["en", "es"] as const).map((lng) => (
               <button
                 key={lng}
@@ -854,7 +854,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.defaultMode")}</p>
-              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+              <div className="grid grid-cols-1 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 sm:grid-cols-2">
                 <button
                   onClick={() => updateSettings({ defaultEntryMode: "duration" })}
                   className={cn(
@@ -879,7 +879,7 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.defaultHours")}</label>
                 <input
@@ -909,7 +909,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.weekLayout")}</p>
-              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+              <div className="grid grid-cols-1 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 sm:grid-cols-2">
                 <button
                   onClick={() => updateSettings({ weekStartsOn: "sunday" })}
                   className={cn(
@@ -1457,7 +1457,7 @@ function GoalMetricFields({
     <div className="grid gap-4 md:grid-cols-2">
       <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/30 p-3 space-y-3">
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyGoal")}</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalHours")}</label>
             <input
@@ -1506,7 +1506,7 @@ function GoalMetricFields({
             {cyclePreview}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalHours")}</label>
             <input

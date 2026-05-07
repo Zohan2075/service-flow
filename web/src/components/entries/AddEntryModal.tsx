@@ -120,7 +120,7 @@ export default function AddEntryModal({
     selectedServiceType.id === entry?.service_type_id &&
     selectedServiceType.entry_type !== storedEntryType
   );
-  const showPlanToggle = settings.planModeEnabled || Boolean(entry?.is_planned);
+  const showPlanToggle = settings.planModeEnabled;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -300,7 +300,7 @@ export default function AddEntryModal({
           </div>
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3 sm:items-center">
               <div>
                 <p className="text-sm font-semibold">{t("entry.entryType")}</p>
                 <p className="text-xs text-slate-400">{effectiveEntryType === "time" ? t("entry.timeMode") : t("entry.unitsMode")}</p>
@@ -326,7 +326,7 @@ export default function AddEntryModal({
 
           {showPlanToggle && (
             <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/30">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start justify-between gap-3 sm:items-center">
                 <div>
                   <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">{t("entry.planMode")}</p>
                   <p className="text-xs text-amber-700/80 dark:text-amber-200/70">{t("entry.planModeDesc")}</p>
@@ -354,7 +354,7 @@ export default function AddEntryModal({
           {effectiveEntryType === "time" && (
           <div>
             <label className="block text-sm font-semibold mb-1">{t("entry.timeSubMode")}</label>
-            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+            <div className="grid grid-cols-1 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => setMode("duration")}
@@ -385,7 +385,7 @@ export default function AddEntryModal({
 
           {/* Manual Duration (default) */}
           {effectiveEntryType === "time" && mode === "duration" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-semibold mb-1">{t("entry.hours")}</label>
                 <input
@@ -417,7 +417,7 @@ export default function AddEntryModal({
 
           {/* Time Range (time-only inputs) */}
           {effectiveEntryType === "time" && mode === "range" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-semibold mb-1">{t("entry.startTime")}</label>
                 <input
