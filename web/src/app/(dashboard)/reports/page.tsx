@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { endOfMonth, startOfMonth } from "date-fns";
 import { useStore } from "@/lib/store";
-import { calendarDateKey, computeDurationSeconds, isUnitsEntry } from "@/types/data";
+import { calendarDateKey, computeDurationSeconds, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import type { GoalDefinition, ServiceType, TimeEntry } from "@/types/data";
 import { formatDuration } from "@/lib/utils";
 import { monthShortYear, useT } from "@/lib/i18n";
@@ -104,6 +104,10 @@ function filterEntriesByRange(entries: TimeEntry[], range: AnnualCycleRange) {
     const entryTime = new Date(entry.start_time).getTime();
     return entryTime >= startTime && entryTime <= endTime;
   });
+}
+
+function filterActualEntries(entries: TimeEntry[]) {
+  return entries.filter((entry) => !isPlannedEntry(entry));
 }
 
 function getAnnualCycleRange(referenceDate: Date, startMonth: number): AnnualCycleRange {
@@ -280,10 +284,14 @@ export default function ReportsPage() {
   const goals = useStore((s) => s.goals);
   const accentColor = useStore((s) => s.settings.accentColor);
   const showYearTotals = useStore((s) => s.settings.showYearTotals);
+  const actualTimeEntries = useMemo(
+    () => filterActualEntries(timeEntries),
+    [timeEntries]
+  );
 
   const monthlyEntries = useMemo(
-    () => filterEntriesByMonth(timeEntries, currentDate),
-    [currentDate, timeEntries]
+    () => filterEntriesByMonth(actualTimeEntries, currentDate),
+    [actualTimeEntries, currentDate]
   );
 
   const serviceGoalMap = useMemo(
@@ -366,8 +374,8 @@ export default function ReportsPage() {
     [annualBaselineRange, language]
   );
   const annualBaselineEntries = useMemo(
-    () => filterEntriesByRange(timeEntries, annualBaselineRange),
-    [annualBaselineRange, timeEntries]
+    () => filterEntriesByRange(actualTimeEntries, annualBaselineRange),
+    [actualTimeEntries, annualBaselineRange]
   );
   const annualBaselineTotals = useMemo(
     () => sumAllServiceTotals(
@@ -389,7 +397,7 @@ export default function ReportsPage() {
           const cycleRange = getAnnualCycleRange(currentDate, goal?.yearly_start_month ?? 9);
           const totals = aggregateServiceEntries(
             filterEntriesByRange(
-              timeEntries.filter((entry) => entry.service_type_id === serviceType.id),
+              actualTimeEntries.filter((entry) => entry.service_type_id === serviceType.id),
               cycleRange
             ),
             serviceType
@@ -403,7 +411,7 @@ export default function ReportsPage() {
         .filter(({ totals, hasGoal }) => totals.seconds > 0 || totals.units > 0 || totals.count > 0 || totals.unitsCount > 0 || hasGoal)
         .map(({ totals }) => totals)
     ),
-    [currentDate, serviceGoalMap, serviceTypes, timeEntries]
+    [actualTimeEntries, currentDate, serviceGoalMap, serviceTypes]
   );
 
   const yearlyCombinedGoalCards = useMemo(
@@ -411,7 +419,7 @@ export default function ReportsPage() {
       .filter((goal) => hasPeriodGoal(goal, "year"))
       .map((goal) => {
         const cycleRange = getAnnualCycleRange(currentDate, goal.yearly_start_month);
-        const totals = sumGoalEntries(filterEntriesByRange(timeEntries, cycleRange), serviceTypes, goal.service_type_ids);
+        const totals = sumGoalEntries(filterEntriesByRange(actualTimeEntries, cycleRange), serviceTypes, goal.service_type_ids);
         if (totals.serviceTags.length === 0) {
           return null;
         }
@@ -431,7 +439,7 @@ export default function ReportsPage() {
         } satisfies CombinedGoalCardData;
       })
       .filter(isDefined),
-    [accentColor, combinedGoals, currentDate, language, serviceTypes, timeEntries]
+    [accentColor, actualTimeEntries, combinedGoals, currentDate, language, serviceTypes]
   );
 
   const monthlyTimeServices = monthlyServiceTotals.filter((serviceTotal) => serviceTotal.entryType === "time");
@@ -647,7 +655,6 @@ export default function ReportsPage() {
 function SummaryCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/20 p-4 shadow-sm">
-      <div className="absolute -right-5 -top-5 size-20 rounded-full bg-primary/10" />
       <div className="relative flex items-center gap-2 text-slate-400 mb-3">
         <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <span className="material-symbols-outlined text-base">{icon}</span>

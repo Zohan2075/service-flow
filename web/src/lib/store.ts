@@ -218,6 +218,7 @@ const INITIAL_SETTINGS: AppSettings = {
   defaultEntryMode: "duration",
   defaultDurationHours: 1,
   defaultDurationMinutes: 0,
+  planModeEnabled: false,
   showYearTotals: true,
   lastSyncedAt: null,
 };
@@ -256,7 +257,57 @@ function normalizeTimeEntry(entry: TimeEntry): TimeEntry {
     ...entry,
     units_quantity: entry.units_quantity ?? null,
     units_label: entry.units_label ?? null,
+    is_planned: entry.is_planned ?? false,
   };
+}
+
+function normalizeProfileImage(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue ? trimmedValue : null;
+}
+
+function normalizePersistedProfile(profile: UserProfile | null | undefined): UserProfile | null {
+  if (!profile) {
+    return null;
+  }
+
+  return {
+    ...profile,
+    image: normalizeProfileImage(profile.image),
+    displayName: profile.displayName ?? null,
+    bio: profile.bio ?? null,
+    customImage: normalizeProfileImage(profile.customImage),
+  };
+}
+
+function mergeLiveProfile(currentProfile: UserProfile | null, incomingProfile: UserProfile): UserProfile {
+  const nextProfile: UserProfile = {
+    google_id: incomingProfile.google_id,
+    name: incomingProfile.name,
+    email: incomingProfile.email,
+    image: normalizeProfileImage(incomingProfile.image),
+    displayName: currentProfile?.displayName ?? null,
+    bio: currentProfile?.bio ?? null,
+    customImage: currentProfile?.customImage ?? null,
+  };
+
+  if (Object.prototype.hasOwnProperty.call(incomingProfile, "displayName")) {
+    nextProfile.displayName = incomingProfile.displayName ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(incomingProfile, "bio")) {
+    nextProfile.bio = incomingProfile.bio ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(incomingProfile, "customImage")) {
+    nextProfile.customImage = normalizeProfileImage(incomingProfile.customImage);
+  }
+
+  return nextProfile;
 }
 
 function resolveEntryTitle(title: unknown, serviceTypeId: string, serviceTypes: ServiceType[]) {
@@ -394,6 +445,10 @@ function mergeImportedProfile(
     nextProfile.bio = importedProfile.bio ?? null;
   }
 
+  if (Object.prototype.hasOwnProperty.call(importedProfile, "customImage")) {
+    nextProfile.customImage = normalizeProfileImage(importedProfile.customImage);
+  }
+
   return nextProfile;
 }
 
@@ -416,9 +471,13 @@ export const useStore = create<AppState>()(
             s.profile?.google_id &&
             p.google_id !== s.profile.google_id;
 
+          const nextProfile = p
+            ? mergeLiveProfile(isAccountSwitch ? null : s.profile, p)
+            : null;
+
           if (isAccountSwitch) {
             return {
-              profile: p,
+              profile: nextProfile,
               settings: INITIAL_SETTINGS,
               serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
               timeEntries: [],
@@ -428,7 +487,7 @@ export const useStore = create<AppState>()(
             };
           }
 
-          return { profile: p };
+          return { profile: nextProfile };
         }),
 
       signOut: () =>
@@ -457,11 +516,22 @@ export const useStore = create<AppState>()(
           return { settings: nextSettings };
         }),
       updateProfile: (patch) =>
-        set((s) => ({
-          ...(s.profile
-            ? withPendingSync({ profile: { ...s.profile, ...patch } })
-            : { profile: null }),
-        })),
+        set((s) => {
+          if (!s.profile) {
+            return { profile: null };
+          }
+
+          const nextProfile: UserProfile = {
+            ...s.profile,
+            ...patch,
+          };
+
+          if (Object.prototype.hasOwnProperty.call(patch, "customImage")) {
+            nextProfile.customImage = normalizeProfileImage(patch.customImage);
+          }
+
+          return withPendingSync({ profile: nextProfile });
+        }),
 
       // ── Service Types ───────────────────────────────────────────────────
       addServiceType: (st) =>
@@ -792,6 +862,7 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          profile: normalizePersistedProfile(p.profile ?? current.profile),
           settings,
           serviceTypes,
           timeEntries: (p.timeEntries ?? current.timeEntries).map(normalizeTimeEntry),

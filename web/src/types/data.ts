@@ -9,6 +9,7 @@ export interface UserProfile {
   // Personalization (editable, synced via Drive)
   displayName?: string | null;
   bio?: string | null;
+  customImage?: string | null;
 }
 
 export type WeekStart = "sunday" | "monday";
@@ -32,6 +33,7 @@ export interface AppSettings {
   defaultEntryMode: "range" | "duration";
   defaultDurationHours: number;
   defaultDurationMinutes: number;
+  planModeEnabled: boolean;
   // Reports
   showYearTotals: boolean;
   // Sync metadata (kept for manual backup)
@@ -62,6 +64,7 @@ export interface TimeEntry {
   units_quantity: number | null;
   units_label: string | null;
   service_type_id: string;
+  is_planned: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -89,6 +92,9 @@ export interface CalendarDay {
   total_duration_seconds: number;
   total_duration_display: string;
   total_units: number;
+  planned_duration_seconds: number;
+  planned_duration_display: string;
+  planned_units: number;
 }
 
 // ─── Backup file schema ──────────────────────────────────────────────────────
@@ -107,6 +113,10 @@ export interface BackupFile {
 
 export function isUnitsEntry(entry: TimeEntry): boolean {
   return entry.units_quantity != null && entry.units_quantity > 0;
+}
+
+export function isPlannedEntry(entry: TimeEntry): boolean {
+  return entry.is_planned;
 }
 
 export function computeDurationSeconds(entry: TimeEntry): number {
@@ -157,10 +167,16 @@ export function buildCalendarDays(
     .map(([date, dayEntries]) => {
       const sorted = dayEntries.sort((a, b) => a.start_time.localeCompare(b.start_time));
       const totalSec = sorted
-        .filter((e) => !isUnitsEntry(e))
+        .filter((e) => !isUnitsEntry(e) && !isPlannedEntry(e))
+        .reduce((sum, e) => sum + computeDurationSeconds(e), 0);
+      const plannedSec = sorted
+        .filter((e) => !isUnitsEntry(e) && isPlannedEntry(e))
         .reduce((sum, e) => sum + computeDurationSeconds(e), 0);
       const totalUnits = sorted
-        .filter((e) => isUnitsEntry(e))
+        .filter((e) => isUnitsEntry(e) && !isPlannedEntry(e))
+        .reduce((sum, e) => sum + (e.units_quantity ?? 0), 0);
+      const plannedUnits = sorted
+        .filter((e) => isUnitsEntry(e) && isPlannedEntry(e))
         .reduce((sum, e) => sum + (e.units_quantity ?? 0), 0);
       return {
         date,
@@ -168,6 +184,9 @@ export function buildCalendarDays(
         total_duration_seconds: totalSec,
         total_duration_display: durationDisplay(totalSec),
         total_units: totalUnits,
+        planned_duration_seconds: plannedSec,
+        planned_duration_display: durationDisplay(plannedSec),
+        planned_units: plannedUnits,
       };
     });
 }

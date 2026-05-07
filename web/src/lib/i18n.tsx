@@ -68,11 +68,17 @@ const translations = {
     "entry.zeroDuration": "Duration must be greater than 0",
     "entry.serviceTypeMismatch": "This entry keeps its original type because the selected service is now configured differently.",
     "entry.titleOptionalHint": "Leave it blank to use the selected service type name.",
+    "entry.planMode": "Planned Work",
+    "entry.planModeDesc": "Mark this entry as planned so it only counts toward Calendar planning totals.",
 
     // More text
     "calendar.more": "more",
     "calendar.units": "units",
     "calendar.counted": "Counted",
+    "calendar.monthTotal": "Month Total",
+    "calendar.monthPlanned": "Month Planned",
+    "calendar.planned": "Planned",
+    "calendar.plannedShort": "Plan",
 
     // Reports
     "reports.title": "Reports",
@@ -111,6 +117,14 @@ const translations = {
     "settings.save": "Save",
     "settings.cancel": "Cancel",
     "settings.profileUpdated": "Profile updated",
+    "settings.profilePhotoHint": "Upload a photo to override the Google image. It will be stored locally and included in backups.",
+    "settings.profilePhotoProcessing": "Preparing image...",
+    "settings.profilePhotoFailed": "Could not process that image.",
+    "settings.uploadPhoto": "Upload Photo",
+    "settings.replacePhoto": "Replace Photo",
+    "settings.resetPhoto": "Use Google Photo",
+    "settings.customPhotoActive": "Using your uploaded photo",
+    "settings.googlePhotoActive": "Using your Google profile photo",
 
     "settings.appearance": "Appearance",
     "settings.theme": "Theme",
@@ -123,6 +137,7 @@ const translations = {
     "settings.resetDefault": "Reset to default",
 
     "settings.language": "Language",
+    "settings.languageDesc": "Choose the language used across the web app.",
     "settings.langEnglish": "English",
     "settings.langSpanish": "Español",
     "settings.entriesServices": "Entries & Services",
@@ -136,6 +151,8 @@ const translations = {
     "settings.supportButton": "Support on Ko-fi",
 
     "settings.entryDefaults": "Entry Defaults",
+    "settings.planMode": "Enable Plan Mode",
+    "settings.planModeDesc": "Show a planned toggle in the entry form. Planned work appears in Calendar only and does not count toward reports or goals.",
     "settings.defaultMode": "Default Mode",
     "settings.defaultHours": "Default Hours",
     "settings.defaultMinutes": "Default Minutes",
@@ -305,11 +322,17 @@ const translations = {
     "entry.zeroDuration": "La duración debe ser mayor a 0",
     "entry.serviceTypeMismatch": "Esta entrada conserva su tipo original porque el servicio seleccionado ahora esta configurado de otra forma.",
     "entry.titleOptionalHint": "Dejalo en blanco para usar el nombre del tipo de servicio seleccionado.",
+    "entry.planMode": "Trabajo planeado",
+    "entry.planModeDesc": "Marca esta entrada como planeada para que solo cuente en los totales de planificacion del Calendario.",
 
     // More text
     "calendar.more": "más",
     "calendar.units": "unidades",
     "calendar.counted": "Contado",
+    "calendar.monthTotal": "Total del mes",
+    "calendar.monthPlanned": "Planeado del mes",
+    "calendar.planned": "Planeado",
+    "calendar.plannedShort": "Plan",
 
     // Reports
     "reports.title": "Reportes",
@@ -348,6 +371,14 @@ const translations = {
     "settings.save": "Guardar",
     "settings.cancel": "Cancelar",
     "settings.profileUpdated": "Perfil actualizado",
+    "settings.profilePhotoHint": "Sube una foto para reemplazar la imagen de Google. Se guardara localmente y se incluira en los respaldos.",
+    "settings.profilePhotoProcessing": "Preparando imagen...",
+    "settings.profilePhotoFailed": "No se pudo procesar esa imagen.",
+    "settings.uploadPhoto": "Subir foto",
+    "settings.replacePhoto": "Cambiar foto",
+    "settings.resetPhoto": "Usar foto de Google",
+    "settings.customPhotoActive": "Usando tu foto subida",
+    "settings.googlePhotoActive": "Usando tu foto de perfil de Google",
 
     "settings.appearance": "Apariencia",
     "settings.theme": "Tema",
@@ -360,6 +391,7 @@ const translations = {
     "settings.resetDefault": "Restablecer por defecto",
 
     "settings.language": "Idioma",
+    "settings.languageDesc": "Elige el idioma que se usa en toda la app web.",
     "settings.langEnglish": "English",
     "settings.langSpanish": "Español",
     "settings.entriesServices": "Entradas y Servicios",
@@ -373,6 +405,8 @@ const translations = {
     "settings.supportButton": "Apoyar en Ko-fi",
 
     "settings.entryDefaults": "Valores Predeterminados",
+    "settings.planMode": "Activar modo plan",
+    "settings.planModeDesc": "Muestra un interruptor de plan en el formulario de entradas. El trabajo planeado aparece solo en Calendario y no cuenta para reportes ni metas.",
     "settings.defaultMode": "Modo Predeterminado",
     "settings.defaultHours": "Horas Predeterminadas",
     "settings.defaultMinutes": "Minutos Predeterminados",

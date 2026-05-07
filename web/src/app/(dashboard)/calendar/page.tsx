@@ -14,7 +14,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { useStore } from "@/lib/store";
-import { calendarDateKey, computeDurationSeconds, durationDisplay, isUnitsEntry } from "@/types/data";
+import { calendarDateKey, computeDurationSeconds, durationDisplay, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import type { TimeEntry, ServiceType, CalendarDay } from "@/types/data";
 import { cn } from "@/lib/utils";
 import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
@@ -77,13 +77,25 @@ export default function CalendarPage() {
         ).map(([date, entries]) => {
           const sortedEntries = [...entries].sort((a, b) => a.start_time.localeCompare(b.start_time));
           const totalDurationSeconds = sortedEntries
-            .filter((e) => !isUnitsEntry(e))
+            .filter((e) => !isUnitsEntry(e) && !isPlannedEntry(e))
+            .reduce(
+              (sum, entry) => sum + computeDurationSeconds(entry),
+              0
+            );
+          const plannedDurationSeconds = sortedEntries
+            .filter((e) => !isUnitsEntry(e) && isPlannedEntry(e))
             .reduce(
               (sum, entry) => sum + computeDurationSeconds(entry),
               0
             );
           const totalUnits = sortedEntries
-            .filter((e) => isUnitsEntry(e))
+            .filter((e) => isUnitsEntry(e) && !isPlannedEntry(e))
+            .reduce(
+              (sum, entry) => sum + (entry.units_quantity ?? 0),
+              0
+            );
+          const plannedUnits = sortedEntries
+            .filter((e) => isUnitsEntry(e) && isPlannedEntry(e))
             .reduce(
               (sum, entry) => sum + (entry.units_quantity ?? 0),
               0
@@ -97,6 +109,9 @@ export default function CalendarPage() {
               total_duration_seconds: totalDurationSeconds,
               total_duration_display: durationDisplay(totalDurationSeconds),
               total_units: totalUnits,
+              planned_duration_seconds: plannedDurationSeconds,
+              planned_duration_display: durationDisplay(plannedDurationSeconds),
+              planned_units: plannedUnits,
             } satisfies CalendarDay,
           ];
         })
@@ -133,6 +148,29 @@ export default function CalendarPage() {
   }, [calendarEnd, calendarStart, firstWeekContainsDate, weekStartsOn]);
 
   const selectedDayData = calendarMap[format(selectedDate, "yyyy-MM-dd")];
+  const monthlyTotals = useMemo(() => {
+    const monthKey = format(currentDate, "yyyy-MM");
+
+    return Object.values(calendarMap).reduce(
+      (totals, day) => {
+        if (!day.date.startsWith(monthKey)) {
+          return totals;
+        }
+
+        totals.totalDurationSeconds += day.total_duration_seconds;
+        totals.totalUnits += day.total_units;
+        totals.plannedDurationSeconds += day.planned_duration_seconds;
+        totals.plannedUnits += day.planned_units;
+        return totals;
+      },
+      {
+        totalDurationSeconds: 0,
+        totalUnits: 0,
+        plannedDurationSeconds: 0,
+        plannedUnits: 0,
+      }
+    );
+  }, [calendarMap, currentDate]);
   const selectedWeekNumber = getWeek(selectedDate, {
     weekStartsOn,
     firstWeekContainsDate,
@@ -188,6 +226,26 @@ export default function CalendarPage() {
           >
             {t("calendar.today")}
           </button>
+          <div className="ml-1 flex flex-wrap items-center gap-2">
+            <div className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+              <span className="text-slate-500 dark:text-slate-400">{t("calendar.monthTotal")}</span>
+              <span className="ml-2 font-bold text-primary">{durationDisplay(monthlyTotals.totalDurationSeconds)}</span>
+              {monthlyTotals.totalUnits > 0 && (
+                <span className="ml-2 text-slate-500 dark:text-slate-400">· {monthlyTotals.totalUnits} {t("calendar.units")}</span>
+              )}
+            </div>
+            {(monthlyTotals.plannedDurationSeconds > 0 || monthlyTotals.plannedUnits > 0) && (
+              <div className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                <span>{t("calendar.monthPlanned")}</span>
+                {monthlyTotals.plannedDurationSeconds > 0 && (
+                  <span className="ml-2 font-bold">{durationDisplay(monthlyTotals.plannedDurationSeconds)}</span>
+                )}
+                {monthlyTotals.plannedUnits > 0 && (
+                  <span className="ml-2">{monthlyTotals.plannedUnits} {t("calendar.units")}</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -226,6 +284,9 @@ export default function CalendarPage() {
                   const isSelected = isSameDay(day, selectedDate);
                   const isTodayDay = isToday(day);
                   const isCurrentMonthDay = isSameMonth(day, currentDate);
+                  const hasPlannedEntries = Boolean(
+                    dayData && (dayData.planned_duration_seconds > 0 || dayData.planned_units > 0)
+                  );
 
                   return (
                     <div
@@ -237,7 +298,8 @@ export default function CalendarPage() {
                           ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
                           : isCurrentMonthDay
                             ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                            : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
+                            : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60",
+                        hasPlannedEntries && !isSelected && "bg-amber-50/70 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)] dark:bg-amber-950/20"
                       )}
                     >
                       <span
@@ -259,21 +321,29 @@ export default function CalendarPage() {
                       <div className="hidden md:block">
                         {dayData?.entries.slice(0, 3).map((entry) => {
                           const st = serviceTypeMap[entry.service_type_id];
+                          const isPlanned = isPlannedEntry(entry);
                           return (
                             <div
                               key={entry.id}
                               className="rounded-r p-1.5 mb-1 border-l-4"
                               style={{
-                                borderColor: st?.color ?? "#2094f3",
-                                backgroundColor: (st?.color ?? "#2094f3") + "1a",
+                                borderColor: isPlanned ? "#f59e0b" : st?.color ?? "#2094f3",
+                                backgroundColor: isPlanned ? "rgba(245, 158, 11, 0.14)" : (st?.color ?? "#2094f3") + "1a",
                               }}
                             >
-                              <p
-                                className="text-[10px] font-bold uppercase leading-none"
-                                style={{ color: st?.color ?? "#2094f3" }}
-                              >
-                                {entry.title}
-                              </p>
+                              <div className="flex items-center gap-1">
+                                <p
+                                  className="text-[10px] font-bold uppercase leading-none"
+                                  style={{ color: isPlanned ? "#b45309" : st?.color ?? "#2094f3" }}
+                                >
+                                  {entry.title}
+                                </p>
+                                {isPlanned && (
+                                  <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-200">
+                                    {t("calendar.plannedShort")}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[10px] text-slate-500 font-medium">
                                 {isUnitsEntry(entry)
                                   ? `${entry.units_quantity} ${t("calendar.units")}`
@@ -298,7 +368,7 @@ export default function CalendarPage() {
                               <div
                                 key={entry.id}
                                 className="size-1.5 rounded-full"
-                                style={{ backgroundColor: st?.color ?? "#2094f3" }}
+                                style={{ backgroundColor: isPlannedEntry(entry) ? "#f59e0b" : st?.color ?? "#2094f3" }}
                               />
                             );
                           })}
@@ -326,6 +396,14 @@ export default function CalendarPage() {
                     <span className="ml-1">· {selectedDayData!.total_units} {t("calendar.units")}</span>
                   )}
                 </p>
+                {((selectedDayData?.planned_duration_seconds ?? 0) > 0 || (selectedDayData?.planned_units ?? 0) > 0) && (
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-200">
+                    {t("calendar.planned")}: {selectedDayData?.planned_duration_display ?? "0m"}
+                    {(selectedDayData?.planned_units ?? 0) > 0 && (
+                      <span className="ml-1">· {selectedDayData!.planned_units} {t("calendar.units")}</span>
+                    )}
+                  </p>
+                )}
                 <p className="text-xs text-slate-400 font-medium">{t("calendar.week")} {selectedWeekNumber}</p>
               </div>
               <button
@@ -404,35 +482,52 @@ function EntryCard({
 }) {
   const { t } = useT();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const isPlanned = isPlannedEntry(entry);
 
   return (
-    <div className="bg-surface p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+    <div className={cn(
+      "bg-surface p-4 rounded-2xl border shadow-sm",
+      isPlanned
+        ? "border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/10"
+        : "border-slate-200 dark:border-slate-800"
+    )}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <div
             className="size-10 md:size-12 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: (serviceType?.color ?? "#2094f3") + "1a" }}
+            style={{ backgroundColor: isPlanned ? "rgba(245, 158, 11, 0.15)" : (serviceType?.color ?? "#2094f3") + "1a" }}
           >
             <span
               className="material-symbols-outlined text-lg md:text-2xl"
-              style={{ color: serviceType?.color ?? "#2094f3" }}
+              style={{ color: isPlanned ? "#d97706" : serviceType?.color ?? "#2094f3" }}
             >
               {serviceType?.icon ?? "work"}
             </span>
           </div>
           <div className="min-w-0">
-            <h4 className="font-bold text-sm md:text-base truncate">{entry.title}</h4>
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="font-bold text-sm md:text-base truncate">{entry.title}</h4>
+              {isPlanned && (
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-200">
+                  {t("calendar.plannedShort")}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 ml-2">
           <div className="text-right min-w-[4.5rem]">
-            <p className="font-bold text-sm md:text-base" style={{ color: serviceType?.color ?? "#2094f3" }}>
+            <p className="font-bold text-sm md:text-base" style={{ color: isPlanned ? "#d97706" : serviceType?.color ?? "#2094f3" }}>
               {isUnitsEntry(entry)
                 ? `${entry.units_quantity} ${t("calendar.units")}`
                 : durationDisplay(computeDurationSeconds(entry))}
             </p>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-              {isUnitsEntry(entry) ? t("calendar.counted") : t("calendar.logged")}
+              {isPlanned
+                ? t("calendar.planned")
+                : isUnitsEntry(entry)
+                  ? t("calendar.counted")
+                  : t("calendar.logged")}
             </p>
           </div>
           <button

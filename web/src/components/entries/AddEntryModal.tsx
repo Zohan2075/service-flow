@@ -49,6 +49,7 @@ export default function AddEntryModal({
   const [title, setTitle] = useState(entry?.title ?? "");
   const [serviceTypeId, setServiceTypeId] = useState(entry?.service_type_id ?? serviceTypes[0]?.id ?? "");
   const [mode, setMode] = useState<TimeMode>(initialTimeMode);
+  const [isPlanned, setIsPlanned] = useState(entry?.is_planned ?? false);
 
   // Range mode fields
   const [startTimeStr, setStartTimeStr] = useState(
@@ -119,6 +120,7 @@ export default function AddEntryModal({
     selectedServiceType.id === entry?.service_type_id &&
     selectedServiceType.entry_type !== storedEntryType
   );
+  const showPlanToggle = settings.planModeEnabled || Boolean(entry?.is_planned);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,6 +161,7 @@ export default function AddEntryModal({
           duration_seconds: null,
           units_quantity: unitsQuantity,
           units_label: null,
+          is_planned: isPlanned,
           notes: notes || null,
           location: location || null,
         };
@@ -182,6 +185,7 @@ export default function AddEntryModal({
           duration_seconds: null,
           units_quantity: null,
           units_label: null,
+          is_planned: isPlanned,
           notes: notes || null,
           location: location || null,
         };
@@ -213,6 +217,7 @@ export default function AddEntryModal({
           duration_seconds: totalSeconds,
           units_quantity: null,
           units_label: null,
+          is_planned: isPlanned,
           notes: notes || null,
           location: location || null,
         };
@@ -316,6 +321,32 @@ export default function AddEntryModal({
           {showsMismatchNotice && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
               {t("entry.serviceTypeMismatch")}
+            </div>
+          )}
+
+          {showPlanToggle && (
+            <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/30">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">{t("entry.planMode")}</p>
+                  <p className="text-xs text-amber-700/80 dark:text-amber-200/70">{t("entry.planModeDesc")}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPlanned((currentValue) => !currentValue)}
+                  className={cn(
+                    "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                    isPlanned ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-700"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
+                      isPlanned ? "translate-x-[1.375rem]" : "translate-x-0.5"
+                    )}
+                  />
+                </button>
+              </div>
             </div>
           )}
 

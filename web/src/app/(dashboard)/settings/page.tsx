@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -63,7 +63,63 @@ type CombinedGoalDraft = CombinedGoalPayload & {
   id: string;
 };
 
-type SettingsCategory = "account" | "appearance" | "entries" | "reports" | "data" | "danger";
+type SettingsCategory = "account" | "appearance" | "language" | "entries" | "reports" | "data" | "danger";
+
+const PROFILE_IMAGE_MAX_SIZE = 320;
+const PROFILE_IMAGE_OUTPUT_QUALITY = 0.84;
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Unable to read image"));
+    };
+
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageElement(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Unable to load image"));
+    image.src = src;
+  });
+}
+
+async function optimizeProfileImage(file: File) {
+  const source = await readFileAsDataUrl(file);
+  const image = await loadImageElement(source);
+  const longestSide = Math.max(image.width, image.height);
+  const scale = longestSide > PROFILE_IMAGE_MAX_SIZE
+    ? PROFILE_IMAGE_MAX_SIZE / longestSide
+    : 1;
+  const targetWidth = Math.max(1, Math.round(image.width * scale));
+  const targetHeight = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to prepare image");
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  return canvas.toDataURL("image/jpeg", PROFILE_IMAGE_OUTPUT_QUALITY);
+}
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -116,6 +172,9 @@ export default function SettingsPage() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState(profile?.displayName ?? profile?.name ?? "");
   const [profileBio, setProfileBio] = useState(profile?.bio ?? "");
+  const [profileCustomImage, setProfileCustomImage] = useState<string | null>(profile?.customImage ?? null);
+  const [processingProfileImage, setProcessingProfileImage] = useState(false);
+  const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Service type create ───────────────────────────────────────────────────
   const handleCreateServiceType = () => {
@@ -350,9 +409,46 @@ export default function SettingsPage() {
     updateProfile({
       displayName: profileName.trim() || null,
       bio: profileBio.trim() || null,
+      customImage: profileCustomImage,
     });
     setEditingProfile(false);
     toast.success(t("settings.profileUpdated"));
+  };
+
+  const handleStartProfileEdit = () => {
+    setProfileName(profile?.displayName ?? profile?.name ?? "");
+    setProfileBio(profile?.bio ?? "");
+    setProfileCustomImage(profile?.customImage ?? null);
+    setEditingProfile(true);
+  };
+
+  const handleProfileImageSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      toast.error(t("settings.profilePhotoFailed"));
+      return;
+    }
+
+    setProcessingProfileImage(true);
+
+    try {
+      const nextImage = await optimizeProfileImage(file);
+      setProfileCustomImage(nextImage);
+    } catch {
+      toast.error(t("settings.profilePhotoFailed"));
+    } finally {
+      setProcessingProfileImage(false);
+    }
+  };
+
+  const handleResetProfileImage = () => {
+    setProfileCustomImage(null);
   };
 
   // ── Reset ─────────────────────────────────────────────────────────────────
@@ -374,14 +470,26 @@ export default function SettingsPage() {
     updateSettings(resolvedTheme === "dark" ? { customBackgroundDark: value } : { customBackgroundLight: value });
   };
   const surfacePresets = resolvedTheme === "dark" ? SURFACE_PRESETS_DARK : SURFACE_PRESETS_LIGHT;
+  const previewProfileAvatar = profileCustomImage ?? profile?.image ?? null;
   const settingsCategories: Array<{ id: SettingsCategory; label: string; icon: string }> = [
     { id: "account", label: t("settings.profile"), icon: "person" },
     { id: "appearance", label: t("settings.appearance"), icon: "palette" },
+    { id: "language", label: t("settings.language"), icon: "translate" },
     { id: "entries", label: t("settings.entriesServices"), icon: "construction" },
     { id: "reports", label: t("settings.reportsGoals"), icon: "flag" },
     { id: "data", label: t("settings.dataBackup"), icon: "cloud_upload" },
     { id: "danger", label: t("settings.dangerZone"), icon: "warning" },
   ];
+
+  useEffect(() => {
+    if (editingProfile) {
+      return;
+    }
+
+    setProfileName(profile?.displayName ?? profile?.name ?? "");
+    setProfileBio(profile?.bio ?? "");
+    setProfileCustomImage(profile?.customImage ?? null);
+  }, [editingProfile, profile]);
 
   return (
     <>
@@ -421,12 +529,49 @@ export default function SettingsPage() {
           <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "account" && "hidden")}>
             <h3 className="font-bold text-lg mb-4">Profile</h3>
             <div className="flex flex-col items-start gap-4 sm:flex-row">
-              <div className="size-14 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg shrink-0 overflow-hidden">
-                {profile.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profile.image} alt="" className="size-14 rounded-full object-cover" />
-                ) : (
-                  profile.name?.slice(0, 2).toUpperCase()
+              <div className="space-y-3">
+                <div className="size-20 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
+                  {previewProfileAvatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previewProfileAvatar} alt="" className="size-20 rounded-full object-cover" />
+                  ) : (
+                    profile.name?.slice(0, 2).toUpperCase()
+                  )}
+                </div>
+
+                {editingProfile && (
+                  <div className="space-y-2">
+                    <input
+                      ref={profileImageInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={handleProfileImageSelected}
+                    />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => profileImageInputRef.current?.click()}
+                        disabled={processingProfileImage}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        {processingProfileImage
+                          ? t("settings.profilePhotoProcessing")
+                          : profileCustomImage
+                            ? t("settings.replacePhoto")
+                            : t("settings.uploadPhoto")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetProfileImage}
+                        disabled={!profileCustomImage}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        {t("settings.resetPhoto")}
+                      </button>
+                    </div>
+                    <p className="max-w-xs text-xs text-slate-400">{t("settings.profilePhotoHint")}</p>
+                  </div>
                 )}
               </div>
               {!editingProfile ? (
@@ -434,12 +579,11 @@ export default function SettingsPage() {
                   <p className="font-bold text-base break-words">{profile.displayName || profile.name}</p>
                   <p className="text-sm text-slate-500 break-all">{profile.email}</p>
                   {profile.bio && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 break-words">{profile.bio}</p>}
+                  <p className="mt-2 text-xs text-slate-400">
+                    {profile.customImage ? t("settings.customPhotoActive") : t("settings.googlePhotoActive")}
+                  </p>
                   <button
-                    onClick={() => {
-                      setProfileName(profile.displayName ?? profile.name ?? "");
-                      setProfileBio(profile.bio ?? "");
-                      setEditingProfile(true);
-                    }}
+                    onClick={handleStartProfileEdit}
                     className="mt-3 inline-flex min-h-10 items-center justify-center rounded-xl px-3 text-sm text-primary font-semibold"
                   >
                     {t("settings.editProfile")}
@@ -663,8 +807,9 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Language ─────────────────────────────────────────────────────── */}
-        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "appearance" && "hidden")}>
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "language" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.language")}</h3>
+          <p className="mb-4 text-sm text-slate-500">{t("settings.languageDesc")}</p>
           <div className="flex gap-2 md:gap-3">
             {(["en", "es"] as const).map((lng) => (
               <button
@@ -687,6 +832,26 @@ export default function SettingsPage() {
         <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "entries" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.entryDefaults")}</h3>
           <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
+              <div>
+                <p className="text-sm font-semibold">{t("settings.planMode")}</p>
+                <p className="text-xs text-slate-400">{t("settings.planModeDesc")}</p>
+              </div>
+              <button
+                onClick={() => updateSettings({ planModeEnabled: !settings.planModeEnabled })}
+                className={cn(
+                  "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                  settings.planModeEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
+                )}
+              >
+                <div
+                  className={cn(
+                    "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
+                    settings.planModeEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
+                  )}
+                />
+              </button>
+            </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.defaultMode")}</p>
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
