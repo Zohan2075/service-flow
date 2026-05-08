@@ -77,6 +77,7 @@ const translations = {
     "calendar.counted": "Counted",
     "calendar.monthTotal": "Month Total",
     "calendar.monthPlanned": "Month Planned",
+    "calendar.monthPlannedVsTotal": "Planned + Total",
     "calendar.planned": "Planned",
     "calendar.plannedShort": "Plan",
 
@@ -331,6 +332,7 @@ const translations = {
     "calendar.counted": "Contado",
     "calendar.monthTotal": "Total del mes",
     "calendar.monthPlanned": "Planeado del mes",
+    "calendar.monthPlannedVsTotal": "Planeado + Total",
     "calendar.planned": "Planeado",
     "calendar.plannedShort": "Plan",
 
@@ -579,6 +581,26 @@ export function monthShortYear(date: Date, lang: Language): string {
 export function shortDate(date: Date, lang: Language): string {
   const names = lang === "es" ? MONTH_SHORT_ES : MONTH_SHORT_EN;
   return `${names[date.getMonth()]} ${date.getDate()}`;
+}
+
+function localeTag(lang: Language): string {
+  return lang === "es" ? "es-ES" : "en-US";
+}
+
+export function longDate(date: Date, lang: Language): string {
+  return new Intl.DateTimeFormat(localeTag(lang), {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+export function dateTimeString(date: Date, lang: Language): string {
+  return new Intl.DateTimeFormat(localeTag(lang), {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 const WEEKDAY_KEYS: TranslationKey[] = [

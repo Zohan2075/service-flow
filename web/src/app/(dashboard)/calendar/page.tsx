@@ -270,6 +270,19 @@ export default function CalendarPage() {
                 )}
               </div>
             )}
+            {(monthlyTotals.plannedDurationSeconds > 0 || monthlyTotals.plannedUnits > 0) && (
+              <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2 text-xs font-semibold text-slate-600 dark:border-primary/20 dark:bg-primary/10/40 dark:text-slate-200">
+                <span className="text-slate-500 dark:text-slate-400">{t("calendar.monthPlannedVsTotal")}</span>
+                <span className="ml-2 font-bold text-primary">
+                  {durationDisplay(monthlyTotals.plannedDurationSeconds + monthlyTotals.totalDurationSeconds)}
+                </span>
+                {(monthlyTotals.plannedUnits > 0 || monthlyTotals.totalUnits > 0) && (
+                  <span className="ml-2 text-slate-500 dark:text-slate-400">
+                    · {monthlyTotals.plannedUnits + monthlyTotals.totalUnits} {t("calendar.units")}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </header>

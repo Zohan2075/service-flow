@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { useStore } from "@/lib/store";
 import type { TimeEntry } from "@/types/data";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { longDate, useT } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
 type EntryType = "time" | "units";
@@ -35,7 +35,7 @@ export default function AddEntryModal({
   const ensureDefaultServiceType = useStore((s) => s.ensureDefaultServiceType);
   const updateTimeEntry = useStore((s) => s.updateTimeEntry);
   const settings = useStore((s) => s.settings);
-  const { t } = useT();
+  const { t, language } = useT();
 
   const isEditing = !!entry;
   const storedEntryType: EntryType = entry && entry.units_quantity != null && entry.units_quantity > 0
@@ -248,7 +248,7 @@ export default function AddEntryModal({
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-surface z-10">
           <div>
             <h3 className="text-lg font-bold">{isEditing ? t("entry.edit") : t("entry.new")}</h3>
-            <p className="text-xs text-slate-500">{format(selectedDate, "EEEE, MMM d, yyyy")}</p>
+            <p className="text-xs text-slate-500">{longDate(selectedDate, language)}</p>
           </div>
           <button
             onClick={onClose}

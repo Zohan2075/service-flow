@@ -25,7 +25,7 @@ import { downloadBackup } from "@/lib/drive";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
-import { monthShortYear, useT } from "@/lib/i18n";
+import { dateTimeString, monthShortYear, useT } from "@/lib/i18n";
 import type { GoalDefinition, ServiceType } from "@/types/data";
 import toast from "react-hot-toast";
 
@@ -1274,7 +1274,7 @@ export default function SettingsPage() {
                     )}
                     {settings.lastSyncedAt && sync.status !== "error" && (
                       <p className="text-xs text-slate-400">
-                        {t("settings.last")}: {new Date(settings.lastSyncedAt).toLocaleString()}
+                        {t("settings.last")}: {dateTimeString(new Date(settings.lastSyncedAt), language)}
                       </p>
                     )}
                   </div>
