@@ -214,6 +214,8 @@ const translations = {
     "settings.invalidBackup": "Invalid backup file",
 
     "settings.driveSync": "Google Drive Backup",
+    "settings.autoSync": "Auto-sync to Google Drive",
+    "settings.autoSyncDesc": "Automatically back up changes to Drive when online",
     "settings.driveConfigHint": "Add NEXT_PUBLIC_GOOGLE_CLIENT_ID to web/.env.local and restart the app to enable Google sign-in and Drive backup.",
     "settings.notSignedIn": "Google account not signed in",
     "settings.driveConnected": "Google Drive connected",
@@ -469,6 +471,8 @@ const translations = {
     "settings.invalidBackup": "Archivo de respaldo inválido",
 
     "settings.driveSync": "Respaldo en Google Drive",
+    "settings.autoSync": "Sincronización automática con Google Drive",
+    "settings.autoSyncDesc": "Copia de seguridad automática de los cambios en Drive cuando hay conexión",
     "settings.driveConfigHint": "Agrega NEXT_PUBLIC_GOOGLE_CLIENT_ID en web/.env.local y reinicia la app para habilitar Google y Drive.",
     "settings.notSignedIn": "Cuenta de Google no conectada",
     "settings.driveConnected": "Google Drive conectado",

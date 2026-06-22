@@ -14,6 +14,8 @@ import { uploadBackup } from "./drive";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+const AUTOSYNC_DEBOUNCE_MS = 30_000;
+
 export type SyncStatus = "idle" | "syncing" | "error";
 
 export interface SyncState {
@@ -40,21 +42,30 @@ export function useSync() {
 
 export function SyncProvider({
   getInteractiveToken,
+  getSilentToken,
   children,
 }: {
   getInteractiveToken: (() => Promise<string>) | null;
+  getSilentToken: (() => Promise<string>) | null;
   children: ReactNode;
 }) {
   const completeSync = useStore((s) => s.completeSync);
+  const autoSyncEnabled = useStore((s) => s.settings.autoSync);
+  const hasPendingChanges = useStore((s) => s.syncMetadata.hasPendingChanges);
 
   const [state, setState] = useState<SyncState>({ status: "idle", error: null });
   const [isOnline, setIsOnline] = useState(true);
   const syncingRef = useRef(false);
+  const autoSyncRef = useRef<() => void>(() => {});
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track online / offline
   useEffect(() => {
     setIsOnline(navigator.onLine);
-    const goOnline = () => setIsOnline(true);
+    const goOnline = () => {
+      setIsOnline(true);
+      autoSyncRef.current();
+    };
     const goOffline = () => setIsOnline(false);
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
@@ -63,6 +74,21 @@ export function SyncProvider({
       window.removeEventListener("offline", goOffline);
     };
   }, []);
+
+  const performSync = useCallback(async (token: string) => {
+    const syncedAt = new Date().toISOString();
+    const store = useStore.getState();
+    const backup = serializeBackup({
+      profile: store.profile,
+      settings: { ...store.settings, lastSyncedAt: syncedAt },
+      serviceTypes: store.serviceTypes,
+      timeEntries: store.timeEntries,
+      goals: store.goals,
+    });
+
+    await uploadBackup(token, JSON.stringify(backup));
+    completeSync(syncedAt);
+  }, [completeSync]);
 
   const syncNow = useCallback(async (tokenOverride?: string) => {
     if (!navigator.onLine) {
@@ -75,18 +101,7 @@ export function SyncProvider({
 
     try {
       const token = tokenOverride ?? await getInteractiveToken();
-      const syncedAt = new Date().toISOString();
-      const store = useStore.getState();
-      const backup = serializeBackup({
-        profile: store.profile,
-        settings: { ...store.settings, lastSyncedAt: syncedAt },
-        serviceTypes: store.serviceTypes,
-        timeEntries: store.timeEntries,
-        goals: store.goals,
-      });
-
-      await uploadBackup(token, JSON.stringify(backup));
-      completeSync(syncedAt);
+      await performSync(token);
       setState({ status: "idle", error: null });
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Backup failed");
@@ -95,7 +110,60 @@ export function SyncProvider({
     } finally {
       syncingRef.current = false;
     }
-  }, [completeSync, getInteractiveToken]);
+  }, [getInteractiveToken, performSync]);
+
+  // Silent auto-sync: no state changes, no rethrow.
+  const autoSync = useCallback(async () => {
+    if (syncingRef.current) return;
+    if (!navigator.onLine) return;
+    if (!autoSyncEnabled) return;
+    if (!hasPendingChanges) return;
+    if (!getSilentToken) return;
+
+    syncingRef.current = true;
+    try {
+      const token = await getSilentToken();
+      await performSync(token);
+    } catch (err) {
+      console.warn("Auto-sync skipped", err);
+    } finally {
+      syncingRef.current = false;
+    }
+  }, [autoSyncEnabled, getSilentToken, hasPendingChanges, performSync]);
+
+  // Keep a ref to the latest autoSync so mount-only effects call the current version.
+  useEffect(() => {
+    autoSyncRef.current = autoSync;
+  }, [autoSync]);
+
+  // Trigger: app open + tab becoming visible again.
+  useEffect(() => {
+    autoSyncRef.current();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        autoSyncRef.current();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  // Trigger: debounced 30s after the last edit.
+  useEffect(() => {
+    if (!hasPendingChanges) {
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      autoSyncRef.current();
+    }, AUTOSYNC_DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    };
+  }, [hasPendingChanges]);
 
   return (
     <SyncContext.Provider value={{ ...state, syncNow, isOnline }}>

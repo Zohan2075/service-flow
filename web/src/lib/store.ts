@@ -183,7 +183,7 @@ function ensureServiceTypesNotEmpty(
   ]);
 }
 
-const SYNC_ONLY_SETTING_KEYS = new Set<keyof AppSettings>(["lastSyncedAt"]);
+const SYNC_ONLY_SETTING_KEYS = new Set<keyof AppSettings>(["lastSyncedAt", "autoSync"]);
 
 function getSyncComparableSettings(settings: AppSettings) {
   return Object.fromEntries(
@@ -220,6 +220,7 @@ const INITIAL_SETTINGS: AppSettings = {
   defaultDurationMinutes: 0,
   planModeEnabled: false,
   showYearTotals: true,
+  autoSync: true,
   lastSyncedAt: null,
 };
 
@@ -232,9 +233,7 @@ const INITIAL_UI_STATE: UiState = {
 };
 
 function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
-  // Strip legacy fields that may come from old backups
   const input = { ...(settings ?? {}) } as Record<string, unknown>;
-  delete input.autoSync;
 
   const merged = { ...INITIAL_SETTINGS, ...input };
   const legacySurface = (input.customSurface as string | null) ?? null;

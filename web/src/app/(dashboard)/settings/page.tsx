@@ -1248,6 +1248,27 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
+              <div>
+                <p className="text-sm font-semibold">{t("settings.autoSync")}</p>
+                <p className="text-xs text-slate-400">{t("settings.autoSyncDesc")}</p>
+              </div>
+              <button
+                onClick={() => updateSettings({ autoSync: !settings.autoSync })}
+                className={cn(
+                  "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                  settings.autoSync ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
+                )}
+              >
+                <div
+                  className={cn(
+                    "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
+                    settings.autoSync ? "translate-x-[1.375rem]" : "translate-x-0.5"
+                  )}
+                />
+              </button>
+            </div>
+
             <div className="space-y-4">
               {/* Backup status */}
               <div className="flex gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">

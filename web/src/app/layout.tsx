@@ -13,6 +13,10 @@ export const metadata: Metadata = {
   title: "ServiceFlow",
   description: "Service time tracking dashboard",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/android-chrome-192x192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -35,8 +39,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/icons/icon.svg" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/android-chrome-192x192.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: serviceWorkerScript,

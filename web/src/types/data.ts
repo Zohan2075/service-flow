@@ -36,6 +36,8 @@ export interface AppSettings {
   planModeEnabled: boolean;
   // Reports
   showYearTotals: boolean;
+  // Auto-sync to Drive (opt-out)
+  autoSync: boolean;
   // Sync metadata (kept for manual backup)
   lastSyncedAt: string | null;      // ISO 8601
 }

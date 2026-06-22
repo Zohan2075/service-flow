@@ -15,8 +15,12 @@ function SyncBridge({ children }: { children: React.ReactNode }) {
     return requestDriveAccess({ interactive: true });
   }, [accessToken, requestDriveAccess]);
 
+  const getSilentToken = useCallback(async () => {
+    return requestDriveAccess({ interactive: false });
+  }, [requestDriveAccess]);
+
   return (
-    <SyncProvider getInteractiveToken={getInteractiveToken}>
+    <SyncProvider getInteractiveToken={getInteractiveToken} getSilentToken={getSilentToken}>
       {children}
     </SyncProvider>
   );
