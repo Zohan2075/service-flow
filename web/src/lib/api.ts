@@ -1,3 +1,29 @@
-// This file is intentionally empty.
-// All types have moved to @/types/data and all data access to @/lib/store.
-export {};
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+export async function exchangeDriveCode(
+  code: string
+): Promise<{ access_token: string; refresh_token: string }> {
+  const res = await fetch(`${API_URL}/api/v1/drive/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) throw new Error(`Drive exchange failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getDriveToken(jwt: string): Promise<string> {
+  const res = await fetch(`${API_URL}/api/v1/drive/token`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) throw new Error(`Drive token refresh failed: ${res.status}`);
+  const data = (await res.json()) as { access_token: string };
+  return data.access_token;
+}
+
+export async function revokeDriveToken(jwt: string): Promise<void> {
+  await fetch(`${API_URL}/api/v1/drive/revoke`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+}

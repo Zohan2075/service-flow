@@ -61,6 +61,30 @@ declare namespace google.accounts.oauth2 {
     callback: (response: TokenResponse) => void;
     error_callback?: (error: NonOAuthError) => void;
   }): TokenClient;
+
+  interface CodeResponse {
+    code: string;
+    error?: string;
+    error_description?: string;
+    error_uri?: string;
+    scope: string;
+    state?: string;
+  }
+
+  interface CodeClient {
+    callback: (response: CodeResponse) => void;
+    error_callback?: (error: NonOAuthError) => void;
+    requestCode(overrides?: { state?: string; scope?: string }): void;
+  }
+
+  function initCodeClient(config: {
+    client_id: string;
+    scope: string;
+    callback: (response: CodeResponse) => void;
+    error_callback?: (error: NonOAuthError) => void;
+    redirect_uri?: string;
+    state?: string;
+  }): CodeClient;
 }
 
 interface Window {

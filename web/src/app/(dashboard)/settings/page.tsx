@@ -124,7 +124,7 @@ async function optimizeProfileImage(file: File) {
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { t, language, setLanguage } = useT();
-  const { user, accessToken, isLoading: googleLoading, isConfigured, error: googleError, requestDriveAccess, signIn } = useGoogleAuth();
+  const { user, isLoading: googleLoading, isConfigured, error: googleError, hasStoredBackendJwt, requestDriveAccess, signIn } = useGoogleAuth();
   const sync = useSync();
 
   const serviceTypes = useStore((s) => s.serviceTypes);
@@ -1229,18 +1229,18 @@ export default function SettingsPage() {
               <div className="flex items-center gap-3 min-w-0">
                 <span className={cn(
                   "material-symbols-outlined shrink-0",
-                  !user ? "text-slate-400" : accessToken ? "text-green-500" : "text-amber-500"
+                  !user ? "text-slate-400" : hasStoredBackendJwt ? "text-green-500" : "text-amber-500"
                 )}>
-                  {!user ? "account_circle" : accessToken ? "cloud_done" : "cloud_sync"}
+                  {!user ? "account_circle" : hasStoredBackendJwt ? "cloud_done" : "cloud_sync"}
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">
-                    {!user ? t("settings.notSignedIn") : accessToken ? t("settings.driveConnected") : t("settings.driveNotConnected")}
+                    {!user ? t("settings.notSignedIn") : hasStoredBackendJwt ? t("settings.driveConnected") : t("settings.driveNotConnected")}
                   </p>
                   <p className="text-xs text-slate-400">
                     {!user
                       ? t("settings.signInFirst")
-                      : accessToken
+                      : hasStoredBackendJwt
                         ? t("settings.driveReady")
                         : t("settings.connectDriveOnce")}
                   </p>

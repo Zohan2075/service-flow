@@ -10,13 +10,14 @@ import {
 } from "react";
 import { useStore } from "@/lib/store";
 import type { UserProfile } from "@/types/data";
+import { exchangeDriveCode, getDriveToken, revokeDriveToken } from "@/lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface GoogleAuthContextValue {
   /** Current signed-in user profile (null = not signed in) */
   user: UserProfile | null;
-  /** Access token for Google APIs (Drive). Null until user grants consent. */
+  /** Access token for Google APIs (Drive). Volatile in-memory cache. */
   accessToken: string | null;
   /** true while GIS script is loading */
   isLoading: boolean;
@@ -24,6 +25,8 @@ interface GoogleAuthContextValue {
   isReady: boolean;
   /** whether the app has a Google OAuth client id configured */
   isConfigured: boolean;
+  /** true when a backend JWT is stored (Drive is connected) */
+  hasStoredBackendJwt: boolean;
   /** configuration or runtime auth error to show in the UI */
   error: string | null;
   /** Trigger Google sign-in popup (also grants Drive access) */
@@ -67,30 +70,39 @@ function loadScript(src: string): Promise<void> {
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const SCOPES = "openid profile email https://www.googleapis.com/auth/drive.file";
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
-const TOKEN_EXPIRY_BUFFER_MS = 60_000;
-const DRIVE_SESSION_STORAGE_KEY = "serviceflow-google-drive-session";
 
-type StoredDriveSession = {
-  accessToken: string;
-  grantedScopes: string | null;
-  tokenExpiresAt: number | null;
-  googleId: string | null;
-};
+const BACKEND_JWT_KEY = "serviceflow-backend-jwt";
 
-function hasDriveScope(scope: string | null | undefined) {
-  if (!scope) return false;
-  return scope.split(/\s+/).includes(DRIVE_SCOPE);
+function getStoredBackendJwt(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(BACKEND_JWT_KEY);
+  } catch {
+    return null;
+  }
 }
 
-function getGoogleResponseError(resp: google.accounts.oauth2.TokenResponse) {
-  return resp.error_description ?? resp.error ?? null;
+function storeBackendJwt(jwt: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(BACKEND_JWT_KEY, jwt);
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
-function getGooglePopupError(
+function clearStoredBackendJwt() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(BACKEND_JWT_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function getCodePopupError(
   error: google.accounts.oauth2.NonOAuthError | undefined,
-  fallbackMessage: string,
-  interactive: boolean
+  fallbackMessage: string
 ) {
   const origin = typeof window !== "undefined" ? window.location.origin : "this origin";
   const isLocalOrigin = typeof window !== "undefined"
@@ -99,175 +111,45 @@ function getGooglePopupError(
 
   switch (error?.type) {
     case "popup_failed_to_open":
-      return interactive
-        ? "Google sign-in popup was blocked by the browser. Allow popups for this site and try again."
-        : "Google Drive session could not be refreshed in the background. Reconnect Drive to continue syncing.";
+      return "Google sign-in popup was blocked by the browser. Allow popups for this site and try again.";
     case "popup_closed":
-      if (interactive && isLocalOrigin) {
+      if (isLocalOrigin) {
         return `Google sign-in could not complete. If Google showed redirect_uri_mismatch, add ${origin} to the OAuth client's Authorized JavaScript origins in Google Cloud Console, then try again.`;
       }
-
-      return interactive
-        ? "Google sign-in was cancelled before it completed."
-        : "Google Drive session refresh was cancelled before it completed.";
+      return "Google sign-in was cancelled before it completed.";
     default:
       return fallbackMessage;
   }
-}
-
-function getTokenExpiresAt(expiresIn?: number) {
-  if (!expiresIn) return null;
-  return Date.now() + Math.max(0, expiresIn * 1000 - TOKEN_EXPIRY_BUFFER_MS);
-}
-
-function removeStoredDriveSessionFrom(storage: Storage | undefined) {
-  if (!storage) return;
-
-  try {
-    storage.removeItem(DRIVE_SESSION_STORAGE_KEY);
-  } catch {
-    // Ignore storage failures and fall back to runtime auth state.
-  }
-}
-
-function parseStoredDriveSession(raw: string, expectedGoogleId?: string): StoredDriveSession | null {
-  const parsed = JSON.parse(raw) as Partial<StoredDriveSession>;
-
-  if (!parsed.accessToken || typeof parsed.accessToken !== "string") {
-    return null;
-  }
-
-  if (expectedGoogleId && parsed.googleId && parsed.googleId !== expectedGoogleId) {
-    return null;
-  }
-
-  const tokenExpiresAt =
-    typeof parsed.tokenExpiresAt === "number" ? parsed.tokenExpiresAt : null;
-
-  if (tokenExpiresAt && tokenExpiresAt <= Date.now()) {
-    return null;
-  }
-
-  return {
-    accessToken: parsed.accessToken,
-    grantedScopes: typeof parsed.grantedScopes === "string" ? parsed.grantedScopes : null,
-    tokenExpiresAt,
-    googleId: typeof parsed.googleId === "string" ? parsed.googleId : null,
-  };
-}
-
-function readStoredDriveSession(expectedGoogleId?: string): StoredDriveSession | null {
-  if (typeof window === "undefined") return null;
-
-  const storageCandidates: Storage[] = [];
-
-  try {
-    storageCandidates.push(window.localStorage);
-  } catch {
-    // Local storage may be blocked by the browser.
-  }
-
-  try {
-    storageCandidates.push(window.sessionStorage);
-  } catch {
-    // Session storage may be blocked by the browser.
-  }
-
-  try {
-    for (const storage of storageCandidates) {
-      const raw = storage.getItem(DRIVE_SESSION_STORAGE_KEY);
-      if (!raw) {
-        continue;
-      }
-
-      const parsed = parseStoredDriveSession(raw, expectedGoogleId);
-      if (!parsed) {
-        removeStoredDriveSessionFrom(storage);
-        continue;
-      }
-
-      try {
-        window.localStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(parsed));
-      } catch {
-        // Ignore local storage write failures.
-      }
-
-      return parsed;
-    }
-
-    return null;
-  } catch {
-    removeStoredDriveSessionFrom(window.localStorage);
-    removeStoredDriveSessionFrom(window.sessionStorage);
-    return null;
-  }
-}
-
-function writeStoredDriveSession(session: StoredDriveSession) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(session));
-  } catch {
-    try {
-      window.sessionStorage.setItem(DRIVE_SESSION_STORAGE_KEY, JSON.stringify(session));
-    } catch {
-      // Ignore storage failures and rely on in-memory auth state.
-    }
-  }
-}
-
-function clearStoredDriveSession() {
-  if (typeof window === "undefined") return;
-  removeStoredDriveSessionFrom(window.localStorage);
-  removeStoredDriveSessionFrom(window.sessionStorage);
 }
 
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const storeProfile = useStore((s) => s.profile);
   const setProfile = useStore((s) => s.setProfile);
   const storeSignOut = useStore((s) => s.signOut);
-  const storeGoogleId = storeProfile?.google_id ?? null;
 
   const [user, setUser] = useState<UserProfile | null>(storeProfile);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [grantedScopes, setGrantedScopes] = useState<string | null>(null);
-  const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tokenClient, setTokenClient] = useState<google.accounts.oauth2.TokenClient | null>(null);
+  const [codeClient, setCodeClient] = useState<google.accounts.oauth2.CodeClient | null>(null);
+  const [backendJwt, setBackendJwt] = useState<string | null>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
   const isConfigured = Boolean(CLIENT_ID);
+
+  const hasStoredBackendJwt = Boolean(backendJwt);
+
+  // Hydrate backendJwt from localStorage on mount
+  useEffect(() => {
+    setBackendJwt(getStoredBackendJwt());
+  }, []);
 
   // Sync store → local reactive state
   useEffect(() => {
     setUser(storeProfile);
   }, [storeProfile]);
 
-  const clearTokenState = useCallback(() => {
-    setAccessToken(null);
-    setGrantedScopes(null);
-    setTokenExpiresAt(null);
-    clearStoredDriveSession();
-  }, []);
+  // ─── GIS initialization ──────────────────────────────────────────────────
 
-  const applyTokenResponse = useCallback((resp: google.accounts.oauth2.TokenResponse) => {
-    const nextTokenExpiresAt = getTokenExpiresAt(resp.expires_in);
-    setAccessToken(resp.access_token);
-    setGrantedScopes(resp.scope ?? null);
-    setTokenExpiresAt(nextTokenExpiresAt);
-    writeStoredDriveSession({
-      accessToken: resp.access_token,
-      grantedScopes: resp.scope ?? null,
-      tokenExpiresAt: nextTokenExpiresAt,
-      googleId: user?.google_id ?? storeGoogleId,
-    });
-  }, [storeGoogleId, user]);
-
-  const hasUsableDriveToken = Boolean(
-    accessToken && hasDriveScope(grantedScopes) && (!tokenExpiresAt || tokenExpiresAt > Date.now())
-  );
-
-  const ensureTokenClient = useCallback(async () => {
+  const ensureCodeClient = useCallback(async () => {
     if (!CLIENT_ID) {
       const message = "Google sign-in is not configured yet. Add NEXT_PUBLIC_GOOGLE_CLIENT_ID to web/.env.local and restart the app.";
       setError(message);
@@ -275,8 +157,8 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       throw new Error(message);
     }
 
-    if (tokenClient) {
-      return tokenClient;
+    if (codeClient) {
+      return codeClient;
     }
 
     setIsLoading(true);
@@ -289,15 +171,16 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Google sign-in failed to initialize");
       }
 
-      const tc = oauth.initTokenClient({
+      const cc = oauth.initCodeClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
+        redirect_uri: "postmessage",
         callback: () => {},
       });
 
-      setTokenClient(tc);
+      setCodeClient(cc);
       setError(null);
-      return tc;
+      return cc;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load Google sign-in";
       setError(message);
@@ -306,21 +189,15 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [tokenClient]);
+  }, [codeClient]);
 
-  const requestToken = useCallback(
-    async ({
-      prompt,
-      fallbackMessage,
-      interactive,
-    }: {
-      prompt: "none" | "" | "consent" | "select_account consent";
-      fallbackMessage: string;
-      interactive: boolean;
-    }) => {
-      const client = await ensureTokenClient();
+  // ─── Code-model popup ────────────────────────────────────────────────────
 
-      return new Promise<google.accounts.oauth2.TokenResponse>((resolve, reject) => {
+  const requestCode = useCallback(
+    async (): Promise<google.accounts.oauth2.CodeResponse> => {
+      const client = await ensureCodeClient();
+
+      return new Promise<google.accounts.oauth2.CodeResponse>((resolve, reject) => {
         let settled = false;
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -332,7 +209,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           reject(new Error(message));
         };
 
-        const resolveWith = (resp: google.accounts.oauth2.TokenResponse) => {
+        const resolveWith = (resp: google.accounts.oauth2.CodeResponse) => {
           if (settled) return;
           settled = true;
           if (timeoutId) clearTimeout(timeoutId);
@@ -340,40 +217,30 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           resolve(resp);
         };
 
-        // Prevent GIS from hanging forever (especially prompt:"none" on mobile)
         timeoutId = setTimeout(() => {
           rejectWith("Google sign-in timed out. Please try again.");
         }, 15_000);
 
         client.callback = (resp) => {
           if (resp.error) {
-            rejectWith(getGoogleResponseError(resp) ?? fallbackMessage);
+            rejectWith(resp.error_description ?? resp.error ?? "Google sign-in failed");
             return;
           }
-
           resolveWith(resp);
         };
 
         client.error_callback = (error) => {
-          rejectWith(getGooglePopupError(error, fallbackMessage, interactive));
+          rejectWith(getCodePopupError(error, "Google sign-in was cancelled."));
         };
 
-        client.requestAccessToken({ prompt });
+        client.requestCode();
       });
     },
-    [ensureTokenClient]
+    [ensureCodeClient]
   );
 
-  // Load GIS script & init token client (skip if no CLIENT_ID)
-  useEffect(() => {
-    let mounted = true;
-    ensureTokenClient().catch(() => {
-      if (!mounted) return;
-    });
-    return () => { mounted = false; };
-  }, [ensureTokenClient]);
+  // ─── Backend exchange + user info ────────────────────────────────────────
 
-  // Fetch user profile from access token
   const fetchUserInfo = useCallback(
     async (token: string) => {
       try {
@@ -397,164 +264,121 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     [setProfile]
   );
 
-  useEffect(() => {
-    if (!storeGoogleId) {
-      return;
-    }
+  // ─── Public auth functions ───────────────────────────────────────────────
 
-    if (hasUsableDriveToken) {
-      return;
-    }
-
-    const storedSession = readStoredDriveSession(storeGoogleId ?? undefined);
-
-    if (!storedSession) {
-      if (accessToken || grantedScopes || tokenExpiresAt) {
-        clearTokenState();
-      }
-      return;
-    }
-
-    setAccessToken(storedSession.accessToken);
-    setGrantedScopes(storedSession.grantedScopes);
-    setTokenExpiresAt(storedSession.tokenExpiresAt);
-    setError(null);
-  }, [
-    accessToken,
-    clearTokenState,
-    grantedScopes,
-    hasUsableDriveToken,
-    storeGoogleId,
-    tokenExpiresAt,
-  ]);
-
-  useEffect(() => {
-    if (!accessToken || !hasDriveScope(grantedScopes)) {
-      return;
-    }
-
-    if (tokenExpiresAt && tokenExpiresAt <= Date.now()) {
-      clearStoredDriveSession();
-      return;
-    }
-
-    writeStoredDriveSession({
-      accessToken,
-      grantedScopes,
-      tokenExpiresAt,
-      googleId: user?.google_id ?? storeGoogleId,
-    });
-  }, [accessToken, grantedScopes, storeGoogleId, tokenExpiresAt, user]);
-
-  // Sign in with popup → gets token + user info in one step
   const signIn = useCallback(async () => {
     setError(null);
 
     try {
-      const resp = await requestToken({
-        prompt: "select_account consent",
-        fallbackMessage: "Google sign-in failed",
-        interactive: true,
-      });
-      applyTokenResponse(resp);
-      await fetchUserInfo(resp.access_token);
+      // 1. Open GIS code popup → get auth code
+      const codeResp = await requestCode();
+
+      // 2. Exchange code with backend → get backend JWT
+      const tokenResp = await exchangeDriveCode(codeResp.code);
+
+      // 3. Store backend JWT
+      storeBackendJwt(tokenResp.access_token);
+      setBackendJwt(tokenResp.access_token);
+
+      // 4. Get a Google access token from backend
+      const googleToken = await getDriveToken(tokenResp.access_token);
+      setGoogleAccessToken(googleToken);
+
+      // 5. Fetch user profile using the Google access token
+      await fetchUserInfo(googleToken);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Google sign-in failed";
       setError(message);
       throw new Error(message);
     }
-  }, [applyTokenResponse, fetchUserInfo, requestToken]);
+  }, [requestCode, fetchUserInfo]);
 
-  // Request Drive access token (reuses existing or prompts)
-  const requestDriveAccess = useCallback((options?: { interactive?: boolean }): Promise<string> => {
+  const requestDriveAccess = useCallback(async (options?: { interactive?: boolean }): Promise<string> => {
     const interactive = options?.interactive ?? true;
 
-    return new Promise((resolve, reject) => {
-      if (hasUsableDriveToken && accessToken) {
-        resolve(accessToken);
-        return;
+    // Silent path: use stored backend JWT to get a fresh Google token from backend
+    const trySilent = async (): Promise<string> => {
+      const jwt = backendJwt ?? getStoredBackendJwt();
+      if (!jwt) {
+        throw new Error(
+          user
+            ? "Google Drive connection lost. Reconnect Drive to continue syncing."
+            : "Sign in with Google again to continue Drive sync."
+        );
       }
+      const googleToken = await getDriveToken(jwt);
+      setGoogleAccessToken(googleToken);
+      return googleToken;
+    };
 
-      const authorize = async () => {
-        try {
-          const storedSession = readStoredDriveSession(user?.google_id ?? storeGoogleId ?? undefined);
+    // Interactive fallback: code model popup → exchange → store → get token
+    const tryInteractive = async (): Promise<string> => {
+      const codeResp = await requestCode();
+      const tokenResp = await exchangeDriveCode(codeResp.code);
+      storeBackendJwt(tokenResp.access_token);
+      setBackendJwt(tokenResp.access_token);
+      const googleToken = await getDriveToken(tokenResp.access_token);
+      setGoogleAccessToken(googleToken);
+      if (!user) {
+        await fetchUserInfo(googleToken);
+      }
+      setError(null);
+      return googleToken;
+    };
 
-          if (storedSession && hasDriveScope(storedSession.grantedScopes)) {
-            setAccessToken(storedSession.accessToken);
-            setGrantedScopes(storedSession.grantedScopes);
-            setTokenExpiresAt(storedSession.tokenExpiresAt);
-            setError(null);
-            resolve(storedSession.accessToken);
-            return;
-          }
+    try {
+      return await trySilent();
+    } catch (silentErr) {
+      if (!interactive) {
+        throw silentErr;
+      }
+      // Interactive fallback: open popup for re-authorization
+      try {
+        return await tryInteractive();
+      } catch (interactiveErr) {
+        const message = interactiveErr instanceof Error ? interactiveErr.message : "Google Drive authorization failed";
+        setError(message);
+        throw new Error(message);
+      }
+    }
+  }, [backendJwt, fetchUserInfo, requestCode, user]);
 
-          if (!interactive) {
-            // Try a silent GIS refresh (no popup) before giving up.
-            // This works when the user is still signed in to Google and has
-            // previously granted Drive access — Google issues a fresh token
-            // without any UI. Only if this fails do we reject.
-            try {
-              const silentResp = await requestToken({
-                prompt: "none",
-                fallbackMessage: "Google Drive silent refresh failed",
-                interactive: false,
-              });
-              applyTokenResponse(silentResp);
-              if (!user) {
-                await fetchUserInfo(silentResp.access_token);
-              }
-              resolve(silentResp.access_token);
-              return;
-            } catch {
-              throw new Error(
-                user
-                  ? "Google Drive session expired. Reconnect Drive to continue syncing."
-                  : "Sign in with Google again to continue Drive sync."
-              );
-            }
-          }
-
-          const resp = await requestToken({
-            prompt: user ? "consent" : "select_account consent",
-            fallbackMessage: "Google Drive authorization failed",
-            interactive: true,
-          });
-
-          applyTokenResponse(resp);
-          if (!user) {
-            await fetchUserInfo(resp.access_token);
-          }
-          setError(null);
-          resolve(resp.access_token);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Google services not loaded yet. Please try again.";
-          if (interactive) {
-            setError(message);
-          }
-          reject(new Error(message));
-        }
-      };
-
-      authorize();
-    });
-  }, [accessToken, applyTokenResponse, fetchUserInfo, hasUsableDriveToken, requestToken, storeGoogleId, user]);
-
-  // Sign out
   const signOutHandler = useCallback(() => {
+    // Best-effort: tell backend to revoke the refresh token
+    const jwt = backendJwt ?? getStoredBackendJwt();
+    if (jwt) {
+      revokeDriveToken(jwt).catch(() => {
+        // Ignore — we're signing out regardless.
+      });
+    }
     window.google?.accounts?.id?.disableAutoSelect();
-    setUser(null);
-    clearTokenState();
+    clearStoredBackendJwt();
+    setBackendJwt(null);
+    setGoogleAccessToken(null);
     storeSignOut();
-  }, [clearTokenState, storeSignOut]);
+  }, [backendJwt, storeSignOut]);
+
+  // ─── Mount-time initialization ───────────────────────────────────────────
+
+  useEffect(() => {
+    let mounted = true;
+    ensureCodeClient().catch(() => {
+      if (!mounted) return;
+    });
+    return () => { mounted = false; };
+  }, [ensureCodeClient]);
+
+  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <GoogleAuthContext.Provider
       value={{
         user,
-        accessToken,
+        accessToken: googleAccessToken,
         isLoading,
         isReady: !isLoading,
         isConfigured,
+        hasStoredBackendJwt,
         error,
         signIn,
         requestDriveAccess,
