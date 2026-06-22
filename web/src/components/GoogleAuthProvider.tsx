@@ -322,10 +322,12 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
 
       return new Promise<google.accounts.oauth2.TokenResponse>((resolve, reject) => {
         let settled = false;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
         const rejectWith = (message: string) => {
           if (settled) return;
           settled = true;
+          if (timeoutId) clearTimeout(timeoutId);
           client.error_callback = undefined;
           reject(new Error(message));
         };
@@ -333,9 +335,15 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         const resolveWith = (resp: google.accounts.oauth2.TokenResponse) => {
           if (settled) return;
           settled = true;
+          if (timeoutId) clearTimeout(timeoutId);
           client.error_callback = undefined;
           resolve(resp);
         };
+
+        // Prevent GIS from hanging forever (especially prompt:"none" on mobile)
+        timeoutId = setTimeout(() => {
+          rejectWith("Google sign-in timed out. Please try again.");
+        }, 15_000);
 
         client.callback = (resp) => {
           if (resp.error) {

@@ -114,18 +114,35 @@ export function SyncProvider({
 
   // Silent auto-sync: no state changes, no rethrow.
   const autoSync = useCallback(async () => {
-    if (syncingRef.current) return;
-    if (!navigator.onLine) return;
-    if (!autoSyncEnabled) return;
-    if (!hasPendingChanges) return;
-    if (!getSilentToken) return;
+    if (syncingRef.current) {
+      console.info("[ServiceFlow] Auto-sync skipped: already syncing");
+      return;
+    }
+    if (!navigator.onLine) {
+      console.info("[ServiceFlow] Auto-sync skipped: offline");
+      return;
+    }
+    if (!autoSyncEnabled) {
+      console.info("[ServiceFlow] Auto-sync skipped: disabled in settings");
+      return;
+    }
+    if (!hasPendingChanges) {
+      console.info("[ServiceFlow] Auto-sync skipped: no pending changes");
+      return;
+    }
+    if (!getSilentToken) {
+      console.info("[ServiceFlow] Auto-sync skipped: no silent token getter");
+      return;
+    }
 
+    console.info("[ServiceFlow] Auto-sync starting");
     syncingRef.current = true;
     try {
       const token = await getSilentToken();
       await performSync(token);
+      console.info("[ServiceFlow] Auto-sync succeeded");
     } catch (err) {
-      console.warn("Auto-sync skipped", err);
+      console.warn("[ServiceFlow] Auto-sync failed:", err instanceof Error ? err.message : err);
     } finally {
       syncingRef.current = false;
     }
