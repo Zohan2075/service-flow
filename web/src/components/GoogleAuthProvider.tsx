@@ -481,11 +481,29 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           }
 
           if (!interactive) {
-            throw new Error(
-              user
-                ? "Google Drive session expired. Reconnect Drive to continue syncing."
-                : "Sign in with Google again to continue Drive sync."
-            );
+            // Try a silent GIS refresh (no popup) before giving up.
+            // This works when the user is still signed in to Google and has
+            // previously granted Drive access — Google issues a fresh token
+            // without any UI. Only if this fails do we reject.
+            try {
+              const silentResp = await requestToken({
+                prompt: "none",
+                fallbackMessage: "Google Drive silent refresh failed",
+                interactive: false,
+              });
+              applyTokenResponse(silentResp);
+              if (!user) {
+                await fetchUserInfo(silentResp.access_token);
+              }
+              resolve(silentResp.access_token);
+              return;
+            } catch {
+              throw new Error(
+                user
+                  ? "Google Drive session expired. Reconnect Drive to continue syncing."
+                  : "Sign in with Google again to continue Drive sync."
+              );
+            }
           }
 
           const resp = await requestToken({

@@ -1,7 +1,7 @@
 // ServiceFlow Service Worker — offline-first caching for static export
 // Bump CACHE version to force update after deploy.
 
-const CACHE = "serviceflow-v1";
+const CACHE = "serviceflow-v2";
 const IS_LOCALHOST =
   self.location.hostname === "localhost" ||
   self.location.hostname === "127.0.0.1";
