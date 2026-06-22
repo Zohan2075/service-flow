@@ -18,7 +18,12 @@ config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 
 # Logging
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    try:
+        fileConfig(config.config_file_name)
+    except KeyError:
+        # Fall back to basic config if alembic.ini is missing logging sections
+        from logging import basicConfig
+        basicConfig()
 
 # Import all models so they are registered with Base
 from app.database import Base
