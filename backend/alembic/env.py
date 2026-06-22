@@ -22,7 +22,7 @@ if config.config_file_name is not None:
 
 # Import all models so they are registered with Base
 from app.database import Base
-from app.models import user, service_type, time_entry  # noqa: F401
+from app.models import user, service_type, time_entry, google_token  # noqa: F401
 
 target_metadata = Base.metadata
 

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import auth, service_types, time_entries
+from app.routers import auth, drive, service_types, time_entries
 
 settings = get_settings()
 
@@ -40,6 +40,7 @@ app.add_middleware(
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(drive.router, prefix="/api/v1")
 app.include_router(service_types.router, prefix="/api/v1")
 app.include_router(time_entries.router, prefix="/api/v1")
 

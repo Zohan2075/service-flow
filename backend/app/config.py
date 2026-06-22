@@ -10,10 +10,10 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
-    # Supabase
-    supabase_url: str
-    supabase_key: str
-    supabase_service_role_key: str
+    # Supabase (optional — DATABASE_URL is used directly via SQLAlchemy)
+    supabase_url: str = ""
+    supabase_key: str = ""
+    supabase_service_role_key: str = ""
 
     # Database
     database_url: str

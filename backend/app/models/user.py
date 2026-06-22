@@ -33,6 +33,9 @@ class User(Base):
     time_entries: Mapped[list["TimeEntry"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"
     )
+    google_token: Mapped["GoogleToken"] = relationship(  # noqa: F821
+        "GoogleToken", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email}>"
