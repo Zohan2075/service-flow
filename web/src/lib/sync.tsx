@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useStore, serializeBackup } from "./store";
-import { uploadBackup } from "./drive";
+import { useStore, serializeBackup, deserializeBackup } from "./store";
+import { uploadBackup, downloadBackup } from "./drive";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +50,7 @@ export function SyncProvider({
   children: ReactNode;
 }) {
   const completeSync = useStore((s) => s.completeSync);
+  const importData = useStore((s) => s.importData);
   const autoSyncEnabled = useStore((s) => s.settings.autoSync);
   const hasPendingChanges = useStore((s) => s.syncMetadata.hasPendingChanges);
 
@@ -112,7 +113,7 @@ export function SyncProvider({
     }
   }, [getInteractiveToken, performSync]);
 
-  // Silent auto-sync: no state changes, no rethrow.
+  // Silent auto-sync + auto-restore: no state changes, no rethrow.
   const autoSync = useCallback(async () => {
     if (syncingRef.current) {
       console.info("[ServiceFlow] Auto-sync skipped: already syncing");
@@ -126,10 +127,6 @@ export function SyncProvider({
       console.info("[ServiceFlow] Auto-sync skipped: disabled in settings");
       return;
     }
-    if (!hasPendingChanges) {
-      console.info("[ServiceFlow] Auto-sync skipped: no pending changes");
-      return;
-    }
     if (!getSilentToken) {
       console.info("[ServiceFlow] Auto-sync skipped: no silent token getter");
       return;
@@ -139,14 +136,36 @@ export function SyncProvider({
     syncingRef.current = true;
     try {
       const token = await getSilentToken();
-      await performSync(token);
-      console.info("[ServiceFlow] Auto-sync succeeded");
+
+      if (hasPendingChanges) {
+        // Upload local changes to Drive
+        await performSync(token);
+        console.info("[ServiceFlow] Auto-sync: uploaded changes");
+      } else {
+        // No pending changes — check if another device uploaded a newer backup
+        try {
+          const backupText = await downloadBackup(token);
+          const backup = JSON.parse(backupText);
+          const lastSynced = useStore.getState().settings.lastSyncedAt;
+
+          if (backup.exported_at && (!lastSynced || new Date(backup.exported_at) > new Date(lastSynced))) {
+            const parsed = deserializeBackup(backup);
+            importData(parsed, { source: "remote" });
+            console.info("[ServiceFlow] Auto-restore: applied newer backup from Drive");
+          } else {
+            console.info("[ServiceFlow] Auto-restore: local data is up to date");
+          }
+        } catch {
+          // No backup exists or download failed — silent skip
+          console.info("[ServiceFlow] Auto-restore: no backup found or download failed");
+        }
+      }
     } catch (err) {
       console.warn("[ServiceFlow] Auto-sync failed:", err instanceof Error ? err.message : err);
     } finally {
       syncingRef.current = false;
     }
-  }, [autoSyncEnabled, getSilentToken, hasPendingChanges, performSync]);
+  }, [autoSyncEnabled, getSilentToken, hasPendingChanges, importData, performSync]);
 
   // Keep a ref to the latest autoSync so mount-only effects call the current version.
   useEffect(() => {
