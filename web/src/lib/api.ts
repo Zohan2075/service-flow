@@ -9,7 +9,11 @@ export async function exchangeDriveCode(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, redirect_uri: redirectUri }),
   });
-  if (!res.ok) throw new Error(`Drive exchange failed: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as Record<string, unknown>).detail ?? res.statusText;
+    throw new Error(`Drive exchange failed: ${res.status} - ${detail}`);
+  }
   return res.json();
 }
 
