@@ -174,7 +174,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       const cc = oauth.initCodeClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
-        redirect_uri: "postmessage",
+        redirect_uri: window.location.origin,
         callback: () => {},
       });
 
