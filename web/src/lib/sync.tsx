@@ -174,15 +174,21 @@ export function SyncProvider({
   }, [autoSync]);
 
   // Trigger: app open + tab becoming visible again.
+  // Delayed on mount to wait for IndexedDB hydration.
   useEffect(() => {
-    autoSyncRef.current();
+    const initTimer = setTimeout(() => {
+      autoSyncRef.current();
+    }, 500);
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
         autoSyncRef.current();
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearTimeout(initTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   // Trigger: debounced 30s after the last edit.
