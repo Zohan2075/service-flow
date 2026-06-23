@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
-import InterestedPersonModal from "@/components/interested/InterestedPersonModal";
+
+const InterestedPersonModal = dynamic(
+  () => import("@/components/interested/InterestedPersonModal"),
+  { ssr: false }
+);
 
 const GENDER_COLORS: Record<"male" | "female", string> = {
   male: "#3b82f6",
