@@ -9,6 +9,7 @@ import type {
   BackupFile,
   GoalDefinition,
   GoalScope,
+  InterestedPerson,
 } from "@/types/data";
 
 // ─── IndexedDB storage adapter for Zustand ──────────────────────────────────
@@ -71,6 +72,7 @@ interface AppState {
   serviceTypes: ServiceType[];
   timeEntries: TimeEntry[];
   goals: GoalDefinition[];
+  interestedPeople: InterestedPerson[];
   syncMetadata: SyncMetadata;
   uiState: UiState;
 
@@ -99,6 +101,11 @@ interface AppState {
   addGoal: (goal: Omit<GoalDefinition, "id" | "created_at" | "updated_at">) => void;
   updateGoal: (id: string, patch: Partial<GoalDefinition>) => void;
   deleteGoal: (id: string) => void;
+
+  // interested person actions
+  addInterestedPerson: (person: Omit<InterestedPerson, "id" | "created_at" | "updated_at">) => void;
+  updateInterestedPerson: (id: string, patch: Partial<InterestedPerson>) => void;
+  deleteInterestedPerson: (id: string) => void;
 
   // transient navigation state
   setViewedMonth: (date: Date) => void;
@@ -459,6 +466,7 @@ export const useStore = create<AppState>()(
       serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
       timeEntries: [],
       goals: [],
+      interestedPeople: [],
       syncMetadata: INITIAL_SYNC_METADATA,
       uiState: INITIAL_UI_STATE,
 
@@ -481,6 +489,7 @@ export const useStore = create<AppState>()(
               serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
               timeEntries: [],
               goals: [],
+              interestedPeople: [],
               syncMetadata: INITIAL_SYNC_METADATA,
               uiState: INITIAL_UI_STATE,
             };
@@ -496,6 +505,7 @@ export const useStore = create<AppState>()(
           serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
           timeEntries: [],
           goals: [],
+          interestedPeople: [],
           syncMetadata: INITIAL_SYNC_METADATA,
           uiState: INITIAL_UI_STATE,
         }),
@@ -764,6 +774,40 @@ export const useStore = create<AppState>()(
           })
         ),
 
+      // ── Interested People ──────────────────────────────────────────────
+      addInterestedPerson: (person) =>
+        set((s) =>
+          withPendingSync({
+            interestedPeople: [
+              ...s.interestedPeople,
+              {
+                ...person,
+                id: uuid(),
+                created_at: now(),
+                updated_at: now(),
+              },
+            ],
+          })
+        ),
+
+      updateInterestedPerson: (id, patch) =>
+        set((s) =>
+          withPendingSync({
+            interestedPeople: s.interestedPeople.map((person) =>
+              person.id === id
+                ? { ...person, ...patch, updated_at: now() }
+                : person
+            ),
+          })
+        ),
+
+      deleteInterestedPerson: (id) =>
+        set((s) =>
+          withPendingSync({
+            interestedPeople: s.interestedPeople.filter((person) => person.id !== id),
+          })
+        ),
+
       // ── Transient Month Navigation ────────────────────────────────────
       setViewedMonth: (date) =>
         set({
@@ -809,6 +853,7 @@ export const useStore = create<AppState>()(
             serviceTypes,
             timeEntries: (file.time_entries ?? []).map(normalizeTimeEntry),
             goals: normalizeGoals(file.goals, serviceTypeMap),
+            interestedPeople: file.interested_people ?? [],
             syncMetadata:
               options?.source === "remote"
                 ? INITIAL_SYNC_METADATA
@@ -833,6 +878,7 @@ export const useStore = create<AppState>()(
             serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
             timeEntries: [],
             goals: [],
+            interestedPeople: [],
             uiState: INITIAL_UI_STATE,
           })
         ),
@@ -847,6 +893,7 @@ export const useStore = create<AppState>()(
         serviceTypes: state.serviceTypes,
         timeEntries: state.timeEntries,
         goals: state.goals,
+        interestedPeople: state.interestedPeople,
         syncMetadata: state.syncMetadata,
       }) as unknown as AppState,
       // Deep-merge settings so new fields get their defaults when loading old data
@@ -866,6 +913,7 @@ export const useStore = create<AppState>()(
           serviceTypes,
           timeEntries: (p.timeEntries ?? current.timeEntries).map(normalizeTimeEntry),
           goals: normalizeGoals(p.goals ?? current.goals, serviceTypeMap),
+          interestedPeople: p.interestedPeople ?? current.interestedPeople,
           syncMetadata: p.syncMetadata ?? current.syncMetadata,
           uiState: current.uiState,
         };
@@ -882,6 +930,7 @@ export function serializeBackup(state: {
   serviceTypes: ServiceType[];
   timeEntries: TimeEntry[];
   goals?: GoalDefinition[];
+  interestedPeople?: InterestedPerson[];
 }): BackupFile {
   return {
     version: 1,
@@ -891,6 +940,7 @@ export function serializeBackup(state: {
     service_types: state.serviceTypes,
     time_entries: state.timeEntries,
     goals: state.goals ?? [],
+    interested_people: state.interestedPeople ?? [],
   };
 }
 

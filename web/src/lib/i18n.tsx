@@ -12,6 +12,7 @@ const translations = {
     "nav.calendar": "Calendar",
     "nav.reports": "Reports",
     "nav.settings": "Settings",
+    "nav.interested": "Interested People",
 
     // Login
     "login.welcome": "Welcome back",
@@ -260,6 +261,37 @@ const translations = {
     // Sidebar
     "sidebar.signOut": "Sign out",
 
+    // Interested People
+    "interested.title": "Interested People",
+    "interested.addNew": "Add Person",
+    "interested.name": "Name",
+    "interested.lastName": "Last Name",
+    "interested.gender": "Gender",
+    "interested.male": "Male",
+    "interested.female": "Female",
+    "interested.age": "Age",
+    "interested.address": "Address",
+    "interested.comments": "Comments",
+    "interested.location": "Location",
+    "interested.initialConversation": "Initial Conversation",
+    "interested.nextVisit": "Next Visit",
+    "interested.status": "Status",
+    "interested.bibleStudent": "Bible Student",
+    "interested.returnVisit": "Return Visit",
+    "interested.interestedPerson": "Interested Person",
+    "interested.selectLocation": "Tap map to set location",
+    "interested.myLocation": "My Location",
+    "interested.empty": "No people registered yet",
+    "interested.deleteConfirm": "Delete this person?",
+    "interested.saved": "Person saved",
+    "interested.deleted": "Person deleted",
+    "interested.noDate": "Not scheduled",
+    "interested.save": "Save",
+    "interested.cancel": "Cancel",
+    "interested.edit": "Edit",
+    "interested.delete": "Delete",
+    "interested.all": "All",
+
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
     "offline.syncPending": "Changes will sync when you're back online",
@@ -269,6 +301,7 @@ const translations = {
     "nav.calendar": "Calendario",
     "nav.reports": "Reportes",
     "nav.settings": "Ajustes",
+    "nav.interested": "Estudios y Revisitas",
 
     // Login
     "login.welcome": "Bienvenido de nuevo",
@@ -516,6 +549,37 @@ const translations = {
 
     // Sidebar
     "sidebar.signOut": "Cerrar sesión",
+
+    // Interested People
+    "interested.title": "Estudios y Revisitas",
+    "interested.addNew": "Agregar Persona",
+    "interested.name": "Nombre",
+    "interested.lastName": "Apellido",
+    "interested.gender": "Género",
+    "interested.male": "Masculino",
+    "interested.female": "Femenino",
+    "interested.age": "Edad",
+    "interested.address": "Dirección",
+    "interested.comments": "Comentarios",
+    "interested.location": "Ubicación",
+    "interested.initialConversation": "Conversación Inicial",
+    "interested.nextVisit": "Próxima Visita",
+    "interested.status": "Estado",
+    "interested.bibleStudent": "Estudiante de la Biblia",
+    "interested.returnVisit": "Revisita",
+    "interested.interestedPerson": "Persona Interesada",
+    "interested.selectLocation": "Toca el mapa para establecer ubicación",
+    "interested.myLocation": "Mi Ubicación",
+    "interested.empty": "No hay personas registradas aún",
+    "interested.deleteConfirm": "¿Eliminar esta persona?",
+    "interested.saved": "Persona guardada",
+    "interested.deleted": "Persona eliminada",
+    "interested.noDate": "No programada",
+    "interested.save": "Guardar",
+    "interested.cancel": "Cancelar",
+    "interested.edit": "Editar",
+    "interested.delete": "Eliminar",
+    "interested.all": "Todos",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",

@@ -88,6 +88,25 @@ export interface GoalDefinition {
   updated_at: string;
 }
 
+export type InterestedPersonStatus = "bible_student" | "return_visit" | "interested_person";
+
+export interface InterestedPerson {
+  id: string;
+  name: string;
+  last_name: string;
+  gender: "male" | "female";
+  age: number | null;
+  address: string | null;
+  comments: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  initial_conversation: string | null;
+  next_visit_date: string | null;  // ISO 8601 date
+  status: InterestedPersonStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CalendarDay {
   date: string;           // "yyyy-MM-dd"
   entries: TimeEntry[];
@@ -109,6 +128,7 @@ export interface BackupFile {
   service_types: ServiceType[];
   time_entries: TimeEntry[];
   goals?: GoalDefinition[];
+  interested_people?: InterestedPerson[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

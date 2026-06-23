@@ -1,0 +1,152 @@
+"use client";
+
+import { useState } from "react";
+import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
+import { useStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
+import InterestedPersonModal from "@/components/interested/InterestedPersonModal";
+
+const STATUS_COLORS: Record<InterestedPersonStatus, string> = {
+  bible_student: "#10b981",
+  return_visit: "#f59e0b",
+  interested_person: "#2094f3",
+};
+
+const STATUS_LABEL_KEYS: Record<InterestedPersonStatus, string> = {
+  bible_student: "interested.bibleStudent",
+  return_visit: "interested.returnVisit",
+  interested_person: "interested.interestedPerson",
+};
+
+type StatusFilter = "all" | InterestedPersonStatus;
+
+const FILTER_OPTIONS: { id: StatusFilter; labelKey: string }[] = [
+  { id: "all", labelKey: "interested.all" },
+  { id: "bible_student", labelKey: "interested.bibleStudent" },
+  { id: "return_visit", labelKey: "interested.returnVisit" },
+  { id: "interested_person", labelKey: "interested.interestedPerson" },
+];
+
+export default function InterestedPeoplePage() {
+  const { t } = useT();
+  const interestedPeople = useStore((s) => s.interestedPeople);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingPerson, setEditingPerson] = useState<InterestedPerson | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const filteredPeople =
+    statusFilter === "all"
+      ? interestedPeople
+      : interestedPeople.filter((p) => p.status === statusFilter);
+
+  const handleOpenAddModal = () => {
+    setShowAddModal(true);
+  };
+
+  const handleOpenEdit = (person: InterestedPerson) => {
+    setEditingPerson(person);
+  };
+
+  return (
+    <>
+      {/* Header */}
+      <header className="px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg md:text-xl font-bold">{t("interested.title")}</h2>
+          <button
+            onClick={handleOpenAddModal}
+            className="hidden md:inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:scale-[1.02] hover:opacity-95 active:scale-[0.99]"
+          >
+            <span className="material-symbols-outlined text-xl">add</span>
+            <span className="whitespace-nowrap">{t("interested.addNew")}</span>
+          </button>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="mt-3 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+          {FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setStatusFilter(option.id)}
+              className={cn(
+                "flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-colors",
+                statusFilter === option.id
+                  ? "bg-surface text-slate-900 dark:text-white shadow-sm"
+                  : "text-slate-500"
+              )}
+            >
+              {option.id !== "all" && (
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: STATUS_COLORS[option.id as InterestedPersonStatus] }}
+                />
+              )}
+              {t(option.labelKey as Parameters<typeof t>[0])}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {/* List */}
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas">
+        {filteredPeople.length === 0 ? (
+          <div className="text-center py-10 md:py-12 text-slate-400">
+            <span className="material-symbols-outlined text-4xl mb-2 block">people</span>
+            <p className="font-medium">{t("interested.empty")}</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredPeople.map((person) => (
+              <button
+                key={person.id}
+                onClick={() => handleOpenEdit(person)}
+                className="w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors"
+              >
+                <span
+                  className="size-3 rounded-full shrink-0"
+                  style={{ backgroundColor: STATUS_COLORS[person.status] }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-sm truncate">
+                    {person.name} {person.last_name}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">
+                    {t(STATUS_LABEL_KEYS[person.status] as Parameters<typeof t>[0])}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-slate-400">
+                    {person.next_visit_date
+                      ? person.next_visit_date
+                      : t("interested.noDate")}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* FAB — offset above mobile nav */}
+      <button
+        onClick={handleOpenAddModal}
+        className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20 md:hidden"
+      >
+        <span className="material-symbols-outlined text-2xl">add</span>
+      </button>
+
+      {showAddModal && (
+        <InterestedPersonModal onClose={() => setShowAddModal(false)} />
+      )}
+
+      {editingPerson && (
+        <InterestedPersonModal
+          person={editingPerson}
+          onClose={() => setEditingPerson(null)}
+        />
+      )}
+    </>
+  );
+}

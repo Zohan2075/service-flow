@@ -85,6 +85,7 @@ export function SyncProvider({
       serviceTypes: store.serviceTypes,
       timeEntries: store.timeEntries,
       goals: store.goals,
+      interestedPeople: store.interestedPeople,
     });
 
     await uploadBackup(token, JSON.stringify(backup));

@@ -132,6 +132,7 @@ export default function SettingsPage() {
   const settings = useStore((s) => s.settings);
   const timeEntries = useStore((s) => s.timeEntries);
   const goals = useStore((s) => s.goals);
+  const interestedPeople = useStore((s) => s.interestedPeople);
   const viewedMonth = useStore((s) => s.uiState.viewedMonth);
   const addServiceType = useStore((s) => s.addServiceType);
   const addGoal = useStore((s) => s.addGoal);
@@ -313,7 +314,7 @@ export default function SettingsPage() {
 
   // ── Export JSON ────────────────────────────────────────────────────────────
   const handleExport = () => {
-    const backup = serializeBackup({ profile, settings, serviceTypes, timeEntries, goals });
+    const backup = serializeBackup({ profile, settings, serviceTypes, timeEntries, goals, interestedPeople });
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
