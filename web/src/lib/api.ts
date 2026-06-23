@@ -1,12 +1,13 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export async function exchangeDriveCode(
-  code: string
+  code: string,
+  redirectUri: string = "postmessage"
 ): Promise<{ access_token: string; refresh_token: string }> {
   const res = await fetch(`${API_URL}/api/v1/drive/exchange`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, redirect_uri: redirectUri }),
   });
   if (!res.ok) throw new Error(`Drive exchange failed: ${res.status}`);
   return res.json();

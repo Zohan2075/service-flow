@@ -11,7 +11,7 @@ SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.f
 DRIVE_SCOPE = ["https://www.googleapis.com/auth/drive.file"]
 
 
-def exchange_auth_code(code: str) -> Credentials:
+def exchange_auth_code(code: str, redirect_uri: str = "postmessage") -> Credentials:
     """Exchange a GIS code-model auth code for Google OAuth credentials."""
     client_config = {
         "web": {
@@ -19,13 +19,13 @@ def exchange_auth_code(code: str) -> Credentials:
             "client_secret": settings.google_client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": ["postmessage"],
+            "redirect_uris": [redirect_uri],
         }
     }
     flow = Flow.from_client_config(
         client_config,
         scopes=SCOPES,
-        redirect_uri="postmessage",
+        redirect_uri=redirect_uri,
     )
     flow.fetch_token(code=code)
     return flow.credentials

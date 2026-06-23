@@ -20,7 +20,7 @@ async def exchange_token(
     payload: ExchangeRequest, db: Annotated[AsyncSession, Depends(get_db)]
 ):
     try:
-        creds = exchange_auth_code(payload.code)
+        creds = exchange_auth_code(payload.code, payload.redirect_uri)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to exchange auth code: {e}")
     if not creds.id_token:

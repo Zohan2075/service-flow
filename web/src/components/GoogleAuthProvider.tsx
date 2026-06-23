@@ -274,7 +274,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       const codeResp = await requestCode();
 
       // 2. Exchange code with backend → get backend JWT
-      const tokenResp = await exchangeDriveCode(codeResp.code);
+      const tokenResp = await exchangeDriveCode(codeResp.code, window.location.origin);
 
       // 3. Store backend JWT
       storeBackendJwt(tokenResp.access_token);
@@ -314,7 +314,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     // Interactive fallback: code model popup → exchange → store → get token
     const tryInteractive = async (): Promise<string> => {
       const codeResp = await requestCode();
-      const tokenResp = await exchangeDriveCode(codeResp.code);
+      const tokenResp = await exchangeDriveCode(codeResp.code, window.location.origin);
       storeBackendJwt(tokenResp.access_token);
       setBackendJwt(tokenResp.access_token);
       const googleToken = await getDriveToken(tokenResp.access_token);
