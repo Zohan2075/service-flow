@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 
 import L from "leaflet";
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents, CircleMarker } from "react-leaflet";
 import { useEffect, useRef, useState } from "react";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
@@ -91,14 +91,21 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const [comments, setComments] = useState(person?.comments ?? "");
   const [lat, setLat] = useState<number | null>(person?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(person?.longitude ?? null);
+  const [userLat, setUserLat] = useState<number | null>(null);
+  const [userLng, setUserLng] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const mapRef = useRef<L.Map | null>(null);
 
-  const hasLocation = lat != null && lng != null;
-  const center: [number, number] = hasLocation ? [lat as number, lng as number] : [20, -100];
-  const zoom = hasLocation ? 15 : 4;
+  const hasPersonLocation = lat != null && lng != null;
+  const hasUserLocation = userLat != null && userLng != null;
+  const center: [number, number] = hasUserLocation
+    ? [userLat as number, userLng as number]
+    : hasPersonLocation
+    ? [lat as number, lng as number]
+    : [20, -100];
+  const zoom = (hasUserLocation || hasPersonLocation) ? 15 : 4;
 
   const handleMapReady = (map: L.Map) => {
     mapRef.current = map;
@@ -125,8 +132,8 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
       (pos) => {
         const nextLat = pos.coords.latitude;
         const nextLng = pos.coords.longitude;
-        setLat(nextLat);
-        setLng(nextLng);
+        setUserLat(nextLat);
+        setUserLng(nextLng);
         mapRef.current?.setView([nextLat, nextLng], 15);
       },
       (err) => {
@@ -352,22 +359,46 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution="&copy; OpenStreetMap contributors"
               />
-              {hasLocation && (
+              {hasPersonLocation && (
                 <Marker
                   position={[lat as number, lng as number]}
                   draggable
                   eventHandlers={{ dragend: handleMarkerDragEnd }}
                 />
               )}
+              {hasUserLocation && (
+                <CircleMarker
+                  center={[userLat as number, userLng as number]}
+                  radius={8}
+                  pathOptions={{
+                    color: "#3b82f6",
+                    fillColor: "#3b82f6",
+                    fillOpacity: 0.5,
+                    weight: 3,
+                  }}
+                />
+              )}
               <MapClickHandler onLocationChange={handleLocationChange} />
               <MapController onMapReady={handleMapReady} />
             </MapContainer>
             <div className="mt-2 flex items-center justify-between gap-2">
-              <p className="text-xs text-slate-500">
-                {hasLocation
-                  ? `${(lat as number).toFixed(4)}, ${(lng as number).toFixed(4)}`
-                  : t("interested.selectLocation")}
-              </p>
+              <div className="space-y-0.5">
+                {hasPersonLocation && (
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-red-500 inline-block shrink-0" />
+                    {t("interested.personPin")}: {(lat as number).toFixed(4)}, {(lng as number).toFixed(4)}
+                  </p>
+                )}
+                {hasUserLocation && (
+                  <p className="text-xs text-blue-500 flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-blue-500 inline-block shrink-0" />
+                    {t("interested.myLocation")}: {(userLat as number).toFixed(4)}, {(userLng as number).toFixed(4)}
+                  </p>
+                )}
+                {!hasPersonLocation && !hasUserLocation && (
+                  <p className="text-xs text-slate-400">{t("interested.selectLocation")}</p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={handleMyLocation}
