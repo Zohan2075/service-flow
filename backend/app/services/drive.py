@@ -1,4 +1,4 @@
-from google_auth_oauthlib.flow import Flow
+import httpx
 from google.oauth2.credentials import Credentials
 import google.auth.transport.requests
 
@@ -7,28 +7,39 @@ from app.services.auth import verify_google_id_token
 
 settings = get_settings()
 
-SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.file"]
 DRIVE_SCOPE = ["https://www.googleapis.com/auth/drive.file"]
+
+TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
 def exchange_auth_code(code: str, redirect_uri: str = "postmessage") -> Credentials:
-    """Exchange a GIS code-model auth code for Google OAuth credentials."""
-    client_config = {
-        "web": {
-            "client_id": settings.google_client_id,
-            "client_secret": settings.google_client_secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [redirect_uri],
-        }
+    """Exchange a GIS code-model auth code for Google OAuth credentials.
+    
+    Uses the raw OAuth token endpoint (not google-auth-oauthlib's Flow)
+    to avoid scope translation issues. Flow auto-expands 'email' to
+    'https://www.googleapis.com/auth/userinfo.email' etc., which causes
+    a scope mismatch with the GIS authorization that uses short names.
+    """
+    data = {
+        "code": code,
+        "client_id": settings.google_client_id,
+        "client_secret": settings.google_client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
     }
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=SCOPES,
-        redirect_uri=redirect_uri,
+    resp = httpx.post(TOKEN_URI, data=data)
+    if not resp.is_success:
+        raise Exception(resp.text.strip())
+    token_data = resp.json()
+    return Credentials(
+        token=token_data.get("access_token"),
+        refresh_token=token_data.get("refresh_token"),
+        token_uri=TOKEN_URI,
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        scopes=token_data.get("scope", "").split(),
+        id_token=token_data.get("id_token"),
     )
-    flow.fetch_token(code=code)
-    return flow.credentials
 
 
 def refresh_access_token(refresh_token: str) -> Credentials:
