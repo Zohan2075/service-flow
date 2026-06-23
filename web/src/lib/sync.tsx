@@ -90,6 +90,9 @@ export function SyncProvider({
 
     await uploadBackup(token, JSON.stringify(backup));
     completeSync(syncedAt);
+    // Flush the microtask queue so Zustand's persist middleware writes
+    // lastSyncedAt to IndexedDB before the caller considers the sync done.
+    await new Promise((r) => setTimeout(r, 0));
   }, [completeSync]);
 
   const syncNow = useCallback(async (tokenOverride?: string) => {
@@ -148,8 +151,12 @@ export function SyncProvider({
           const backupText = await downloadBackup(token);
           const backup = JSON.parse(backupText);
           const lastSynced = useStore.getState().settings.lastSyncedAt;
+          // Compare backup.settings.lastSyncedAt (syncedAt used when the
+          // backup was created) rather than exported_at (a different clock
+          // a few ms later) to avoid a circular re-import on every refresh.
+          const backupSyncedAt = backup.settings?.lastSyncedAt ?? null;
 
-          if (backup.exported_at && (!lastSynced || new Date(backup.exported_at) > new Date(lastSynced))) {
+          if (backupSyncedAt && (!lastSynced || new Date(backupSyncedAt) > new Date(lastSynced))) {
             const parsed = deserializeBackup(backup);
             importData(parsed, { source: "remote" });
             console.info("[ServiceFlow] Auto-restore: applied newer backup from Drive");
