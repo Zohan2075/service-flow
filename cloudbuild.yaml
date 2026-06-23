@@ -7,6 +7,10 @@ steps:
       - '.'
       - '-f'
       - Dockerfile
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - 'gcr.io/$PROJECT_ID/github.com/zohan2075/service-flow:$COMMIT_SHA'
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
@@ -17,8 +21,6 @@ steps:
       - '--region=northamerica-south1'
       - '--platform=managed'
       - '--allow-unauthenticated'
-images:
-  - 'gcr.io/$PROJECT_ID/github.com/zohan2075/service-flow:$COMMIT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY
