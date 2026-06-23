@@ -100,7 +100,7 @@ export interface InterestedPerson {
   comments: string | null;
   latitude: number | null;
   longitude: number | null;
-  initial_conversation: string | null;
+  initial_conversation_date: string | null;  // ISO 8601 date — when the initial conversation happened
   next_visit_date: string | null;  // ISO 8601 date
   status: InterestedPersonStatus;
   created_at: string;

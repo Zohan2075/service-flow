@@ -82,8 +82,8 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
     person?.status ?? "interested_person"
   );
   const [address, setAddress] = useState(person?.address ?? "");
-  const [initialConversation, setInitialConversation] = useState(
-    person?.initial_conversation ?? ""
+  const [initialConversationDate, setInitialConversationDate] = useState(
+    person?.initial_conversation_date ?? ""
   );
   const [nextVisitDate, setNextVisitDate] = useState(
     person?.next_visit_date ?? ""
@@ -155,7 +155,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
         comments: comments.trim() || null,
         latitude: lat,
         longitude: lng,
-        initial_conversation: initialConversation.trim() || null,
+        initial_conversation_date: initialConversationDate || null,
         next_visit_date: nextVisitDate || null,
         status,
       };
@@ -302,16 +302,16 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             />
           </div>
 
-          {/* Initial Conversation */}
+          {/* Initial Conversation Date */}
           <div>
             <label className="block text-sm font-semibold mb-1">
               {t("interested.initialConversation")}
             </label>
-            <textarea
-              value={initialConversation}
-              onChange={(e) => setInitialConversation(e.target.value)}
-              rows={2}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            <input
+              type="date"
+              value={initialConversationDate}
+              onChange={(e) => setInitialConversationDate(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 

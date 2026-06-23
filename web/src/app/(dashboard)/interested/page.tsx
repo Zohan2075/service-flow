@@ -7,6 +7,11 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import InterestedPersonModal from "@/components/interested/InterestedPersonModal";
 
+const GENDER_COLORS: Record<"male" | "female", string> = {
+  male: "#3b82f6",
+  female: "#ec4899",
+};
+
 const STATUS_COLORS: Record<InterestedPersonStatus, string> = {
   bible_student: "#10b981",
   return_visit: "#f59e0b",
@@ -103,25 +108,48 @@ export default function InterestedPeoplePage() {
                 key={person.id}
                 onClick={() => handleOpenEdit(person)}
                 className="w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors"
+                style={{ borderLeft: `4px solid ${GENDER_COLORS[person.gender]}` }}
               >
                 <span
                   className="size-3 rounded-full shrink-0"
                   style={{ backgroundColor: STATUS_COLORS[person.status] }}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm truncate">
-                    {person.name} {person.last_name}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="text-xs"
+                      style={{ color: GENDER_COLORS[person.gender] }}
+                    >
+                      {person.gender === "male" ? "♂" : "♀"}
+                    </span>
+                    <p className="font-semibold text-sm truncate">
+                      {person.name} {person.last_name}
+                    </p>
+                  </div>
                   <p className="text-xs text-slate-400 truncate">
                     {t(STATUS_LABEL_KEYS[person.status] as Parameters<typeof t>[0])}
                   </p>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs text-slate-400">
-                    {person.next_visit_date
-                      ? person.next_visit_date
-                      : t("interested.noDate")}
-                  </p>
+                <div className="flex items-center gap-2 shrink-0">
+                  {person.latitude != null && person.longitude != null && (
+                    <a
+                      href={`https://www.google.com/maps?q=${person.latitude},${person.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center justify-center size-8 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                      title="Ver ubicación"
+                    >
+                      <span className="material-symbols-outlined text-lg">location_on</span>
+                    </a>
+                  )}
+                  <div className="text-right shrink-0">
+                    <p className="text-xs text-slate-400">
+                      {person.next_visit_date
+                        ? person.next_visit_date
+                        : t("interested.noDate")}
+                    </p>
+                  </div>
                 </div>
               </button>
             ))}
