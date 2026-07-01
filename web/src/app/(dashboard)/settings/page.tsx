@@ -1159,8 +1159,34 @@ export default function SettingsPage() {
 
         {/* ── Interested People Statuses ─────────────────────────────────── */}
         <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "interested" && "hidden")}>
-          <h3 className="font-bold text-lg mb-1">{t("settings.interestedPeople")}</h3>
+          <h3 className="font-bold text-lg mb-1">{settings.interestedSettingsLabel || t("settings.interestedPeople")}</h3>
           <p className="text-xs text-slate-400 mb-4">{t("settings.interestedStatusDesc")}</p>
+
+          {/* Custom labels */}
+          <div className="space-y-3 mb-6 pb-6 border-b border-slate-200 dark:border-slate-700">
+            <div>
+              <label className="block text-xs font-semibold mb-1">{t("settings.interestedNavLabel")}</label>
+              <input
+                type="text"
+                value={settings.interestedNavLabel ?? ""}
+                onChange={(e) => updateSettings({ interestedNavLabel: e.target.value || undefined })}
+                placeholder={t("nav.interested")}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <p className="text-[10px] text-slate-400 mt-0.5">{t("settings.interestedNavLabelDesc")}</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1">{t("settings.interestedPeople")}</label>
+              <input
+                type="text"
+                value={settings.interestedSettingsLabel ?? ""}
+                onChange={(e) => updateSettings({ interestedSettingsLabel: e.target.value || undefined })}
+                placeholder={t("settings.interestedPeople")}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <p className="text-[10px] text-slate-400 mt-0.5">{t("settings.interestedSettingsLabelDesc")}</p>
+            </div>
+          </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
             if (!over || active.id === over.id) return;

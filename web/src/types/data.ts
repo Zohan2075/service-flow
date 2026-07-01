@@ -40,6 +40,7 @@ export interface AppSettings {
   autoSync: boolean;
   // Navigation labels (customizable)
   interestedNavLabel?: string;    // custom label for "Interested People" nav item
+  interestedSettingsLabel?: string; // custom label for "Interested People" settings section heading
   // Sync metadata (kept for manual backup)
   lastSyncedAt: string | null;      // ISO 8601
 }

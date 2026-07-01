@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import { useT } from "@/lib/i18n";
+import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -27,6 +28,8 @@ export default function Sidebar() {
     .join("")
     .slice(0, 2)
     .toUpperCase() ?? "SF";
+
+  const interestedNavLabel = useStore((s) => s.settings.interestedNavLabel);
 
   const handleSignOut = () => {
     signOut();
@@ -59,7 +62,7 @@ export default function Sidebar() {
               )}
             >
               <span className="material-symbols-outlined">{icon}</span>
-              {t(labelKey)}
+              {labelKey === "nav.interested" && interestedNavLabel ? interestedNavLabel : t(labelKey)}
             </Link>
           );
         })}

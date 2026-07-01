@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
+import { useStore } from "@/lib/store";
 
 const navItems = [
   { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
@@ -18,6 +19,7 @@ export default function MobileNavBar() {
   const router = useRouter();
   const { t } = useT();
   const { user, signOut } = useSupabaseAuth();
+  const interestedNavLabel = useStore((s) => s.settings.interestedNavLabel);
 
   const handleSignOut = () => {
     signOut();
@@ -72,7 +74,7 @@ export default function MobileNavBar() {
             >
               <span className="material-symbols-outlined text-[22px] leading-none">{icon}</span>
               <span className={cn("text-[10px] font-medium leading-none", active && "font-bold")}>
-                {t(labelKey)}
+                {labelKey === "nav.interested" && interestedNavLabel ? interestedNavLabel : t(labelKey)}
               </span>
             </Link>
           );
