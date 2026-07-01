@@ -38,6 +38,8 @@ export interface AppSettings {
   showYearTotals: boolean;
   // Auto-sync to Drive (opt-out)
   autoSync: boolean;
+  // Navigation labels (customizable)
+  interestedNavLabel?: string;    // custom label for "Interested People" nav item
   // Sync metadata (kept for manual backup)
   lastSyncedAt: string | null;      // ISO 8601
 }
