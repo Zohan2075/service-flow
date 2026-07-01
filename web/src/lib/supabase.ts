@@ -318,13 +318,16 @@ export interface SyncState {
 }
 
 export async function pushAll(state: SyncState, userId: string): Promise<void> {
+  // Phase 1: push service_types FIRST (required for FK references in time_entries and goals)
+  await pushServiceTypes(state.serviceTypes, userId);
+
+  // Phase 2: push everything else in parallel (safe now that service_types exist)
   const promises: Promise<void>[] = [];
 
   if (state.profile) {
     promises.push(pushProfile(state.profile, userId));
   }
   promises.push(pushSettings(state.settings, userId));
-  promises.push(pushServiceTypes(state.serviceTypes, userId));
   promises.push(pushTimeEntries(state.timeEntries, userId));
   promises.push(pushGoals(state.goals, userId));
   promises.push(pushInterestedPeople(state.interestedPeople, userId));
