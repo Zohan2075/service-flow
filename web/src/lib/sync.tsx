@@ -9,12 +9,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useStore, serializeBackup, deserializeBackup } from "./store";
-import { uploadBackup, downloadBackup } from "./drive";
+import { useStore } from "./store";
+import { pushAll, pullAll, getSupabase } from "./supabase";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-const AUTOSYNC_DEBOUNCE_MS = 30_000;
+const AUTOSYNC_DEBOUNCE_MS = 2_000; // 2 seconds — near-instant sync
 
 export type SyncStatus = "idle" | "syncing" | "error";
 
@@ -24,7 +24,7 @@ export interface SyncState {
 }
 
 interface SyncContextValue extends SyncState {
-  syncNow: (tokenOverride?: string) => Promise<void>;
+  syncNow: () => Promise<void>;
   isOnline: boolean;
 }
 
@@ -38,17 +38,26 @@ export function useSync() {
   return ctx;
 }
 
-// ─── Manual-only Sync Provider ───────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function SyncProvider({
-  getInteractiveToken,
-  getSilentToken,
-  children,
-}: {
-  getInteractiveToken: (() => Promise<string>) | null;
-  getSilentToken: (() => Promise<string>) | null;
-  children: ReactNode;
+/** Check if remote state is effectively empty (no meaningful data). */
+function isRemoteEmpty(state: {
+  serviceTypes: unknown[];
+  timeEntries: unknown[];
+  goals: unknown[];
+  interestedPeople: unknown[];
 }) {
+  return (
+    state.serviceTypes.length === 0 &&
+    state.timeEntries.length === 0 &&
+    state.goals.length === 0 &&
+    state.interestedPeople.length === 0
+  );
+}
+
+// ─── Sync Provider ───────────────────────────────────────────────────────────
+
+export function SyncProvider({ children }: { children: ReactNode }) {
   const completeSync = useStore((s) => s.completeSync);
   const importData = useStore((s) => s.importData);
   const autoSyncEnabled = useStore((s) => s.settings.autoSync);
@@ -76,48 +85,60 @@ export function SyncProvider({
     };
   }, []);
 
-  const performSync = useCallback(async (token: string) => {
+  // ── performSync: push local state to Supabase ───────────────────────────
+
+  const performSync = useCallback(async () => {
+    const {
+      data: { session },
+    } = await getSupabase().auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Not authenticated");
+
     const syncedAt = new Date().toISOString();
     const store = useStore.getState();
-    const backup = serializeBackup({
-      profile: store.profile,
-      settings: { ...store.settings, lastSyncedAt: syncedAt },
-      serviceTypes: store.serviceTypes,
-      timeEntries: store.timeEntries,
-      goals: store.goals,
-      interestedPeople: store.interestedPeople,
-    });
 
-    await uploadBackup(token, JSON.stringify(backup));
+    await pushAll(
+      {
+        profile: store.profile,
+        settings: { ...store.settings, lastSyncedAt: syncedAt },
+        serviceTypes: store.serviceTypes,
+        timeEntries: store.timeEntries,
+        goals: store.goals,
+        interestedPeople: store.interestedPeople,
+      },
+      userId,
+    );
+
     completeSync(syncedAt);
-    // Flush the microtask queue so Zustand's persist middleware writes
-    // lastSyncedAt to IndexedDB before the caller considers the sync done.
+    // Flush microtask so Zustand persist writes lastSyncedAt to IndexedDB
     await new Promise((r) => setTimeout(r, 0));
   }, [completeSync]);
 
-  const syncNow = useCallback(async (tokenOverride?: string) => {
+  // ── syncNow: manual sync (push immediately) ─────────────────────────────
+
+  const syncNow = useCallback(async () => {
     if (!navigator.onLine) {
       throw new Error("You are offline. Reconnect and try again.");
     }
-    if (!getInteractiveToken || syncingRef.current) return;
+    if (syncingRef.current) return;
 
     syncingRef.current = true;
     setState({ status: "syncing", error: null });
 
     try {
-      const token = tokenOverride ?? await getInteractiveToken();
-      await performSync(token);
+      await performSync();
       setState({ status: "idle", error: null });
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Backup failed");
+      const error = err instanceof Error ? err : new Error("Sync failed");
       setState({ status: "error", error: error.message });
       throw error;
     } finally {
       syncingRef.current = false;
     }
-  }, [getInteractiveToken, performSync]);
+  }, [performSync]);
 
-  // Silent auto-sync + auto-restore: no state changes, no rethrow.
+  // ── autoSync: silent push (pending) or pull (no pending) ────────────────
+
   const autoSync = useCallback(async () => {
     if (syncingRef.current) {
       console.info("[ServiceFlow] Auto-sync skipped: already syncing");
@@ -131,51 +152,91 @@ export function SyncProvider({
       console.info("[ServiceFlow] Auto-sync skipped: disabled in settings");
       return;
     }
-    if (!getSilentToken) {
-      console.info("[ServiceFlow] Auto-sync skipped: no silent token getter");
+
+    // Check if user is authenticated
+    const {
+      data: { session },
+    } = await getSupabase().auth.getSession();
+    if (!session?.user?.id) {
+      console.info("[ServiceFlow] Auto-sync skipped: not authenticated");
       return;
     }
 
     console.info("[ServiceFlow] Auto-sync starting");
     syncingRef.current = true;
     try {
-      const token = await getSilentToken();
-
       if (hasPendingChanges) {
-        // Upload local changes to Drive
-        await performSync(token);
-        console.info("[ServiceFlow] Auto-sync: uploaded changes");
+        // Upload local changes to Supabase
+        await performSync();
+        console.info("[ServiceFlow] Auto-sync: pushed changes to Supabase");
       } else {
-        // No pending changes — check if another device uploaded a newer backup
+        // No pending changes — pull from Supabase
         try {
-          const backupText = await downloadBackup(token);
-          const backup = JSON.parse(backupText);
-          const lastSynced = useStore.getState().settings.lastSyncedAt;
-          // Compare backup.settings.lastSyncedAt (syncedAt used when the
-          // backup was created) rather than exported_at (a different clock
-          // a few ms later) to avoid a circular re-import on every refresh.
-          const backupSyncedAt = backup.settings?.lastSyncedAt ?? null;
+          const remote = await pullAll(session.user.id);
 
-          if (backupSyncedAt && (!lastSynced || new Date(backupSyncedAt) > new Date(lastSynced))) {
-            const parsed = deserializeBackup(backup);
-            importData(parsed, { source: "remote" });
-            console.info("[ServiceFlow] Auto-restore: applied newer backup from Drive");
+          // First-time sync: if server is empty but we have local data, push instead
+          const store = useStore.getState();
+          const hasLocalData =
+            store.serviceTypes.length > 0 ||
+            store.timeEntries.length > 0 ||
+            store.goals.length > 0 ||
+            store.interestedPeople.length > 0;
+
+          if (isRemoteEmpty(remote) && hasLocalData) {
+            await performSync();
+            console.info("[ServiceFlow] Auto-sync: pushed local data (first sync)");
+          } else if (!isRemoteEmpty(remote)) {
+            // Compare timestamps — only import if remote has newer data
+            const remoteLastSynced = remote.settings?.lastSyncedAt ?? null;
+            const localLastSynced = store.settings.lastSyncedAt;
+
+            if (
+              remoteLastSynced &&
+              (!localLastSynced ||
+                new Date(remoteLastSynced) > new Date(localLastSynced))
+            ) {
+              importData(
+                {
+                  version: 1 as const,
+                  exported_at: new Date().toISOString(),
+                  profile: remote.profile,
+                  settings: remote.settings,
+                  service_types: remote.serviceTypes,
+                  time_entries: remote.timeEntries,
+                  goals: remote.goals,
+                  interested_people: remote.interestedPeople,
+                },
+                { source: "remote" },
+              );
+              console.info(
+                "[ServiceFlow] Auto-restore: applied newer data from Supabase",
+              );
+            } else {
+              console.info(
+                "[ServiceFlow] Auto-restore: local data is up to date",
+              );
+            }
           } else {
-            console.info("[ServiceFlow] Auto-restore: local data is up to date");
+            console.info("[ServiceFlow] Auto-restore: no remote data to restore");
           }
-        } catch {
-          // No backup exists or download failed — silent skip
-          console.info("[ServiceFlow] Auto-restore: no backup found or download failed");
+        } catch (err) {
+          console.info(
+            "[ServiceFlow] Auto-restore: pull failed or no data found",
+            err instanceof Error ? err.message : err,
+          );
         }
       }
     } catch (err) {
-      console.warn("[ServiceFlow] Auto-sync failed:", err instanceof Error ? err.message : err);
+      console.warn(
+        "[ServiceFlow] Auto-sync failed:",
+        err instanceof Error ? err.message : err,
+      );
     } finally {
       syncingRef.current = false;
     }
-  }, [autoSyncEnabled, getSilentToken, hasPendingChanges, importData, performSync]);
+  }, [autoSyncEnabled, hasPendingChanges, importData, performSync]);
 
-  // Keep a ref to the latest autoSync so mount-only effects call the current version.
+  // Keep a ref to the latest autoSync so mount-only effects call current version.
   useEffect(() => {
     autoSyncRef.current = autoSync;
   }, [autoSync]);

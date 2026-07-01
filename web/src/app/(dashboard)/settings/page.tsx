@@ -20,8 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useStore, serializeBackup, deserializeBackup } from "@/lib/store";
-import { useGoogleAuth } from "@/components/GoogleAuthProvider";
-import { downloadBackup } from "@/lib/drive";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
@@ -124,7 +123,7 @@ async function optimizeProfileImage(file: File) {
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { t, language, setLanguage } = useT();
-  const { user, isLoading: googleLoading, isConfigured, error: googleError, hasStoredBackendJwt, requestDriveAccess, signIn } = useGoogleAuth();
+  const { user, isLoading: authLoading, isConfigured, error: authError, signIn } = useSupabaseAuth();
   const sync = useSync();
 
   const serviceTypes = useStore((s) => s.serviceTypes);
@@ -346,24 +345,11 @@ export default function SettingsPage() {
     input.click();
   };
 
-  // ── Drive Backup ──────────────────────────────────────────────────────────
-  const ensureDriveAccess = async () => {
-    if (!isConfigured) {
-      throw new Error(t("settings.driveConfigHint"));
-    }
-
-    if (!user) {
-      await signIn();
-    }
-
-    return requestDriveAccess({ interactive: true });
-  };
-
-  const handleDriveBackup = async () => {
+  // ── Supabase Sync ──────────────────────────────────────────────────────────
+  const handleSyncNow = async () => {
     setDriveLoading(true);
     try {
-      const token = await ensureDriveAccess();
-      await sync.syncNow(token);
+      await sync.syncNow();
       toast.success(t("settings.backedUp"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("settings.driveBackupFailed"));
@@ -381,28 +367,6 @@ export default function SettingsPage() {
     if (oldIndex === -1 || newIndex === -1) return;
 
     reorderServiceTypes(arrayMove(serviceTypes, oldIndex, newIndex).map((serviceType) => serviceType.id));
-  };
-
-  const restoreBackupFromDrive = async (token: string) => {
-    const text = await downloadBackup(token);
-    const parsed = JSON.parse(text);
-    const backup = deserializeBackup(parsed);
-    importData(backup, { source: "remote" });
-  };
-
-  // ── Drive Restore ─────────────────────────────────────────────────────────
-  const handleDriveRestore = async () => {
-    setDriveLoading(true);
-    try {
-      const token = await ensureDriveAccess();
-      await restoreBackupFromDrive(token);
-      completeSync(new Date().toISOString());
-      toast.success(t("settings.restored"));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("settings.driveRestoreFailed"));
-    } finally {
-      setDriveLoading(false);
-    }
   };
 
   // ── Save profile ──────────────────────────────────────────────────────────
@@ -462,7 +426,7 @@ export default function SettingsPage() {
   const activeThemeLabel = resolvedTheme === "dark" ? t("settings.dark") : t("settings.light");
   const activeSurface = resolvedTheme === "dark" ? settings.customSurfaceDark : settings.customSurfaceLight;
   const activeBackground = resolvedTheme === "dark" ? settings.customBackgroundDark : settings.customBackgroundLight;
-  const isDriveBusy = driveLoading || googleLoading || sync.status === "syncing";
+  const isDriveBusy = driveLoading || authLoading || sync.status === "syncing";
   const hasPendingChanges = useStore((s) => s.syncMetadata.hasPendingChanges);
   const updateActiveSurface = (value: string | null) => {
     updateSettings(resolvedTheme === "dark" ? { customSurfaceDark: value } : { customSurfaceLight: value });
@@ -1220,9 +1184,9 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {googleError && isConfigured && (
+            {authError && isConfigured && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300">
-                {googleError}
+                {authError}
               </div>
             )}
 
@@ -1230,20 +1194,18 @@ export default function SettingsPage() {
               <div className="flex items-center gap-3 min-w-0">
                 <span className={cn(
                   "material-symbols-outlined shrink-0",
-                  !user ? "text-slate-400" : hasStoredBackendJwt ? "text-green-500" : "text-amber-500"
+                  !user ? "text-slate-400" : "text-green-500"
                 )}>
-                  {!user ? "account_circle" : hasStoredBackendJwt ? "cloud_done" : "cloud_sync"}
+                  {!user ? "account_circle" : "cloud_done"}
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">
-                    {!user ? t("settings.notSignedIn") : hasStoredBackendJwt ? t("settings.driveConnected") : t("settings.driveNotConnected")}
+                    {!user ? t("settings.notSignedIn") : "Connected to Supabase"}
                   </p>
                   <p className="text-xs text-slate-400">
                     {!user
                       ? t("settings.signInFirst")
-                      : hasStoredBackendJwt
-                        ? t("settings.driveReady")
-                        : t("settings.connectDriveOnce")}
+                      : "Your data syncs automatically with Supabase"}
                   </p>
                 </div>
               </div>
@@ -1303,30 +1265,18 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Manual backup/restore */}
+              {/* Manual sync */}
               <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.manual")}</p>
                 <button
-                  onClick={handleDriveBackup}
-                  disabled={isDriveBusy || !isConfigured}
+                  onClick={handleSyncNow}
+                  disabled={isDriveBusy || !isConfigured || !user}
                   className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-green-500">cloud_upload</span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">{t("settings.backupDrive")}</p>
-                    <p className="text-xs text-slate-400 truncate">{t("settings.backupDriveDesc")}</p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={handleDriveRestore}
-                  disabled={isDriveBusy || !isConfigured}
-                  className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-blue-500">cloud_download</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{t("settings.restoreDrive")}</p>
-                    <p className="text-xs text-slate-400 truncate">{t("settings.restoreDriveDesc")}</p>
+                    <p className="text-sm font-semibold">Sync Now</p>
+                    <p className="text-xs text-slate-400 truncate">Push local changes to Supabase</p>
                   </div>
                 </button>
               </div>

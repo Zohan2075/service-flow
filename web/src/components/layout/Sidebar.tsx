@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useGoogleAuth } from "@/components/GoogleAuthProvider";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname() ?? "";
   const router = useRouter();
-  const { user, signOut } = useGoogleAuth();
+  const { user, signOut } = useSupabaseAuth();
   const { theme, setTheme } = useTheme();
   const { t } = useT();
 
@@ -67,7 +67,7 @@ export default function Sidebar() {
 
       {/* Theme toggle + User */}
       <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
-        <div className="flex items-center gap-2 justify-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+        <div className="flex items-center gap-2 justify-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1" suppressHydrationWarning>
           {(["light", "dark", "system"] as const).map((t) => (
             <button
               key={t}

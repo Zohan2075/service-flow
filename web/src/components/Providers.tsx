@@ -1,36 +1,17 @@
 "use client";
 
-import { useCallback } from "react";
-import { GoogleAuthProvider, useGoogleAuth } from "@/components/GoogleAuthProvider";
+import { SupabaseAuthProvider } from "@/components/SupabaseAuthProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { I18nProvider } from "@/lib/i18n";
 import { SyncProvider } from "@/lib/sync";
 import { Toaster } from "react-hot-toast";
 
-function SyncBridge({ children }: { children: React.ReactNode }) {
-  const { requestDriveAccess } = useGoogleAuth();
-
-  const getInteractiveToken = useCallback(async () => {
-    return requestDriveAccess({ interactive: true });
-  }, [requestDriveAccess]);
-
-  const getSilentToken = useCallback(async () => {
-    return requestDriveAccess({ interactive: false });
-  }, [requestDriveAccess]);
-
-  return (
-    <SyncProvider getInteractiveToken={getInteractiveToken} getSilentToken={getSilentToken}>
-      {children}
-    </SyncProvider>
-  );
-}
-
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <GoogleAuthProvider>
+    <SupabaseAuthProvider>
       <ThemeProvider>
         <I18nProvider>
-          <SyncBridge>
+          <SyncProvider>
             {children}
             <Toaster
               position="top-right"
@@ -38,9 +19,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                 className: "dark:bg-slate-800 dark:text-white",
               }}
             />
-          </SyncBridge>
+          </SyncProvider>
         </I18nProvider>
       </ThemeProvider>
-    </GoogleAuthProvider>
+    </SupabaseAuthProvider>
   );
 }

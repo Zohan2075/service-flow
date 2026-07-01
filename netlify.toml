@@ -5,5 +5,5 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  NEXT_PUBLIC_GOOGLE_CLIENT_ID = "239823436666-l9857mtjqou52t4b799hhrc50d5nll9p.apps.googleusercontent.com"
-  NEXT_PUBLIC_API_URL = "https://service-flow-api-239823436666.northamerica-south1.run.app"
+  NEXT_PUBLIC_SUPABASE_URL = "https://fguxwkdglianjmenjovy.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_lzECDFuzfkqYXtrVgSd_Hg_q1Ls7aG8"
