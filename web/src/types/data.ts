@@ -105,6 +105,7 @@ export interface InterestedPerson {
   longitude: number | null;
   initial_conversation_date: string | null;  // ISO 8601 date — when the initial conversation happened
   next_visit_date: string | null;  // ISO 8601 date
+  next_visit_weekly_day: number | null;  // 0=Sun…6=Sat — when set, next visit repeats weekly on this day
   status: InterestedPersonStatus;
   created_at: string;
   updated_at: string;

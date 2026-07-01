@@ -51,6 +51,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const updateInterestedPerson = useStore((s) => s.updateInterestedPerson);
   const deleteInterestedPerson = useStore((s) => s.deleteInterestedPerson);
   const interestedStatuses = useStore((s) => s.interestedStatuses);
+  const language = useStore((s) => s.settings.language);
   const { t } = useT();
 
   // Build status lookup from customizable config
@@ -82,6 +83,9 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const [nextVisitDate, setNextVisitDate] = useState(
     person?.next_visit_date ?? ""
   );
+  const [nextVisitWeeklyDay, setNextVisitWeeklyDay] = useState<number | null>(
+    person?.next_visit_weekly_day ?? null
+  );
   const [comments, setComments] = useState(person?.comments ?? "");
   const [lat, setLat] = useState<number | null>(person?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(person?.longitude ?? null);
@@ -89,6 +93,15 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const [userLng, setUserLng] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Localized short weekday names (0=Sun…6=Sat)
+  const WEEKDAYS_SHORT = useMemo(
+    () =>
+      language === "es"
+        ? ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
+        : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    [language],
+  );
 
   const mapRef = useRef<L.Map | null>(null);
 
@@ -158,6 +171,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
         longitude: lng,
         initial_conversation_date: initialConversationDate || null,
         next_visit_date: nextVisitDate || null,
+        next_visit_weekly_day: nextVisitWeeklyDay,
         status,
       };
 
@@ -329,6 +343,45 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
               onChange={(e) => setNextVisitDate(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
             />
+
+            {/* Weekly toggle */}
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setNextVisitWeeklyDay(nextVisitWeeklyDay !== null ? null : 0)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors",
+                  nextVisitWeeklyDay !== null
+                    ? "bg-primary text-white border-primary"
+                    : "border-slate-200 dark:border-slate-700 text-slate-500 hover:border-primary/50",
+                )}
+              >
+                <span className="material-symbols-outlined text-base">
+                  {nextVisitWeeklyDay !== null ? "event_repeat" : "repeat"}
+                </span>
+                {t("interested.weekly")}
+              </button>
+
+              {nextVisitWeeklyDay !== null && (
+                <div className="mt-2 flex gap-1">
+                  {WEEKDAYS_SHORT.map((label, day) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setNextVisitWeeklyDay(day)}
+                      className={cn(
+                        "flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                        nextVisitWeeklyDay === day
+                          ? "bg-primary text-white"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-primary/10",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Comments */}

@@ -28,6 +28,15 @@ export default function InterestedPeoplePage() {
   const [editingPerson, setEditingPerson] = useState<InterestedPerson | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
+  // Localized short weekday names (0=Sun…6=Sat)
+  const WEEKDAYS = useMemo(
+    () =>
+      settings.language === "es"
+        ? ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
+        : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    [settings.language],
+  );
+
   // Build lookup maps from customizable statuses (fall back to defaults if empty)
   const statusMap = useMemo(() => {
     const map = new Map<string, { name: string; color: string; icon: string }>();
@@ -157,11 +166,20 @@ export default function InterestedPeoplePage() {
                     </a>
                   )}
                   <div className="text-right shrink-0">
-                    <p className="text-xs text-slate-400">
-                      {person.next_visit_date
-                        ? person.next_visit_date
-                        : t("interested.noDate")}
-                    </p>
+                    {person.next_visit_weekly_day != null ? (
+                      <div className="flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs text-primary">event_repeat</span>
+                        <p className="text-xs text-primary font-semibold">
+                          {WEEKDAYS[person.next_visit_weekly_day]}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">
+                        {person.next_visit_date
+                          ? person.next_visit_date
+                          : t("interested.noDate")}
+                      </p>
+                    )}
                   </div>
                 </div>
               </button>
