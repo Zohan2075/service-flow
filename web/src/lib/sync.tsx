@@ -68,6 +68,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const syncingRef = useRef(false);
   const autoSyncRef = useRef<() => void>(() => {});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasPulledOnceRef = useRef(false);
 
   // Track online / offline
   useEffect(() => {
@@ -94,8 +95,51 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const userId = session?.user?.id;
     if (!userId) throw new Error("Not authenticated");
 
-    const syncedAt = new Date().toISOString();
     const store = useStore.getState();
+
+    // SAFETY: Before pushing, check if remote has data but local is empty.
+    // This prevents a fresh device from overwriting all data with empty state.
+    const hasLocalData =
+      store.serviceTypes.length > 0 ||
+      store.timeEntries.length > 0 ||
+      store.goals.length > 0 ||
+      store.interestedPeople.length > 0;
+
+    if (!hasLocalData && !hasPulledOnceRef.current) {
+      console.info("[ServiceFlow] Push blocked: local data is empty and we haven't pulled yet. Pulling first...");
+      try {
+        const remote = await pullAll(userId);
+        const remoteHasData =
+          remote.serviceTypes.length > 0 ||
+          remote.timeEntries.length > 0 ||
+          remote.goals.length > 0 ||
+          remote.interestedPeople.length > 0;
+
+        if (remoteHasData) {
+          importData(
+            {
+              version: 1 as const,
+              exported_at: new Date().toISOString(),
+              profile: remote.profile,
+              settings: remote.settings,
+              service_types: remote.serviceTypes,
+              time_entries: remote.timeEntries,
+              goals: remote.goals,
+              interested_people: remote.interestedPeople,
+              interested_statuses: remote.interestedStatuses,
+            },
+            { source: "remote" },
+          );
+          hasPulledOnceRef.current = true;
+          console.info("[ServiceFlow] Pulled remote data to prevent overwrite");
+          return; // Don't push — we just pulled
+        }
+      } catch (err) {
+        console.warn("[ServiceFlow] Safety pull failed:", err instanceof Error ? err.message : err);
+      }
+    }
+
+    const syncedAt = new Date().toISOString();
 
     console.info(`[ServiceFlow] Pushing to Supabase: ${store.serviceTypes.length} serviceTypes, ${store.timeEntries.length} entries, ${store.goals.length} goals, ${store.interestedPeople.length} interestedPeople`);
 
@@ -112,10 +156,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       userId,
     );
 
+    hasPulledOnceRef.current = true;
     completeSync(syncedAt);
     // Flush microtask so Zustand persist writes lastSyncedAt to IndexedDB
     await new Promise((r) => setTimeout(r, 0));
-  }, [completeSync]);
+  }, [completeSync, importData]);
 
   // ── syncNow: manual sync (push immediately) ─────────────────────────────
 
@@ -168,6 +213,58 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     console.info("[ServiceFlow] Auto-sync starting");
     syncingRef.current = true;
     try {
+      // CRITICAL: Always pull first on a fresh device to prevent overwriting remote data
+      if (!hasPulledOnceRef.current) {
+        console.info("[ServiceFlow] First sync: pulling from Supabase before any push");
+        try {
+          const remote = await pullAll(session.user.id);
+          hasPulledOnceRef.current = true;
+          console.info(
+            `[ServiceFlow] Pulled from Supabase: ${remote.serviceTypes.length} serviceTypes, ${remote.timeEntries.length} entries, ${remote.goals.length} goals, ${remote.interestedPeople.length} interestedPeople`,
+          );
+
+          const store = useStore.getState();
+          const hasLocalData =
+            store.serviceTypes.length > 0 ||
+            store.timeEntries.length > 0 ||
+            store.goals.length > 0 ||
+            store.interestedPeople.length > 0;
+
+          const remoteHasData =
+            remote.serviceTypes.length > 0 ||
+            remote.timeEntries.length > 0 ||
+            remote.goals.length > 0 ||
+            remote.interestedPeople.length > 0;
+
+          if (remoteHasData) {
+            // Remote has data — import it (this is the primary source of truth)
+            importData(
+              {
+                version: 1 as const,
+                exported_at: new Date().toISOString(),
+                profile: remote.profile,
+                settings: remote.settings,
+                service_types: remote.serviceTypes,
+                time_entries: remote.timeEntries,
+                goals: remote.goals,
+                interested_people: remote.interestedPeople,
+                interested_statuses: remote.interestedStatuses,
+              },
+              { source: "remote" },
+            );
+            console.info("[ServiceFlow] First sync: imported remote data");
+          } else if (hasLocalData) {
+            // Remote is empty but local has data — push local data
+            await performSync();
+            console.info("[ServiceFlow] First sync: pushed local data (remote was empty)");
+          }
+        } catch (err) {
+          console.warn("[ServiceFlow] First sync pull failed:", err instanceof Error ? err.message : err);
+        }
+        return;
+      }
+
+      // Subsequent syncs: normal push/pull logic
       if (hasPendingChanges) {
         // Upload local changes to Supabase
         await performSync();
@@ -180,7 +277,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             `[ServiceFlow] Pulled from Supabase: ${remote.serviceTypes.length} serviceTypes, ${remote.timeEntries.length} entries, ${remote.goals.length} goals, ${remote.interestedPeople.length} interestedPeople`,
           );
 
-          // First-time sync: if server is empty but we have local data, push instead
           const store = useStore.getState();
           const hasLocalData =
             store.serviceTypes.length > 0 ||
@@ -190,13 +286,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
           if (isRemoteEmpty(remote) && hasLocalData) {
             await performSync();
-            console.info("[ServiceFlow] Auto-sync: pushed local data (first sync)");
+            console.info("[ServiceFlow] Auto-sync: pushed local data (remote was empty)");
           } else if (!isRemoteEmpty(remote)) {
-            // Compare timestamps — only import if remote has newer data
             const remoteLastSynced = remote.settings?.lastSyncedAt ?? null;
             const localLastSynced = store.settings.lastSyncedAt;
 
-            // Import if remote is newer, OR if we have no sync timestamp yet
             const shouldImport =
               !localLastSynced ||
               !remoteLastSynced ||
@@ -217,13 +311,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
                 },
                 { source: "remote" },
               );
-              console.info(
-                "[ServiceFlow] Auto-restore: applied newer data from Supabase",
-              );
+              console.info("[ServiceFlow] Auto-restore: applied newer data from Supabase");
             } else {
-              console.info(
-                "[ServiceFlow] Auto-restore: local data is up to date",
-              );
+              console.info("[ServiceFlow] Auto-restore: local data is up to date");
             }
           } else {
             console.info("[ServiceFlow] Auto-restore: no remote data to restore");
