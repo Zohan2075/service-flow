@@ -190,11 +190,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             const remoteLastSynced = remote.settings?.lastSyncedAt ?? null;
             const localLastSynced = store.settings.lastSyncedAt;
 
-            if (
-              remoteLastSynced &&
-              (!localLastSynced ||
-                new Date(remoteLastSynced) > new Date(localLastSynced))
-            ) {
+            // Import if remote is newer, OR if we have no sync timestamp yet
+            const shouldImport =
+              !localLastSynced ||
+              !remoteLastSynced ||
+              new Date(remoteLastSynced) > new Date(localLastSynced);
+
+            if (shouldImport) {
               importData(
                 {
                   version: 1 as const,
