@@ -449,7 +449,7 @@ export default function SettingsPage() {
     { id: "language", label: t("settings.language"), icon: "translate" },
     { id: "entries", label: t("settings.entriesServices"), icon: "construction" },
     { id: "reports", label: t("settings.reportsGoals"), icon: "flag" },
-    { id: "interested", label: t("settings.interestedPeople"), icon: "people" },
+    { id: "interested", label: settings.interestedSettingsLabel || t("settings.interestedPeople"), icon: "people" },
     { id: "data", label: t("settings.dataBackup"), icon: "cloud_upload" },
     { id: "danger", label: t("settings.dangerZone"), icon: "warning" },
   ];

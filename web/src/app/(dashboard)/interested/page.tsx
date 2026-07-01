@@ -21,6 +21,7 @@ type StatusFilter = "all" | InterestedPersonStatus;
 
 export default function InterestedPeoplePage() {
   const { t } = useT();
+  const settings = useStore((s) => s.settings);
   const interestedPeople = useStore((s) => s.interestedPeople);
   const interestedStatuses = useStore((s) => s.interestedStatuses);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -65,7 +66,7 @@ export default function InterestedPeoplePage() {
       {/* Header */}
       <header className="px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg md:text-xl font-bold">{t("interested.title")}</h2>
+          <h2 className="text-lg md:text-xl font-bold">{settings.interestedSettingsLabel || t("interested.title")}</h2>
           <button
             onClick={handleOpenAddModal}
             className="hidden md:inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:scale-[1.02] hover:opacity-95 active:scale-[0.99]"
