@@ -84,35 +84,45 @@ export default function Sidebar() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3 p-2 rounded-xl">
-          <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-            {user?.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={user.image}
-                alt={initials}
-                className="size-10 rounded-full object-cover"
-              />
-            ) : (
-              initials
-            )}
+        {user ? (
+          <div className="flex items-center gap-3 p-2 rounded-xl">
+            <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+              {user.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.image}
+                  alt={initials}
+                  className="size-10 rounded-full object-cover"
+                />
+              ) : (
+                initials
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">
+                {user.name ?? "User"}
+              </p>
+              <p className="text-xs text-slate-500 truncate">
+                {user.email ?? ""}
+              </p>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              title="Sign out"
+            >
+              <span className="material-symbols-outlined text-base">logout</span>
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">
-              {user?.name ?? "User"}
-            </p>
-            <p className="text-xs text-slate-500 truncate">
-              {user?.email ?? ""}
-            </p>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-            title="Sign out"
+        ) : (
+          <Link
+            href="/login"
+            className="flex items-center justify-center gap-2 p-3 rounded-xl bg-primary/10 text-primary font-semibold hover:bg-primary/20 transition-colors"
           >
-            <span className="material-symbols-outlined text-base">logout</span>
-          </button>
-        </div>
+            <span className="material-symbols-outlined text-base">login</span>
+            {t("login.continueGoogle")}
+          </Link>
+        )}
       </div>
     </aside>
   );
