@@ -1803,6 +1803,7 @@ function SortableServiceTypeItem({
             className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 touch-none cursor-grab active:cursor-grabbing dark:hover:bg-slate-800 dark:hover:text-slate-200"
             title="Drag to reorder"
             aria-label={`Drag ${serviceType.name} to reorder`}
+            suppressHydrationWarning
             {...attributes}
             {...listeners}
           >

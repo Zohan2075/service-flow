@@ -23,12 +23,7 @@ function hexToRgb(hex: string): string {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themeSetting = useStore((s) => s.settings.theme);
   const updateSettings = useStore((s) => s.updateSettings);
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("sf-theme") as Theme) || "system";
-    }
-    return "system";
-  });
+  const [theme, setThemeState] = useState<Theme>("system");
   const [resolved, setResolved] = useState<"light" | "dark">("light");
 
   const accentColor = useStore((s) => s.settings.accentColor);
