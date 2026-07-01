@@ -6,5 +6,6 @@ web/.env.local
 
 # Backend
 backend/.env
+backend-legacy/.env
 backend/.venv/
 **/__pycache__/
