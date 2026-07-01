@@ -710,6 +710,7 @@ export default function SettingsPage() {
                     activeSurface === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
                   )}
                   style={{ backgroundColor: c }}
+                  suppressHydrationWarning
                 />
               ))}
               <label
@@ -753,6 +754,7 @@ export default function SettingsPage() {
                     activeBackground === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
                   )}
                   style={{ backgroundColor: c }}
+                  suppressHydrationWarning
                 />
               ))}
               <label
@@ -1092,6 +1094,7 @@ export default function SettingsPage() {
                       newColor === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
                     )}
                     style={{ backgroundColor: c }}
+                    suppressHydrationWarning
                   />
                 ))}
                 <label

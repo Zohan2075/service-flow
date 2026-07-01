@@ -97,6 +97,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const syncedAt = new Date().toISOString();
     const store = useStore.getState();
 
+    console.info(`[ServiceFlow] Pushing to Supabase: ${store.serviceTypes.length} serviceTypes, ${store.timeEntries.length} entries, ${store.goals.length} goals, ${store.interestedPeople.length} interestedPeople`);
+
     await pushAll(
       {
         profile: store.profile,
@@ -173,6 +175,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         // No pending changes — pull from Supabase
         try {
           const remote = await pullAll(session.user.id);
+          console.info(
+            `[ServiceFlow] Pulled from Supabase: ${remote.serviceTypes.length} serviceTypes, ${remote.timeEntries.length} entries, ${remote.goals.length} goals, ${remote.interestedPeople.length} interestedPeople`,
+          );
 
           // First-time sync: if server is empty but we have local data, push instead
           const store = useStore.getState();

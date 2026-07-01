@@ -93,7 +93,8 @@ export async function pushServiceTypes(
 ): Promise<void> {
   const client = getSupabase();
   // Delete all existing and re-insert (simple full sync)
-  await client.from("service_types").delete().eq("user_id", userId);
+  const { error: delErr } = await client.from("service_types").delete().eq("user_id", userId);
+  if (delErr) console.warn("[ServiceFlow] pushServiceTypes delete error:", delErr.message);
   if (items.length === 0) return;
   const rows = items.map((s) => ({
     id: s.id,
@@ -108,6 +109,8 @@ export async function pushServiceTypes(
     created_at: s.created_at,
     updated_at: s.updated_at,
   }));
+  const { error: insErr } = await client.from("service_types").insert(rows);
+  if (insErr) console.warn("[ServiceFlow] pushServiceTypes insert error:", insErr.message);
   await client.from("service_types").insert(rows);
 }
 
@@ -161,7 +164,8 @@ export async function pushTimeEntries(
     created_at: e.created_at,
     updated_at: e.updated_at,
   }));
-  await client.from("time_entries").insert(rows);
+  const { error: insErr } = await client.from("time_entries").insert(rows);
+  if (insErr) console.warn("[ServiceFlow] pushTimeEntries insert error:", insErr.message);
 }
 
 export async function pullTimeEntries(
