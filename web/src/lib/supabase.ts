@@ -92,9 +92,8 @@ export async function pushServiceTypes(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  // Delete all existing and re-insert (simple full sync)
   const { error: delErr } = await client.from("service_types").delete().eq("user_id", userId);
-  if (delErr) console.warn("[ServiceFlow] pushServiceTypes delete error:", delErr.message);
+  if (delErr) throw new Error(`pushServiceTypes delete: ${delErr.message}`);
   if (items.length === 0) return;
   const rows = items.map((s) => ({
     id: s.id,
@@ -110,8 +109,7 @@ export async function pushServiceTypes(
     updated_at: s.updated_at,
   }));
   const { error: insErr } = await client.from("service_types").insert(rows);
-  if (insErr) console.warn("[ServiceFlow] pushServiceTypes insert error:", insErr.message);
-  await client.from("service_types").insert(rows);
+  if (insErr) throw new Error(`pushServiceTypes insert: ${insErr.message}`);
 }
 
 export async function pullServiceTypes(
@@ -146,7 +144,8 @@ export async function pushTimeEntries(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  await client.from("time_entries").delete().eq("user_id", userId);
+  const { error: delErr } = await client.from("time_entries").delete().eq("user_id", userId);
+  if (delErr) throw new Error(`pushTimeEntries delete: ${delErr.message}`);
   if (items.length === 0) return;
   const rows = items.map((e) => ({
     id: e.id,
@@ -165,7 +164,7 @@ export async function pushTimeEntries(
     updated_at: e.updated_at,
   }));
   const { error: insErr } = await client.from("time_entries").insert(rows);
-  if (insErr) console.warn("[ServiceFlow] pushTimeEntries insert error:", insErr.message);
+  if (insErr) throw new Error(`pushTimeEntries insert: ${insErr.message}`);
 }
 
 export async function pullTimeEntries(
@@ -203,7 +202,8 @@ export async function pushGoals(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  await client.from("goals").delete().eq("user_id", userId);
+  const { error: delErr } = await client.from("goals").delete().eq("user_id", userId);
+  if (delErr) throw new Error(`pushGoals delete: ${delErr.message}`);
   if (items.length === 0) return;
   const rows = items.map((g) => ({
     id: g.id,
@@ -220,7 +220,8 @@ export async function pushGoals(
     created_at: g.created_at,
     updated_at: g.updated_at,
   }));
-  await client.from("goals").insert(rows);
+  const { error: insErr } = await client.from("goals").insert(rows);
+  if (insErr) throw new Error(`pushGoals insert: ${insErr.message}`);
 }
 
 export async function pullGoals(userId: string): Promise<GoalDefinition[]> {
@@ -255,7 +256,8 @@ export async function pushInterestedPeople(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  await client.from("interested_people").delete().eq("user_id", userId);
+  const { error: delErr } = await client.from("interested_people").delete().eq("user_id", userId);
+  if (delErr) throw new Error(`pushInterestedPeople delete: ${delErr.message}`);
   if (items.length === 0) return;
   const rows = items.map((p) => ({
     id: p.id,
@@ -274,7 +276,8 @@ export async function pushInterestedPeople(
     created_at: p.created_at,
     updated_at: p.updated_at,
   }));
-  await client.from("interested_people").insert(rows);
+  const { error: insErr } = await client.from("interested_people").insert(rows);
+  if (insErr) throw new Error(`pushInterestedPeople insert: ${insErr.message}`);
 }
 
 export async function pullInterestedPeople(
