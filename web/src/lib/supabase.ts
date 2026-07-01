@@ -8,6 +8,7 @@ import type {
   TimeEntry,
   GoalDefinition,
   InterestedPerson,
+  InterestedStatusConfig,
 } from "@/types/data";
 
 // ─── Client Singleton ────────────────────────────────────────────────────────
@@ -309,6 +310,49 @@ export async function pullInterestedPeople(
   );
 }
 
+// ─── Interested Statuses ─────────────────────────────────────────────────────
+
+export async function pushInterestedStatuses(
+  items: InterestedStatusConfig[],
+  userId: string,
+): Promise<void> {
+  const client = getSupabase();
+  const { error: delErr } = await client.from("interested_statuses").delete().eq("user_id", userId);
+  if (delErr) throw new Error(`pushInterestedStatuses delete: ${delErr.message}`);
+  if (items.length === 0) return;
+  const rows = items.map((s) => ({
+    id: s.id,
+    user_id: userId,
+    name: s.name,
+    color: s.color,
+    icon: s.icon,
+    sort_order: s.sort_order,
+    updated_at: new Date().toISOString(),
+  }));
+  const { error: insErr } = await client.from("interested_statuses").insert(rows);
+  if (insErr) throw new Error(`pushInterestedStatuses insert: ${insErr.message}`);
+}
+
+export async function pullInterestedStatuses(
+  userId: string,
+): Promise<InterestedStatusConfig[]> {
+  const client = getSupabase();
+  const { data } = await client
+    .from("interested_statuses")
+    .select("*")
+    .eq("user_id", userId)
+    .order("sort_order");
+  return (data ?? []).map(
+    (r): InterestedStatusConfig => ({
+      id: r.id,
+      name: r.name,
+      color: r.color,
+      icon: r.icon,
+      sort_order: r.sort_order,
+    }),
+  );
+}
+
 // ─── Bulk Push (full sync upload) ────────────────────────────────────────────
 
 export interface SyncState {
@@ -318,6 +362,7 @@ export interface SyncState {
   timeEntries: TimeEntry[];
   goals: GoalDefinition[];
   interestedPeople: InterestedPerson[];
+  interestedStatuses: InterestedStatusConfig[];
 }
 
 export async function pushAll(state: SyncState, userId: string): Promise<void> {
@@ -334,6 +379,7 @@ export async function pushAll(state: SyncState, userId: string): Promise<void> {
   promises.push(pushTimeEntries(state.timeEntries, userId));
   promises.push(pushGoals(state.goals, userId));
   promises.push(pushInterestedPeople(state.interestedPeople, userId));
+  promises.push(pushInterestedStatuses(state.interestedStatuses, userId));
 
   await Promise.all(promises);
 }
@@ -343,7 +389,7 @@ export async function pushAll(state: SyncState, userId: string): Promise<void> {
 export async function pullAll(
   userId: string,
 ): Promise<SyncState> {
-  const [profileRow, settings, serviceTypes, timeEntries, goals, interestedPeople] =
+  const [profileRow, settings, serviceTypes, timeEntries, goals, interestedPeople, interestedStatuses] =
     await Promise.all([
       pullProfile(userId),
       pullSettings(userId),
@@ -351,6 +397,7 @@ export async function pullAll(
       pullTimeEntries(userId),
       pullGoals(userId),
       pullInterestedPeople(userId),
+      pullInterestedStatuses(userId),
     ]);
 
   // Build profile from Supabase user + profiles table
@@ -383,5 +430,6 @@ export async function pullAll(
     timeEntries,
     goals,
     interestedPeople,
+    interestedStatuses: interestedStatuses.length > 0 ? interestedStatuses : [],
   };
 }

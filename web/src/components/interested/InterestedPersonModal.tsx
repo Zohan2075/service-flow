@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 
 import L from "leaflet";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents, CircleMarker } from "react-leaflet";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -17,24 +17,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: "/leaflet/marker-icon.png",
   shadowUrl: "/leaflet/marker-shadow.png",
 });
-
-const STATUS_COLORS: Record<InterestedPersonStatus, string> = {
-  bible_student: "#10b981",
-  return_visit: "#f59e0b",
-  interested_person: "#2094f3",
-};
-
-const STATUS_ORDER: InterestedPersonStatus[] = [
-  "bible_student",
-  "return_visit",
-  "interested_person",
-];
-
-const STATUS_LABEL_KEYS: Record<InterestedPersonStatus, string> = {
-  bible_student: "interested.bibleStudent",
-  return_visit: "interested.returnVisit",
-  interested_person: "interested.interestedPerson",
-};
 
 interface Props {
   person?: InterestedPerson | null;
@@ -68,7 +50,19 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const addInterestedPerson = useStore((s) => s.addInterestedPerson);
   const updateInterestedPerson = useStore((s) => s.updateInterestedPerson);
   const deleteInterestedPerson = useStore((s) => s.deleteInterestedPerson);
+  const interestedStatuses = useStore((s) => s.interestedStatuses);
   const { t } = useT();
+
+  // Build status lookup from customizable config
+  const statusOptions = useMemo(() => {
+    return interestedStatuses
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((s) => ({ id: s.id, name: s.name, color: s.color, icon: s.icon }));
+  }, [interestedStatuses]);
+
+  const getStatusColor = (id: InterestedPersonStatus) =>
+    interestedStatuses.find((s) => s.id === id)?.color ?? "#2094f3";
 
   const isEditing = !!person;
 
@@ -272,28 +266,30 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           <div>
             <label className="block text-sm font-semibold mb-1">{t("interested.status")}</label>
             <div className="flex flex-wrap gap-2">
-              {STATUS_ORDER.map((s) => (
+              {statusOptions.map((opt) => (
                 <button
-                  key={s}
+                  key={opt.id}
                   type="button"
-                  onClick={() => setStatus(s)}
+                  onClick={() => setStatus(opt.id)}
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition-all",
-                    status === s
+                    status === opt.id
                       ? "border-transparent text-white"
                       : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
                   )}
                   style={
-                    status === s
-                      ? { backgroundColor: STATUS_COLORS[s], borderColor: STATUS_COLORS[s] }
+                    status === opt.id
+                      ? { backgroundColor: opt.color, borderColor: opt.color }
                       : {}
                   }
+                  suppressHydrationWarning
                 >
                   <span
                     className="size-2 rounded-full"
-                    style={{ backgroundColor: status === s ? "#fff" : STATUS_COLORS[s] }}
+                    style={{ backgroundColor: status === opt.id ? "#fff" : opt.color }}
+                    suppressHydrationWarning
                   />
-                  {t(STATUS_LABEL_KEYS[s] as Parameters<typeof t>[0])}
+                  {opt.name}
                 </button>
               ))}
             </div>

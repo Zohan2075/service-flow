@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
@@ -17,33 +17,35 @@ const GENDER_COLORS: Record<"male" | "female", string> = {
   female: "#ec4899",
 };
 
-const STATUS_COLORS: Record<InterestedPersonStatus, string> = {
-  bible_student: "#10b981",
-  return_visit: "#f59e0b",
-  interested_person: "#2094f3",
-};
-
-const STATUS_LABEL_KEYS: Record<InterestedPersonStatus, string> = {
-  bible_student: "interested.bibleStudent",
-  return_visit: "interested.returnVisit",
-  interested_person: "interested.interestedPerson",
-};
-
 type StatusFilter = "all" | InterestedPersonStatus;
-
-const FILTER_OPTIONS: { id: StatusFilter; labelKey: string }[] = [
-  { id: "all", labelKey: "interested.all" },
-  { id: "bible_student", labelKey: "interested.bibleStudent" },
-  { id: "return_visit", labelKey: "interested.returnVisit" },
-  { id: "interested_person", labelKey: "interested.interestedPerson" },
-];
 
 export default function InterestedPeoplePage() {
   const { t } = useT();
   const interestedPeople = useStore((s) => s.interestedPeople);
+  const interestedStatuses = useStore((s) => s.interestedStatuses);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState<InterestedPerson | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  // Build lookup maps from customizable statuses (fall back to defaults if empty)
+  const statusMap = useMemo(() => {
+    const map = new Map<string, { name: string; color: string; icon: string }>();
+    for (const s of interestedStatuses) {
+      map.set(s.id, { name: s.name, color: s.color, icon: s.icon });
+    }
+    return map;
+  }, [interestedStatuses]);
+
+  const getStatusInfo = (id: InterestedPersonStatus) =>
+    statusMap.get(id) ?? { name: id.replace(/_/g, " "), color: "#2094f3", icon: "person" };
+
+  // Filter options: "All" + custom-ordered statuses
+  const filterOptions: { id: StatusFilter; label: string; color?: string }[] = [
+    { id: "all", label: t("interested.all") },
+    ...interestedStatuses
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((s) => ({ id: s.id as StatusFilter, label: s.name, color: s.color })),
+  ];
 
   const filteredPeople =
     statusFilter === "all"
@@ -75,7 +77,7 @@ export default function InterestedPeoplePage() {
 
         {/* Filter tabs */}
         <div className="mt-3 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-          {FILTER_OPTIONS.map((option) => (
+          {filterOptions.map((option) => (
             <button
               key={option.id}
               type="button"
@@ -87,13 +89,14 @@ export default function InterestedPeoplePage() {
                   : "text-slate-500"
               )}
             >
-              {option.id !== "all" && (
+              {option.color && (
                 <span
                   className="size-2 rounded-full"
-                  style={{ backgroundColor: STATUS_COLORS[option.id as InterestedPersonStatus] }}
+                  style={{ backgroundColor: option.color }}
+                  suppressHydrationWarning
                 />
               )}
-              {t(option.labelKey as Parameters<typeof t>[0])}
+              {option.label}
             </button>
           ))}
         </div>
@@ -117,7 +120,8 @@ export default function InterestedPeoplePage() {
               >
                 <span
                   className="size-3 rounded-full shrink-0"
-                  style={{ backgroundColor: STATUS_COLORS[person.status] }}
+                  style={{ backgroundColor: getStatusInfo(person.status).color }}
+                  suppressHydrationWarning
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -131,8 +135,11 @@ export default function InterestedPeoplePage() {
                       {person.name} {person.last_name}
                     </p>
                   </div>
-                  <p className="text-xs text-slate-400 truncate">
-                    {t(STATUS_LABEL_KEYS[person.status] as Parameters<typeof t>[0])}
+                  <p className="text-xs text-slate-400 truncate flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs" style={{ color: getStatusInfo(person.status).color }} suppressHydrationWarning>
+                      {getStatusInfo(person.status).icon}
+                    </span>
+                    {getStatusInfo(person.status).name}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

@@ -10,7 +10,9 @@ import type {
   GoalDefinition,
   GoalScope,
   InterestedPerson,
+  InterestedStatusConfig,
 } from "@/types/data";
+import { DEFAULT_INTERESTED_STATUSES } from "@/types/data";
 
 // ─── IndexedDB storage adapter for Zustand ──────────────────────────────────
 
@@ -73,6 +75,7 @@ interface AppState {
   timeEntries: TimeEntry[];
   goals: GoalDefinition[];
   interestedPeople: InterestedPerson[];
+  interestedStatuses: InterestedStatusConfig[];
   syncMetadata: SyncMetadata;
   uiState: UiState;
 
@@ -106,6 +109,10 @@ interface AppState {
   addInterestedPerson: (person: Omit<InterestedPerson, "id" | "created_at" | "updated_at">) => void;
   updateInterestedPerson: (id: string, patch: Partial<InterestedPerson>) => void;
   deleteInterestedPerson: (id: string) => void;
+
+  // interested status config actions
+  updateInterestedStatus: (id: string, patch: Partial<InterestedStatusConfig>) => void;
+  reorderInterestedStatuses: (orderedIds: string[]) => void;
 
   // transient navigation state
   setViewedMonth: (date: Date) => void;
@@ -467,6 +474,7 @@ export const useStore = create<AppState>()(
       timeEntries: [],
       goals: [],
       interestedPeople: [],
+      interestedStatuses: [...DEFAULT_INTERESTED_STATUSES],
       syncMetadata: INITIAL_SYNC_METADATA,
       uiState: INITIAL_UI_STATE,
 
@@ -808,6 +816,28 @@ export const useStore = create<AppState>()(
           })
         ),
 
+      // ── Interested Status Config ─────────────────────────────────────
+      updateInterestedStatus: (id, patch) =>
+        set((s) =>
+          withPendingSync({
+            interestedStatuses: s.interestedStatuses.map((status) =>
+              status.id === id ? { ...status, ...patch } : status
+            ),
+          })
+        ),
+
+      reorderInterestedStatuses: (orderedIds) =>
+        set((s) =>
+          withPendingSync({
+            interestedStatuses: s.interestedStatuses
+              .map((status) => ({
+                ...status,
+                sort_order: orderedIds.indexOf(status.id),
+              }))
+              .sort((a, b) => a.sort_order - b.sort_order),
+          })
+        ),
+
       // ── Transient Month Navigation ────────────────────────────────────
       setViewedMonth: (date) =>
         set({
@@ -854,6 +884,7 @@ export const useStore = create<AppState>()(
             timeEntries: (file.time_entries ?? []).map(normalizeTimeEntry),
             goals: normalizeGoals(file.goals, serviceTypeMap),
             interestedPeople: file.interested_people ?? [],
+            interestedStatuses: file.interested_statuses?.length ? file.interested_statuses : get().interestedStatuses,
             syncMetadata:
               options?.source === "remote"
                 ? INITIAL_SYNC_METADATA
@@ -879,6 +910,7 @@ export const useStore = create<AppState>()(
             timeEntries: [],
             goals: [],
             interestedPeople: [],
+            interestedStatuses: [...DEFAULT_INTERESTED_STATUSES],
             uiState: INITIAL_UI_STATE,
           })
         ),
@@ -894,6 +926,7 @@ export const useStore = create<AppState>()(
         timeEntries: state.timeEntries,
         goals: state.goals,
         interestedPeople: state.interestedPeople,
+        interestedStatuses: state.interestedStatuses,
         syncMetadata: state.syncMetadata,
       }) as unknown as AppState,
       // Deep-merge settings so new fields get their defaults when loading old data
@@ -914,6 +947,7 @@ export const useStore = create<AppState>()(
           timeEntries: (p.timeEntries ?? current.timeEntries).map(normalizeTimeEntry),
           goals: normalizeGoals(p.goals ?? current.goals, serviceTypeMap),
           interestedPeople: p.interestedPeople ?? current.interestedPeople,
+          interestedStatuses: p.interestedStatuses?.length ? p.interestedStatuses : current.interestedStatuses,
           syncMetadata: p.syncMetadata ?? current.syncMetadata,
           uiState: current.uiState,
         };
@@ -931,6 +965,7 @@ export function serializeBackup(state: {
   timeEntries: TimeEntry[];
   goals?: GoalDefinition[];
   interestedPeople?: InterestedPerson[];
+  interestedStatuses?: InterestedStatusConfig[];
 }): BackupFile {
   return {
     version: 1,
@@ -941,6 +976,7 @@ export function serializeBackup(state: {
     time_entries: state.timeEntries,
     goals: state.goals ?? [],
     interested_people: state.interestedPeople ?? [],
+    interested_statuses: state.interestedStatuses ?? [],
   };
 }
 

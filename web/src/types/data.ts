@@ -107,6 +107,20 @@ export interface InterestedPerson {
   updated_at: string;
 }
 
+export interface InterestedStatusConfig {
+  id: InterestedPersonStatus;
+  name: string;
+  color: string;
+  icon: string;
+  sort_order: number;
+}
+
+export const DEFAULT_INTERESTED_STATUSES: InterestedStatusConfig[] = [
+  { id: "bible_student", name: "Bible Student", color: "#2094f3", icon: "school", sort_order: 0 },
+  { id: "return_visit", name: "Return Visit", color: "#10b981", icon: "location_on", sort_order: 1 },
+  { id: "interested_person", name: "Interested Person", color: "#f97316", icon: "person", sort_order: 2 },
+];
+
 export interface CalendarDay {
   date: string;           // "yyyy-MM-dd"
   entries: TimeEntry[];
@@ -129,6 +143,7 @@ export interface BackupFile {
   time_entries: TimeEntry[];
   goals?: GoalDefinition[];
   interested_people?: InterestedPerson[];
+  interested_statuses?: InterestedStatusConfig[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

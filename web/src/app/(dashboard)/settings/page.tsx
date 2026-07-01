@@ -25,7 +25,7 @@ import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
 import { dateTimeString, monthShortYear, useT } from "@/lib/i18n";
-import type { GoalDefinition, ServiceType } from "@/types/data";
+import type { GoalDefinition, ServiceType, InterestedStatusConfig } from "@/types/data";
 import toast from "react-hot-toast";
 
 const COLORS = [
@@ -36,6 +36,10 @@ const COLORS = [
 const ICONS = [
   "build", "groups", "analytics", "computer",
   "phone_in_talk", "drive_eta", "home_repair_service", "engineering", "medical_services", "Auto_Stories",
+  // Ministry / interested people icons
+  "school", "menu_book", "book", "church", "location_on", "home",
+  "person", "contact_page", "star", "bookmark", "map", "psychology",
+  "lightbulb", "person_add",
 ];
 
 const ACCENT_PRESETS = [
@@ -62,7 +66,7 @@ type CombinedGoalDraft = CombinedGoalPayload & {
   id: string;
 };
 
-type SettingsCategory = "account" | "appearance" | "language" | "entries" | "reports" | "data" | "danger";
+type SettingsCategory = "account" | "appearance" | "language" | "entries" | "reports" | "interested" | "data" | "danger";
 
 const PROFILE_IMAGE_MAX_SIZE = 320;
 const PROFILE_IMAGE_OUTPUT_QUALITY = 0.84;
@@ -132,6 +136,9 @@ export default function SettingsPage() {
   const timeEntries = useStore((s) => s.timeEntries);
   const goals = useStore((s) => s.goals);
   const interestedPeople = useStore((s) => s.interestedPeople);
+  const interestedStatuses = useStore((s) => s.interestedStatuses);
+  const updateInterestedStatus = useStore((s) => s.updateInterestedStatus);
+  const reorderInterestedStatuses = useStore((s) => s.reorderInterestedStatuses);
   const viewedMonth = useStore((s) => s.uiState.viewedMonth);
   const addServiceType = useStore((s) => s.addServiceType);
   const addGoal = useStore((s) => s.addGoal);
@@ -442,6 +449,7 @@ export default function SettingsPage() {
     { id: "language", label: t("settings.language"), icon: "translate" },
     { id: "entries", label: t("settings.entriesServices"), icon: "construction" },
     { id: "reports", label: t("settings.reportsGoals"), icon: "flag" },
+    { id: "interested", label: t("settings.interestedPeople"), icon: "people" },
     { id: "data", label: t("settings.dataBackup"), icon: "cloud_upload" },
     { id: "danger", label: t("settings.dangerZone"), icon: "warning" },
   ];
@@ -1147,6 +1155,32 @@ export default function SettingsPage() {
               {t("settings.createST")}
             </button>
           </div>
+        </div>
+
+        {/* ── Interested People Statuses ─────────────────────────────────── */}
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "interested" && "hidden")}>
+          <h3 className="font-bold text-lg mb-1">{t("settings.interestedPeople")}</h3>
+          <p className="text-xs text-slate-400 mb-4">{t("settings.interestedStatusDesc")}</p>
+
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
+            if (!over || active.id === over.id) return;
+            const oldIndex = interestedStatuses.findIndex((s) => s.id === active.id);
+            const newIndex = interestedStatuses.findIndex((s) => s.id === over.id);
+            if (oldIndex === -1 || newIndex === -1) return;
+            reorderInterestedStatuses(arrayMove(interestedStatuses, oldIndex, newIndex).map((s) => s.id));
+          }}>
+            <SortableContext items={interestedStatuses.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-3">
+                {interestedStatuses.map((status) => (
+                  <SortableStatusItem
+                    key={status.id}
+                    status={status}
+                    onUpdate={(patch) => updateInterestedStatus(status.id, patch)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         </div>
 
         {/* ── Data Management ──────────────────────────────────────────────── */}
@@ -1931,6 +1965,160 @@ function SortableServiceTypeItem({
               ))}
             </div>
           </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={!editName.trim()}
+              className="flex-1 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              {t("settings.save")}
+            </button>
+            <button
+              onClick={handleCancel}
+              className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              {t("settings.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sortable Interested Status Item ─────────────────────────────────────────
+
+function SortableStatusItem({
+  status,
+  onUpdate,
+}: {
+  status: InterestedStatusConfig;
+  onUpdate: (patch: Partial<InterestedStatusConfig>) => void;
+}) {
+  const { t } = useT();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(status.name);
+  const [editColor, setEditColor] = useState(status.color);
+  const [editIcon, setEditIcon] = useState(status.icon);
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: status.id,
+  });
+
+  const handleSave = () => {
+    if (!editName.trim()) return;
+    onUpdate({ name: editName.trim(), color: editColor, icon: editIcon });
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditName(status.name);
+    setEditColor(status.color);
+    setEditIcon(status.icon);
+    setEditing(false);
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-surface",
+        isDragging && "z-10 shadow-lg ring-2 ring-primary/20"
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 touch-none cursor-grab active:cursor-grabbing dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            title="Drag to reorder"
+            aria-label={`Drag ${status.name} to reorder`}
+            suppressHydrationWarning
+            {...attributes}
+            {...listeners}
+          >
+            <span className="material-symbols-outlined text-base">drag_indicator</span>
+          </button>
+          <div
+            className="size-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ backgroundColor: status.color + "1a" }}
+            suppressHydrationWarning
+          >
+            <span className="material-symbols-outlined text-sm" style={{ color: status.color }} suppressHydrationWarning>
+              {status.icon}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{status.name}</p>
+            <p className="text-xs text-slate-400 capitalize">{status.id.replace(/_/g, " ")}</p>
+          </div>
+        </div>
+        <button
+          onClick={() => (editing ? handleCancel() : setEditing(true))}
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0"
+        >
+          <span className="material-symbols-outlined text-base">{editing ? "close" : "edit"}</span>
+        </button>
+      </div>
+
+      {editing && (
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+          {/* Name */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.name")}</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-sm focus:outline-none focus:border-primary"
+              placeholder={status.name}
+            />
+          </div>
+
+          {/* Color */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.color")}</label>
+            <div className="flex gap-2 flex-wrap">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setEditColor(c)}
+                  className={cn(
+                    "size-7 rounded-full border-2 transition-all",
+                    editColor === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
+                  )}
+                  style={{ backgroundColor: c }}
+                  suppressHydrationWarning
+                />
+              ))}
+              <label className="size-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                <span className="material-symbols-outlined text-xs text-slate-400">palette</span>
+                <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="sr-only" />
+              </label>
+            </div>
+          </div>
+
+          {/* Icon */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.icon")}</label>
+            <div className="flex gap-2 flex-wrap">
+              {ICONS.map((ic) => (
+                <button
+                  key={ic}
+                  onClick={() => setEditIcon(ic)}
+                  className={cn(
+                    "size-8 rounded-lg border-2 flex items-center justify-center transition-all",
+                    editIcon === ic ? "border-primary bg-primary/10 text-primary scale-110" : "border-slate-200 dark:border-slate-700 text-slate-500"
+                  )}
+                >
+                  <span className="material-symbols-outlined text-sm">{ic}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Save / Cancel */}
           <div className="flex gap-2">
             <button
               onClick={handleSave}

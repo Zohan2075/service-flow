@@ -107,6 +107,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         timeEntries: store.timeEntries,
         goals: store.goals,
         interestedPeople: store.interestedPeople,
+        interestedStatuses: store.interestedStatuses,
       },
       userId,
     );
@@ -212,6 +213,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
                   time_entries: remote.timeEntries,
                   goals: remote.goals,
                   interested_people: remote.interestedPeople,
+                  interested_statuses: remote.interestedStatuses,
                 },
                 { source: "remote" },
               );
