@@ -104,6 +104,18 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   );
 
   const mapRef = useRef<L.Map | null>(null);
+  const addressRef = useRef<HTMLTextAreaElement>(null);
+  const commentsRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textareas as content grows
+  useEffect(() => {
+    const el = addressRef.current;
+    if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+  }, [address]);
+  useEffect(() => {
+    const el = commentsRef.current;
+    if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+  }, [comments]);
 
   const hasPersonLocation = lat != null && lng != null;
   const hasUserLocation = userLat != null && userLng != null;
@@ -153,7 +165,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
     e.preventDefault();
     const trimmedName = name.trim();
     const trimmedLastName = lastName.trim();
-    if (!trimmedName || !trimmedLastName) {
+    if (!trimmedName) {
       toast.error(t("interested.name"));
       return;
     }
@@ -162,7 +174,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
     try {
       const data = {
         name: trimmedName,
-        last_name: trimmedLastName,
+        last_name: trimmedLastName || "",
         gender,
         age: age.trim() ? Number(age) : null,
         address: address.trim() || null,
@@ -231,7 +243,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             </div>
             <div>
               <label className="block text-sm font-semibold mb-1">
-                {t("interested.lastName")} *
+                {t("interested.lastName")}
               </label>
               <input
                 value={lastName}
@@ -312,10 +324,12 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           {/* Address */}
           <div>
             <label className="block text-sm font-semibold mb-1">{t("interested.address")}</label>
-            <input
+            <textarea
+              ref={addressRef}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
+              rows={1}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none overflow-hidden"
             />
           </div>
 
@@ -388,10 +402,11 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           <div>
             <label className="block text-sm font-semibold mb-1">{t("interested.comments")}</label>
             <textarea
+              ref={commentsRef}
               value={comments}
               onChange={(e) => setComments(e.target.value)}
-              rows={2}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              rows={1}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none overflow-hidden"
             />
           </div>
 
