@@ -80,9 +80,14 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const [initialConversationDate, setInitialConversationDate] = useState(
     person?.initial_conversation_date ?? ""
   );
-  const [nextVisitDate, setNextVisitDate] = useState(
-    person?.next_visit_date ?? ""
-  );
+  const [nextVisitDate, setNextVisitDate] = useState(() => {
+    const iso = person?.next_visit_date ?? "";
+    return iso ? new Date(iso).toISOString().slice(0, 10) : "";
+  });
+  const [nextVisitTime, setNextVisitTime] = useState(() => {
+    const iso = person?.next_visit_date ?? "";
+    return iso ? new Date(iso).toTimeString().slice(0, 5) : "";
+  });
   const [nextVisitWeeklyDay, setNextVisitWeeklyDay] = useState<number | null>(
     person?.next_visit_weekly_day ?? null
   );
@@ -182,7 +187,9 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
         latitude: lat,
         longitude: lng,
         initial_conversation_date: initialConversationDate || null,
-        next_visit_date: nextVisitDate || null,
+        next_visit_date: nextVisitDate
+          ? `${nextVisitDate}T${nextVisitTime || "00:00"}:00`
+          : null,
         next_visit_weekly_day: nextVisitWeeklyDay,
         status,
       };
@@ -346,17 +353,25 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             />
           </div>
 
-          {/* Next Visit Date */}
+          {/* Next Visit Date & Time */}
           <div>
             <label className="block text-sm font-semibold mb-1">
               {t("interested.nextVisit")}
             </label>
-            <input
-              type="date"
-              value={nextVisitDate}
-              onChange={(e) => setNextVisitDate(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <input
+                type="date"
+                value={nextVisitDate}
+                onChange={(e) => setNextVisitDate(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <input
+                type="time"
+                value={nextVisitTime}
+                onChange={(e) => setNextVisitTime(e.target.value)}
+                className="w-[7.5rem] px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
 
             {/* Weekly toggle */}
             <div className="mt-2">

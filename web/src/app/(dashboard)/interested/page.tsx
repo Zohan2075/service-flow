@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { useT, dateTimeString } from "@/lib/i18n";
 
 const InterestedPersonModal = dynamic(
   () => import("@/components/interested/InterestedPersonModal"),
@@ -168,17 +168,23 @@ export default function InterestedPeoplePage() {
                   <div className="text-right shrink-0">
                     {person.next_visit_weekly_day != null ? (
                       <div className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs text-primary">event_repeat</span>
-                        <p className="text-xs text-primary font-semibold">
+                        <span className="material-symbols-outlined text-xs text-primary">
+                          event_repeat
+                        </span>
+                        <p className="text-xs text-primary font-semibold leading-tight">
                           {WEEKDAYS[person.next_visit_weekly_day]}
+                          {person.next_visit_date &&
+                            ` ${new Date(person.next_visit_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                        </p>
+                      </div>
+                    ) : person.next_visit_date ? (
+                      <div className="flex flex-col items-end">
+                        <p className="text-xs text-slate-500 leading-tight">
+                          {dateTimeString(new Date(person.next_visit_date), settings.language)}
                         </p>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400">
-                        {person.next_visit_date
-                          ? person.next_visit_date
-                          : t("interested.noDate")}
-                      </p>
+                      <p className="text-xs text-slate-400">{t("interested.noDate")}</p>
                     )}
                   </div>
                 </div>
