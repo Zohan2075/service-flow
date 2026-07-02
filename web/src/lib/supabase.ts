@@ -93,9 +93,11 @@ export async function pushServiceTypes(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  const { error: delErr } = await client.from("service_types").delete().eq("user_id", userId);
-  if (delErr) throw new Error(`pushServiceTypes delete: ${delErr.message}`);
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    const { error } = await client.from("service_types").delete().eq("user_id", userId);
+    if (error) throw new Error(`pushServiceTypes delete: ${error.message}`);
+    return;
+  }
   const rows = items.map((s) => ({
     id: s.id,
     user_id: userId,
@@ -109,8 +111,17 @@ export async function pushServiceTypes(
     created_at: s.created_at,
     updated_at: s.updated_at,
   }));
-  const { error: insErr } = await client.from("service_types").insert(rows);
-  if (insErr) throw new Error(`pushServiceTypes insert: ${insErr.message}`);
+  // Upsert first — if this fails, nothing is deleted
+  const { error: upsErr } = await client.from("service_types").upsert(rows, { onConflict: "id" });
+  if (upsErr) throw new Error(`pushServiceTypes upsert: ${upsErr.message}`);
+  // Safe cleanup: delete stale rows NOT in current set
+  const currentIds = items.map((s) => s.id);
+  const { data: existing } = await client.from("service_types").select("id").eq("user_id", userId);
+  const staleIds = (existing ?? []).filter((r) => !currentIds.includes(r.id)).map((r) => r.id);
+  if (staleIds.length > 0) {
+    const { error: delErr } = await client.from("service_types").delete().in("id", staleIds);
+    if (delErr) console.warn("[ServiceFlow] pushServiceTypes stale cleanup failed:", delErr.message);
+  }
 }
 
 export async function pullServiceTypes(
@@ -145,9 +156,11 @@ export async function pushTimeEntries(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  const { error: delErr } = await client.from("time_entries").delete().eq("user_id", userId);
-  if (delErr) throw new Error(`pushTimeEntries delete: ${delErr.message}`);
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    const { error } = await client.from("time_entries").delete().eq("user_id", userId);
+    if (error) throw new Error(`pushTimeEntries delete: ${error.message}`);
+    return;
+  }
   const rows = items.map((e) => ({
     id: e.id,
     user_id: userId,
@@ -164,8 +177,15 @@ export async function pushTimeEntries(
     created_at: e.created_at,
     updated_at: e.updated_at,
   }));
-  const { error: insErr } = await client.from("time_entries").insert(rows);
-  if (insErr) throw new Error(`pushTimeEntries insert: ${insErr.message}`);
+  const { error: upsErr } = await client.from("time_entries").upsert(rows, { onConflict: "id" });
+  if (upsErr) throw new Error(`pushTimeEntries upsert: ${upsErr.message}`);
+  const currentIds = items.map((e) => e.id);
+  const { data: existing } = await client.from("time_entries").select("id").eq("user_id", userId);
+  const staleIds = (existing ?? []).filter((r) => !currentIds.includes(r.id)).map((r) => r.id);
+  if (staleIds.length > 0) {
+    const { error: delErr } = await client.from("time_entries").delete().in("id", staleIds);
+    if (delErr) console.warn("[ServiceFlow] pushTimeEntries stale cleanup failed:", delErr.message);
+  }
 }
 
 export async function pullTimeEntries(
@@ -203,9 +223,11 @@ export async function pushGoals(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  const { error: delErr } = await client.from("goals").delete().eq("user_id", userId);
-  if (delErr) throw new Error(`pushGoals delete: ${delErr.message}`);
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    const { error } = await client.from("goals").delete().eq("user_id", userId);
+    if (error) throw new Error(`pushGoals delete: ${error.message}`);
+    return;
+  }
   const rows = items.map((g) => ({
     id: g.id,
     user_id: userId,
@@ -221,8 +243,15 @@ export async function pushGoals(
     created_at: g.created_at,
     updated_at: g.updated_at,
   }));
-  const { error: insErr } = await client.from("goals").insert(rows);
-  if (insErr) throw new Error(`pushGoals insert: ${insErr.message}`);
+  const { error: upsErr } = await client.from("goals").upsert(rows, { onConflict: "id" });
+  if (upsErr) throw new Error(`pushGoals upsert: ${upsErr.message}`);
+  const currentIds = items.map((g) => g.id);
+  const { data: existing } = await client.from("goals").select("id").eq("user_id", userId);
+  const staleIds = (existing ?? []).filter((r) => !currentIds.includes(r.id)).map((r) => r.id);
+  if (staleIds.length > 0) {
+    const { error: delErr } = await client.from("goals").delete().in("id", staleIds);
+    if (delErr) console.warn("[ServiceFlow] pushGoals stale cleanup failed:", delErr.message);
+  }
 }
 
 export async function pullGoals(userId: string): Promise<GoalDefinition[]> {
@@ -257,9 +286,11 @@ export async function pushInterestedPeople(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  const { error: delErr } = await client.from("interested_people").delete().eq("user_id", userId);
-  if (delErr) throw new Error(`pushInterestedPeople delete: ${delErr.message}`);
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    const { error } = await client.from("interested_people").delete().eq("user_id", userId);
+    if (error) throw new Error(`pushInterestedPeople delete: ${error.message}`);
+    return;
+  }
   const rows = items.map((p) => ({
     id: p.id,
     user_id: userId,
@@ -278,8 +309,15 @@ export async function pushInterestedPeople(
     created_at: p.created_at,
     updated_at: p.updated_at,
   }));
-  const { error: insErr } = await client.from("interested_people").insert(rows);
-  if (insErr) throw new Error(`pushInterestedPeople insert: ${insErr.message}`);
+  const { error: upsErr } = await client.from("interested_people").upsert(rows, { onConflict: "id" });
+  if (upsErr) throw new Error(`pushInterestedPeople upsert: ${upsErr.message}`);
+  const currentIds = items.map((p) => p.id);
+  const { data: existing } = await client.from("interested_people").select("id").eq("user_id", userId);
+  const staleIds = (existing ?? []).filter((r) => !currentIds.includes(r.id)).map((r) => r.id);
+  if (staleIds.length > 0) {
+    const { error: delErr } = await client.from("interested_people").delete().in("id", staleIds);
+    if (delErr) console.warn("[ServiceFlow] pushInterestedPeople stale cleanup failed:", delErr.message);
+  }
 }
 
 export async function pullInterestedPeople(
@@ -319,9 +357,11 @@ export async function pushInterestedStatuses(
   userId: string,
 ): Promise<void> {
   const client = getSupabase();
-  const { error: delErr } = await client.from("interested_statuses").delete().eq("user_id", userId);
-  if (delErr) throw new Error(`pushInterestedStatuses delete: ${delErr.message}`);
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    const { error } = await client.from("interested_statuses").delete().eq("user_id", userId);
+    if (error) throw new Error(`pushInterestedStatuses delete: ${error.message}`);
+    return;
+  }
   const rows = items.map((s) => ({
     id: s.id,
     user_id: userId,
@@ -331,8 +371,15 @@ export async function pushInterestedStatuses(
     sort_order: s.sort_order,
     updated_at: new Date().toISOString(),
   }));
-  const { error: insErr } = await client.from("interested_statuses").insert(rows);
-  if (insErr) throw new Error(`pushInterestedStatuses insert: ${insErr.message}`);
+  const { error: upsErr } = await client.from("interested_statuses").upsert(rows, { onConflict: "id" });
+  if (upsErr) throw new Error(`pushInterestedStatuses upsert: ${upsErr.message}`);
+  const currentIds = items.map((s) => s.id);
+  const { data: existing } = await client.from("interested_statuses").select("id").eq("user_id", userId);
+  const staleIds = (existing ?? []).filter((r) => !currentIds.includes(r.id)).map((r) => r.id);
+  if (staleIds.length > 0) {
+    const { error: delErr } = await client.from("interested_statuses").delete().in("id", staleIds);
+    if (delErr) console.warn("[ServiceFlow] pushInterestedStatuses stale cleanup failed:", delErr.message);
+  }
 }
 
 export async function pullInterestedStatuses(
