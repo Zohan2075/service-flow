@@ -97,15 +97,16 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
     const store = useStore.getState();
 
-    // SAFETY: Before pushing, check if remote has data but local is empty.
-    // This prevents a fresh device from overwriting all data with empty state.
     const hasLocalData =
       store.serviceTypes.length > 0 ||
       store.timeEntries.length > 0 ||
       store.goals.length > 0 ||
       store.interestedPeople.length > 0;
 
-    if (!hasLocalData && !hasPulledOnceRef.current) {
+    // SAFETY: Never push empty data — always pull first to check if remote
+    // has data. Last line of defense against overwriting Supabase with an
+    // emptied local store (IndexedDB corruption, auth glitch, etc.).
+    if (!hasLocalData) {
       console.info("[ServiceFlow] Push blocked: local data is empty and we haven't pulled yet. Pulling first...");
       try {
         const remote = await pullAll(userId);
@@ -341,21 +342,27 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, [autoSync]);
 
   // Trigger: app open + tab becoming visible again.
-  // Delayed on mount to wait for IndexedDB hydration.
+  // CRITICAL: Wait for IndexedDB hydration before first sync to prevent
+  // stale persisted data from overwriting freshly-synced Supabase data.
   useEffect(() => {
-    const initTimer = setTimeout(() => {
+    if (useStore.persist.hasHydrated()) {
       autoSyncRef.current();
-    }, 500);
+    } else {
+      const unsub = useStore.persist.onFinishHydration(() => {
+        autoSyncRef.current();
+      });
+      return unsub;
+    }
+  }, []);
+
+  useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
         autoSyncRef.current();
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      clearTimeout(initTimer);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
   // Trigger: debounced 30s after the last edit.

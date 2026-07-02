@@ -870,6 +870,18 @@ export const useStore = create<AppState>()(
       // ── Bulk ───────────────────────────────────────────────────────────
       importData: (file, options) =>
         set((s) => {
+          // Guard: refuse to import if all data arrays are empty (non-remote source).
+          // Prevents importing a blank/empty backup file from wiping existing data.
+          if (options?.source !== "remote") {
+            const hasTimeEntries = (file.time_entries ?? []).length > 0;
+            const hasGoals = Array.isArray(file.goals) && file.goals.length > 0;
+            const hasInterested = (file.interested_people ?? []).length > 0;
+            if (!hasTimeEntries && !hasGoals && !hasInterested) {
+              console.warn("[ServiceFlow] importData blocked: backup file has no data arrays");
+              return {}; // No-op — preserve existing data
+            }
+          }
+
           const settings = normalizeSettings({ ...s.settings, ...(file.settings ?? {}) });
           const serviceTypes = ensureServiceTypesNotEmpty(
             sortServiceTypesByOrder(file.service_types),
@@ -929,26 +941,45 @@ export const useStore = create<AppState>()(
         interestedStatuses: state.interestedStatuses,
         syncMetadata: state.syncMetadata,
       }) as unknown as AppState,
-      // Deep-merge settings so new fields get their defaults when loading old data
+      // CRITICAL: Prevent stale IndexedDB data from overwriting freshly-synced
+      // Supabase data. If current state has real data (sync already imported),
+      // prefer it over persisted data. Otherwise use persisted (normal hydration).
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
-        const settings = normalizeSettings({ ...current.settings, ...(p.settings ?? {}) });
+
+        const hasCurrentData =
+          current.timeEntries.length > 0 ||
+          current.interestedPeople.length > 0 ||
+          current.goals.length > 0;
+
+        const settings = normalizeSettings({
+          ...current.settings,
+          ...(hasCurrentData ? {} : (p.settings ?? {})),
+        });
+
         const serviceTypes = ensureServiceTypesNotEmpty(
-          sortServiceTypesByOrder(p.serviceTypes ?? current.serviceTypes),
-          settings
+          sortServiceTypesByOrder(
+            hasCurrentData ? current.serviceTypes : (p.serviceTypes ?? current.serviceTypes),
+          ),
+          settings,
         );
-        const serviceTypeMap = new Map(serviceTypes.map((serviceType) => [serviceType.id, serviceType]));
+        const serviceTypeMap = new Map(serviceTypes.map((st) => [st.id, st]));
+
         return {
           ...current,
-          ...p,
-          profile: normalizePersistedProfile(p.profile ?? current.profile),
+          ...(hasCurrentData ? {} : p),
+          profile: normalizePersistedProfile(
+            hasCurrentData && current.profile?.google_id ? current.profile : (p.profile ?? current.profile),
+          ),
           settings,
           serviceTypes,
-          timeEntries: (p.timeEntries ?? current.timeEntries).map(normalizeTimeEntry),
-          goals: normalizeGoals(p.goals ?? current.goals, serviceTypeMap),
-          interestedPeople: p.interestedPeople ?? current.interestedPeople,
-          interestedStatuses: p.interestedStatuses?.length ? p.interestedStatuses : current.interestedStatuses,
-          syncMetadata: p.syncMetadata ?? current.syncMetadata,
+          timeEntries: (hasCurrentData ? current.timeEntries : (p.timeEntries ?? current.timeEntries)).map(normalizeTimeEntry),
+          goals: normalizeGoals(hasCurrentData ? current.goals : (p.goals ?? current.goals), serviceTypeMap),
+          interestedPeople: hasCurrentData ? current.interestedPeople : (p.interestedPeople ?? current.interestedPeople),
+          interestedStatuses: hasCurrentData && current.interestedStatuses?.length
+            ? current.interestedStatuses
+            : (p.interestedStatuses?.length ? p.interestedStatuses : current.interestedStatuses),
+          syncMetadata: hasCurrentData ? current.syncMetadata : (p.syncMetadata ?? current.syncMetadata),
           uiState: current.uiState,
         };
       },
@@ -993,6 +1024,9 @@ export function deserializeBackup(raw: unknown): BackupFile {
   }
   if (Object.prototype.hasOwnProperty.call(obj, "goals") && !Array.isArray(obj.goals)) {
     throw new Error("Invalid backup file: goals must be an array");
+  }
+  if (Object.prototype.hasOwnProperty.call(obj, "interested_people") && !Array.isArray(obj.interested_people)) {
+    throw new Error("Invalid backup file: interested_people must be an array");
   }
   return obj as unknown as BackupFile;
 }
