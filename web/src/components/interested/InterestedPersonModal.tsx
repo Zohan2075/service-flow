@@ -82,11 +82,15 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   );
   const [nextVisitDate, setNextVisitDate] = useState(() => {
     const iso = person?.next_visit_date ?? "";
-    return iso ? new Date(iso).toISOString().slice(0, 10) : "";
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [nextVisitTime, setNextVisitTime] = useState(() => {
     const iso = person?.next_visit_date ?? "";
-    return iso ? new Date(iso).toTimeString().slice(0, 5) : "";
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   });
   const [nextVisitWeeklyDay, setNextVisitWeeklyDay] = useState<number | null>(
     person?.next_visit_weekly_day ?? null
@@ -188,7 +192,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
         longitude: lng,
         initial_conversation_date: initialConversationDate || null,
         next_visit_date: nextVisitDate
-          ? `${nextVisitDate}T${nextVisitTime || "00:00"}:00`
+          ? new Date(`${nextVisitDate}T${nextVisitTime || "00:00"}:00`).toISOString()
           : null,
         next_visit_weekly_day: nextVisitWeeklyDay,
         status,
