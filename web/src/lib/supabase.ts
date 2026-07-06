@@ -415,22 +415,40 @@ export interface SyncState {
 }
 
 export async function pushAll(state: SyncState, userId: string): Promise<void> {
-  // Phase 1: push service_types FIRST (required for FK references in time_entries and goals)
-  await pushServiceTypes(state.serviceTypes, userId);
+  const errors: string[] = [];
 
-  // Phase 2: push everything else in parallel (safe now that service_types exist)
-  const promises: Promise<void>[] = [];
+  // Phase 1: push service_types FIRST (required for FK references)
+  try {
+    await pushServiceTypes(state.serviceTypes, userId);
+  } catch (err) {
+    errors.push(`serviceTypes: ${err instanceof Error ? err.message : err}`);
+  }
+
+  // Phase 2: push everything else — each independently so one table's
+  // failure doesn't block other tables from syncing.
+  const tasks: Array<{ label: string; fn: () => Promise<void> }> = [];
 
   if (state.profile) {
-    promises.push(pushProfile(state.profile, userId));
+    tasks.push({ label: "profile", fn: () => pushProfile(state.profile!, userId) });
   }
-  promises.push(pushSettings(state.settings, userId));
-  promises.push(pushTimeEntries(state.timeEntries, userId));
-  promises.push(pushGoals(state.goals, userId));
-  promises.push(pushInterestedPeople(state.interestedPeople, userId));
-  promises.push(pushInterestedStatuses(state.interestedStatuses, userId));
+  tasks.push({ label: "settings", fn: () => pushSettings(state.settings, userId) });
+  tasks.push({ label: "timeEntries", fn: () => pushTimeEntries(state.timeEntries, userId) });
+  tasks.push({ label: "goals", fn: () => pushGoals(state.goals, userId) });
+  tasks.push({ label: "interestedPeople", fn: () => pushInterestedPeople(state.interestedPeople, userId) });
+  tasks.push({ label: "interestedStatuses", fn: () => pushInterestedStatuses(state.interestedStatuses, userId) });
 
-  await Promise.all(promises);
+  const results = await Promise.allSettled(tasks.map((t) => t.fn()));
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      console.error(`[ServiceFlow] pushAll ${tasks[i].label}: ${msg}`);
+      errors.push(`${tasks[i].label}: ${msg}`);
+    }
+  });
+
+  if (errors.length > 0) {
+    throw new Error(`Sync errors: ${errors.join("; ")}`);
+  }
 }
 
 // ─── Bulk Pull (full sync download) ──────────────────────────────────────────
@@ -438,16 +456,36 @@ export async function pushAll(state: SyncState, userId: string): Promise<void> {
 export async function pullAll(
   userId: string,
 ): Promise<SyncState> {
-  const [profileRow, settings, serviceTypes, timeEntries, goals, interestedPeople, interestedStatuses] =
-    await Promise.all([
-      pullProfile(userId),
-      pullSettings(userId),
-      pullServiceTypes(userId),
-      pullTimeEntries(userId),
-      pullGoals(userId),
-      pullInterestedPeople(userId),
-      pullInterestedStatuses(userId),
-    ]);
+  const results = await Promise.allSettled([
+    pullProfile(userId),
+    pullSettings(userId),
+    pullServiceTypes(userId),
+    pullTimeEntries(userId),
+    pullGoals(userId),
+    pullInterestedPeople(userId),
+    pullInterestedStatuses(userId),
+  ]);
+
+  const get = <T>(index: number, fallback: T): T => {
+    const r = results[index];
+    return r.status === "fulfilled" ? (r.value as T) : fallback;
+  };
+
+  const profileRow = get<UserProfile | null>(0, null);
+  const settings = get<AppSettings | null>(1, null);
+  const serviceTypes = get<ServiceType[]>(2, []);
+  const timeEntries = get<TimeEntry[]>(3, []);
+  const goals = get<GoalDefinition[]>(4, []);
+  const interestedPeople = get<InterestedPerson[]>(5, []);
+  const interestedStatuses = get<InterestedStatusConfig[]>(6, []);
+
+  // Log per-table failures
+  const labels = ["profile", "settings", "serviceTypes", "timeEntries", "goals", "interestedPeople", "interestedStatuses"];
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.error(`[ServiceFlow] pullAll ${labels[i]}:`, r.reason instanceof Error ? r.reason.message : r.reason);
+    }
+  });
 
   // Build profile from Supabase user + profiles table
   let profile: UserProfile | null = null;
