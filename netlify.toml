@@ -1,9 +1,0 @@
-[build]
-  base = "web"
-  command = "npm run build"
-  publish = "out"
-
-[build.environment]
-  NODE_VERSION = "20"
-  NEXT_PUBLIC_SUPABASE_URL = "https://fguxwkdglianjmenjovy.supabase.co"
-  NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_lzECDFuzfkqYXtrVgSd_Hg_q1Ls7aG8"
