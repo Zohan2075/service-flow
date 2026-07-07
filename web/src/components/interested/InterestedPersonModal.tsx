@@ -432,38 +432,48 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           {/* Location */}
           <div>
             <label className="block text-sm font-semibold mb-1">{t("interested.location")}</label>
-            <MapContainer
-              center={center}
-              zoom={zoom}
-              style={{ height: "300px", width: "100%" }}
-              className="rounded-xl"
-            >
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution="&copy; OpenStreetMap contributors"
-              />
-              {hasPersonLocation && (
-                <Marker
-                  position={[lat as number, lng as number]}
-                  draggable
-                  eventHandlers={{ dragend: handleMarkerDragEnd }}
+            {typeof navigator !== "undefined" && !navigator.onLine ? (
+              <div className="flex items-center justify-center h-[300px] rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="text-center">
+                  <span className="material-symbols-outlined text-3xl text-slate-400 mb-2 block">wifi_off</span>
+                  <p className="text-sm text-slate-500 font-medium">Map unavailable offline</p>
+                  <p className="text-xs text-slate-400 mt-1">Location fields are still editable</p>
+                </div>
+              </div>
+            ) : (
+              <MapContainer
+                center={center}
+                zoom={zoom}
+                style={{ height: "300px", width: "100%" }}
+                className="rounded-xl"
+              >
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution="&copy; OpenStreetMap contributors"
                 />
-              )}
-              {hasUserLocation && (
-                <CircleMarker
-                  center={[userLat as number, userLng as number]}
-                  radius={8}
-                  pathOptions={{
-                    color: "#3b82f6",
-                    fillColor: "#3b82f6",
-                    fillOpacity: 0.5,
-                    weight: 3,
-                  }}
-                />
-              )}
-              <MapClickHandler onLocationChange={handleLocationChange} />
-              <MapController onMapReady={handleMapReady} />
-            </MapContainer>
+                {hasPersonLocation && (
+                  <Marker
+                    position={[lat as number, lng as number]}
+                    draggable
+                    eventHandlers={{ dragend: handleMarkerDragEnd }}
+                  />
+                )}
+                {hasUserLocation && (
+                  <CircleMarker
+                    center={[userLat as number, userLng as number]}
+                    radius={8}
+                    pathOptions={{
+                      color: "#3b82f6",
+                      fillColor: "#3b82f6",
+                      fillOpacity: 0.5,
+                      weight: 3,
+                    }}
+                  />
+                )}
+                <MapClickHandler onLocationChange={handleLocationChange} />
+                <MapController onMapReady={handleMapReady} />
+              </MapContainer>
+            )}
             <div className="mt-2 flex items-center justify-between gap-2">
               <div className="space-y-0.5">
                 {hasPersonLocation && (
@@ -482,14 +492,16 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
                   <p className="text-xs text-slate-400">{t("interested.selectLocation")}</p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={handleMyLocation}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-              >
-                <span className="material-symbols-outlined text-base">my_location</span>
-                {t("interested.myLocation")}
-              </button>
+              {typeof navigator !== "undefined" && navigator.onLine && (
+                <button
+                  type="button"
+                  onClick={handleMyLocation}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                >
+                  <span className="material-symbols-outlined text-base">my_location</span>
+                  {t("interested.myLocation")}
+                </button>
+              )}
             </div>
           </div>
 
