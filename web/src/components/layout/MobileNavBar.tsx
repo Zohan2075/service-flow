@@ -18,16 +18,25 @@ export default function MobileNavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useT();
-  const { user, signOut } = useSupabaseAuth();
+  const { user, isLoading, signOut } = useSupabaseAuth();
   const interestedNavLabel = useStore((s) => s.settings.interestedNavLabel);
+  const hasLocalData = useStore(
+    (s) =>
+      s.timeEntries.length > 0 ||
+      s.interestedPeople.length > 0 ||
+      s.goals.length > 0 ||
+      s.serviceTypes.length > 1, // >1 because there's always a default
+  );
 
   const handleSignOut = () => {
     signOut();
     router.push("/login");
   };
 
-  // If not authenticated, show login button
-  if (!user) {
+  // Show nav items if: logged in, OR auth still loading (offline), OR has local data
+  const showNav = !!user || isLoading || hasLocalData;
+
+  if (!showNav) {
     return (
       <nav
         className="md:hidden fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
@@ -79,13 +88,23 @@ export default function MobileNavBar() {
             </Link>
           );
         })}
-        <button
-          onClick={handleSignOut}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500"
-        >
-          <span className="material-symbols-outlined text-[22px] leading-none">logout</span>
-          <span className="text-[10px] font-medium leading-none">Sign Out</span>
-        </button>
+        {user ? (
+          <button
+            onClick={handleSignOut}
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500"
+          >
+            <span className="material-symbols-outlined text-[22px] leading-none">logout</span>
+            <span className="text-[10px] font-medium leading-none">Sign Out</span>
+          </button>
+        ) : (
+          <Link
+            href="/login"
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500"
+          >
+            <span className="material-symbols-outlined text-[22px] leading-none">login</span>
+            <span className="text-[10px] font-medium leading-none">{t("login.continueGoogle")}</span>
+          </Link>
+        )}
       </div>
     </nav>
   );
