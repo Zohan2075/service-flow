@@ -85,30 +85,32 @@ export default function InterestedPeoplePage() {
           </button>
         </div>
 
-        {/* Filter tabs */}
-        <div className="mt-3 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-          {filterOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => setStatusFilter(option.id)}
-              className={cn(
-                "flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-colors",
-                statusFilter === option.id
-                  ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                  : "text-slate-500"
-              )}
-            >
-              {option.color && (
-                <span
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: option.color }}
-                  suppressHydrationWarning
-                />
-              )}
-              {option.label}
-            </button>
-          ))}
+        {/* Filter tabs — horizontally scrollable on mobile */}
+        <div className="mt-3 overflow-x-auto">
+          <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 min-w-max">
+            {filterOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setStatusFilter(option.id)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors",
+                  statusFilter === option.id
+                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-500"
+                )}
+              >
+                {option.color && (
+                  <span
+                    className="size-2 rounded-full shrink-0"
+                    style={{ backgroundColor: option.color }}
+                    suppressHydrationWarning
+                  />
+                )}
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
