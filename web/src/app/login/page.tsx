@@ -37,11 +37,9 @@ export default function LoginPage() {
     <div className="min-h-[100dvh] flex items-start justify-center bg-canvas px-4 py-8 sm:items-center sm:py-4">
       <div className="w-full max-w-sm sm:max-w-md">
         {/* Logo */}
-        <div className="flex items-center gap-3 justify-center mb-6 sm:mb-8">
-          <div className="bg-primary rounded-xl p-2.5 flex items-center justify-center text-white">
-            <span className="material-symbols-outlined text-2xl">event_note</span>
-          </div>
-          <h1 className="font-bold text-2xl tracking-tight">ServiceFlow</h1>
+        <div className="flex flex-col items-center gap-2 mb-6 sm:mb-8">
+          <h1 className="font-extrabold text-3xl sm:text-4xl tracking-tight bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">ServiceFlow</h1>
+          <p className="text-sm text-slate-400">Field service, simplified.</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm">

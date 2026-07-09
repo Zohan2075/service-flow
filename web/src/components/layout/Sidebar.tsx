@@ -39,11 +39,9 @@ export default function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col w-64 bg-surface border-r border-slate-200 dark:border-slate-800">
       {/* Logo */}
-      <div className="p-6 flex items-center gap-3">
-        <div className="bg-primary rounded-xl p-2 flex items-center justify-center text-white">
-          <span className="material-symbols-outlined">event_note</span>
-        </div>
-        <h1 className="font-bold text-xl tracking-tight">ServiceFlow</h1>
+      <div className="p-6 flex flex-col items-start gap-1">
+        <h1 className="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">ServiceFlow</h1>
+        <p className="text-[11px] text-slate-400 font-medium">Field service, simplified.</p>
       </div>
 
       {/* Nav */}
