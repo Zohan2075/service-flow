@@ -360,27 +360,44 @@ export default function CalendarPage() {
   // ── Touch swipe: animated month switch on mobile ───────────────────────
   const [swipeDelta, setSwipeDelta] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
+  const [swipeCompleting, setSwipeCompleting] = useState(false);
   const touchStartX = useRef(0);
+  const gridRef = useRef<HTMLDivElement>(null);
   const SWIPE_THRESHOLD = 80;
+  const SWIPE_ANIM_MS = 300;
 
   const onTouchStart = (e: React.TouchEvent) => {
+    if (swipeCompleting) return;
     touchStartX.current = e.touches[0].clientX;
     setSwipeDelta(0);
     setIsSwiping(true);
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
+    if (!isSwiping || swipeCompleting) return;
     setSwipeDelta(touchStartX.current - e.touches[0].clientX);
   };
 
   const onTouchEnd = () => {
-    setIsSwiping(false);
     if (Math.abs(swipeDelta) >= SWIPE_THRESHOLD) {
-      if (swipeDelta > 0) goToNextViewedMonth();
-      else goToPreviousViewedMonth();
+      // Smooth completion: animate the slide to full width, then switch month
+      const gridWidth = gridRef.current?.offsetWidth ?? window.innerWidth;
+      setSwipeCompleting(true);
+      setIsSwiping(false);
+      // Animate swipeDelta to full grid width (adjacent month slides fully in)
+      setSwipeDelta(swipeDelta > 0 ? gridWidth : -gridWidth);
+      // After animation completes, switch month and reset
+      setTimeout(() => {
+        if (swipeDelta > 0) goToNextViewedMonth();
+        else goToPreviousViewedMonth();
+        setSwipeDelta(0);
+        setSwipeCompleting(false);
+      }, SWIPE_ANIM_MS);
+    } else {
+      // Not enough swipe — spring back
+      setIsSwiping(false);
+      setSwipeDelta(0);
     }
-    setSwipeDelta(0);
   };
 
   const handleOpenAddModal = () => {
@@ -467,6 +484,7 @@ export default function CalendarPage() {
       <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas">
         {/* Calendar Grid — swipeable carousel on mobile */}
         <div
+          ref={gridRef}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
@@ -475,20 +493,20 @@ export default function CalendarPage() {
           {/* Current month — slides with the swipe */}
           <div
             style={{
-              transform: isSwiping ? `translateX(${-swipeDelta}px)` : "translateX(0)",
-              transition: isSwiping ? "none" : "transform 0.25s ease-out",
+              transform: (isSwiping || swipeCompleting) ? `translateX(${-swipeDelta}px)` : "translateX(0)",
+              transition: isSwiping ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
             }}
           >
             {renderMonthGrid(currentDate, calendarWeeks)}
           </div>
 
           {/* Next month — slides in from the right when swiping left */}
-          {isSwiping && swipeDelta > 0 && (
+          {(isSwiping || swipeCompleting) && swipeDelta > 0 && (
             <div
               className="absolute inset-0"
               style={{
                 transform: `translateX(calc(100% - ${swipeDelta}px))`,
-                transition: "none",
+                transition: isSwiping ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
               }}
             >
               {renderMonthGrid(addMonths(currentDate, 1), computeWeeks(addMonths(currentDate, 1)))}
@@ -496,12 +514,12 @@ export default function CalendarPage() {
           )}
 
           {/* Previous month — slides in from the left when swiping right */}
-          {isSwiping && swipeDelta < 0 && (
+          {(isSwiping || swipeCompleting) && swipeDelta < 0 && (
             <div
               className="absolute inset-0"
               style={{
                 transform: `translateX(calc(-100% - ${swipeDelta}px))`,
-                transition: "none",
+                transition: isSwiping ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
               }}
             >
               {renderMonthGrid(addMonths(currentDate, -1), computeWeeks(addMonths(currentDate, -1)))}
