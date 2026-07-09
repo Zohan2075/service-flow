@@ -361,6 +361,7 @@ export default function CalendarPage() {
   const [swipeDelta, setSwipeDelta] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [swipeCompleting, setSwipeCompleting] = useState(false);
+  const [swipeResetting, setSwipeResetting] = useState(false);
   const touchStartX = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const SWIPE_THRESHOLD = 80;
@@ -384,14 +385,16 @@ export default function CalendarPage() {
       const gridWidth = gridRef.current?.offsetWidth ?? window.innerWidth;
       setSwipeCompleting(true);
       setIsSwiping(false);
-      // Animate swipeDelta to full grid width (adjacent month slides fully in)
       setSwipeDelta(swipeDelta > 0 ? gridWidth : -gridWidth);
-      // After animation completes, switch month and reset
+      // After animation completes, switch month with NO transition (instant)
       setTimeout(() => {
+        setSwipeResetting(true); // disable transition
         if (swipeDelta > 0) goToNextViewedMonth();
         else goToPreviousViewedMonth();
         setSwipeDelta(0);
         setSwipeCompleting(false);
+        // Re-enable transition on next frame
+        requestAnimationFrame(() => setSwipeResetting(false));
       }, SWIPE_ANIM_MS);
     } else {
       // Not enough swipe — spring back
@@ -494,7 +497,7 @@ export default function CalendarPage() {
           <div
             style={{
               transform: (isSwiping || swipeCompleting) ? `translateX(${-swipeDelta}px)` : "translateX(0)",
-              transition: isSwiping ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
+              transition: (isSwiping || swipeResetting) ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
             }}
           >
             {renderMonthGrid(currentDate, calendarWeeks)}
@@ -506,7 +509,7 @@ export default function CalendarPage() {
               className="absolute inset-0"
               style={{
                 transform: `translateX(calc(100% - ${swipeDelta}px))`,
-                transition: isSwiping ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
+                transition: (isSwiping || swipeResetting) ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
               }}
             >
               {renderMonthGrid(addMonths(currentDate, 1), computeWeeks(addMonths(currentDate, 1)))}
@@ -519,7 +522,7 @@ export default function CalendarPage() {
               className="absolute inset-0"
               style={{
                 transform: `translateX(calc(-100% - ${swipeDelta}px))`,
-                transition: isSwiping ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
+                transition: (isSwiping || swipeResetting) ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
               }}
             >
               {renderMonthGrid(addMonths(currentDate, -1), computeWeeks(addMonths(currentDate, -1)))}
