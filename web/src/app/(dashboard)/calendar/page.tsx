@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   eachDayOfInterval,
   endOfMonth,
@@ -207,6 +207,23 @@ export default function CalendarPage() {
     toast.success(t("calendar.entryDeleted"));
   };
 
+  // ── Touch swipe: switch months on mobile ────────────────────────────────
+  const touchStartX = useRef(0);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) < 50) return;
+    if (diff > 0) {
+      goToNextViewedMonth();
+    } else {
+      goToPreviousViewedMonth();
+    }
+  };
+
   const handleOpenAddModal = () => {
     ensureDefaultServiceType();
     setShowAddModal(true);
@@ -221,7 +238,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <>
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="flex flex-col h-full md:min-h-0">
       {/* Top Header */}
       <header className="border-b border-slate-200 bg-surface/80 px-4 py-3 backdrop-blur-md dark:border-slate-800 md:px-6 md:py-4">
         <div className="flex flex-col gap-3">
@@ -503,7 +520,7 @@ export default function CalendarPage() {
           onSuccess={() => setEditingEntry(null)}
         />
       )}
-    </>
+    </div>
   );
 }
 
