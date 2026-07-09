@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  addMonths,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -207,22 +208,34 @@ export default function CalendarPage() {
     toast.success(t("calendar.entryDeleted"));
   };
 
-  // ── Touch swipe: switch months on mobile ────────────────────────────────
+  // ── Touch swipe: animated month switch on mobile ───────────────────────
+  const [swipeDelta, setSwipeDelta] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef(0);
+  const SWIPE_THRESHOLD = 80;
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    setSwipeDelta(0);
+    setIsSwiping(true);
   };
 
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) < 50) return;
-    if (diff > 0) {
-      goToNextViewedMonth();
-    } else {
-      goToPreviousViewedMonth();
-    }
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!isSwiping) return;
+    setSwipeDelta(touchStartX.current - e.touches[0].clientX);
   };
+
+  const onTouchEnd = () => {
+    setIsSwiping(false);
+    if (Math.abs(swipeDelta) >= SWIPE_THRESHOLD) {
+      if (swipeDelta > 0) goToNextViewedMonth();
+      else goToPreviousViewedMonth();
+    }
+    setSwipeDelta(0);
+  };
+
+  const prevMonthName = monthYear(addMonths(currentDate, -1), language);
+  const nextMonthName = monthYear(addMonths(currentDate, 1), language);
 
   const handleOpenAddModal = () => {
     ensureDefaultServiceType();
@@ -238,7 +251,27 @@ export default function CalendarPage() {
   };
 
   return (
-    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="flex flex-col h-full md:min-h-0">
+    <div
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      className="flex flex-col h-full md:min-h-0 relative overflow-hidden select-none"
+      style={{
+        transform: isSwiping ? `translateX(${-swipeDelta}px)` : "translateX(0)",
+        transition: isSwiping ? "none" : "transform 0.25s ease-out",
+      }}
+    >
+      {/* Swipe preview overlay */}
+      {isSwiping && Math.abs(swipeDelta) > 20 && (
+        <div
+          className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+          style={{ opacity: Math.min(Math.abs(swipeDelta) / SWIPE_THRESHOLD, 0.35) }}
+        >
+          <span className="text-2xl font-bold text-slate-400 dark:text-slate-500">
+            {swipeDelta > 0 ? nextMonthName : prevMonthName}
+          </span>
+        </div>
+      )}
       {/* Top Header */}
       <header className="border-b border-slate-200 bg-surface/80 px-4 py-3 backdrop-blur-md dark:border-slate-800 md:px-6 md:py-4">
         <div className="flex flex-col gap-3">
