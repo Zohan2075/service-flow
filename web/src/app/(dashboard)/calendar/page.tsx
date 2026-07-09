@@ -168,6 +168,155 @@ export default function CalendarPage() {
     });
   }, [calendarEnd, calendarStart, firstWeekContainsDate, weekStartsOn]);
 
+  // Compute weeks for ANY month (used for swipe carousel adjacent months)
+  const computeWeeks = (monthDate: Date) => {
+    const mStart = startOfMonth(monthDate);
+    const mEnd = endOfMonth(monthDate);
+    const gStart = startOfWeek(mStart, { weekStartsOn });
+    const gEnd = endOfWeek(mEnd, { weekStartsOn });
+    const days = eachDayOfInterval({ start: gStart, end: gEnd });
+    return Array.from({ length: Math.ceil(days.length / 7) }, (_, i) => {
+      const weekDays = days.slice(i * 7, i * 7 + 7);
+      return {
+        weekNumber: getWeek(weekDays[0], { weekStartsOn, firstWeekContainsDate }),
+        days: weekDays,
+      };
+    });
+  };
+
+  // Render a full month grid for any month — used for current + swipe-adjacent months
+  const renderMonthGrid = (monthDate: Date, weeks: { weekNumber: number; days: Date[] }[]) => (
+    <div className="bg-surface shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden rounded-2xl shrink-0 w-full">
+      {/* Weekday Header */}
+      <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800 md:grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]">
+        <div className="hidden items-center justify-center border-r border-slate-100 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 md:flex md:py-3 md:text-xs">
+          {t("calendar.wk")}
+        </div>
+        {weekdayLabels.map((d) => (
+          <div
+            key={d}
+            className="border-r border-slate-100 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 last:border-r-0 dark:border-slate-800 md:py-3 md:text-xs"
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar Cells */}
+      <div>
+        {weeks.map(({ weekNumber, days }) => (
+          <div
+            key={weekNumber + days[0].toISOString()}
+            className="grid grid-cols-7 md:grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]"
+          >
+            <div className="hidden items-center justify-center border-r border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-400 dark:border-slate-800 dark:bg-slate-800/50 md:flex md:text-xs">
+              {weekNumber}
+            </div>
+            {days.map((day) => {
+              const key = format(day, "yyyy-MM-dd");
+              const dayData = calendarMap[key];
+              const isSelected = isSameDay(day, selectedDate);
+              const isTodayDay = isToday(day);
+              const isCurrentMonthDay = isSameMonth(day, monthDate);
+              const hasPlannedEntries = Boolean(
+                dayData && (dayData.planned_duration_seconds > 0 || dayData.planned_units > 0)
+              );
+
+              return (
+                <div
+                  key={key}
+                  onClick={() => handleSelectDay(day)}
+                  className={cn(
+                    "min-h-[4.5rem] cursor-pointer border-r border-b border-slate-100 p-1.5 transition-colors dark:border-slate-800 sm:min-h-[5.25rem] md:min-h-24 md:p-2",
+                    isSelected
+                      ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
+                      : isCurrentMonthDay
+                        ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                        : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60",
+                    hasPlannedEntries && !isSelected && "bg-amber-50/70 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)] dark:bg-amber-950/20"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-flex items-center justify-center size-6 md:size-7 rounded-full text-xs md:text-sm font-bold mb-1 md:mb-2",
+                      isTodayDay
+                        ? "bg-primary text-white"
+                        : isSelected
+                          ? "text-primary font-extrabold"
+                          : isCurrentMonthDay
+                            ? "text-slate-700 dark:text-slate-200"
+                            : "text-slate-400 dark:text-slate-500"
+                    )}
+                  >
+                    {format(day, "d")}
+                  </span>
+
+                  {/* Desktop: show entry chips */}
+                  <div className="hidden md:block">
+                    {dayData?.entries.slice(0, 3).map((entry) => {
+                      const st = serviceTypeMap[entry.service_type_id];
+                      const isPlanned = isPlannedEntry(entry);
+                      return (
+                        <div
+                          key={entry.id}
+                          className="rounded-r p-1.5 mb-1 border-l-4"
+                          style={{
+                            borderColor: isPlanned ? "#f59e0b" : st?.color ?? "#2094f3",
+                            backgroundColor: isPlanned ? "rgba(245, 158, 11, 0.14)" : (st?.color ?? "#2094f3") + "1a",
+                          }}
+                        >
+                          <div className="flex items-center gap-1">
+                            <p
+                              className="text-[10px] font-bold uppercase leading-none"
+                              style={{ color: isPlanned ? "#b45309" : st?.color ?? "#2094f3" }}
+                            >
+                              {entry.title}
+                            </p>
+                            {isPlanned && (
+                              <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-200">
+                                {t("calendar.plannedShort")}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {isUnitsEntry(entry)
+                              ? `${entry.units_quantity} ${t("calendar.units")}`
+                              : durationDisplay(computeDurationSeconds(entry))}
+                          </p>
+                        </div>
+                      );
+                    })}
+                    {(dayData?.entries.length ?? 0) > 3 && (
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        +{dayData!.entries.length - 3} {t("calendar.more")}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Mobile: show dot indicators */}
+                  {dayData && dayData.entries.length > 0 && (
+                    <div className="flex gap-0.5 md:hidden mt-0.5">
+                      {dayData.entries.slice(0, 4).map((entry) => {
+                        const st = serviceTypeMap[entry.service_type_id];
+                        return (
+                          <div
+                            key={entry.id}
+                            className="size-1.5 rounded-full"
+                            style={{ backgroundColor: isPlannedEntry(entry) ? "#f59e0b" : st?.color ?? "#2094f3" }}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   const selectedDayData = calendarMap[format(selectedDate, "yyyy-MM-dd")];
   const monthlyTotals = useMemo(() => {
     const monthKey = format(currentDate, "yyyy-MM");
@@ -233,9 +382,6 @@ export default function CalendarPage() {
     }
     setSwipeDelta(0);
   };
-
-  const prevMonthName = monthYear(addMonths(currentDate, -1), language);
-  const nextMonthName = monthYear(addMonths(currentDate, 1), language);
 
   const handleOpenAddModal = () => {
     ensureDefaultServiceType();
@@ -319,157 +465,48 @@ export default function CalendarPage() {
 
       {/* Calendar & Day View */}
       <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas">
-        {/* Calendar Grid — swipeable on mobile */}
+        {/* Calendar Grid — swipeable carousel on mobile */}
         <div
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
-          className="relative overflow-hidden select-none rounded-2xl"
-          style={{
-            transform: isSwiping ? `translateX(${-swipeDelta}px)` : "translateX(0)",
-            transition: isSwiping ? "none" : "transform 0.25s ease-out",
-          }}
+          className="relative overflow-hidden select-none md:overflow-visible"
         >
-          {/* Swipe preview overlay */}
-          {isSwiping && Math.abs(swipeDelta) > 20 && (
+          {/* Current month — slides with the swipe */}
+          <div
+            style={{
+              transform: isSwiping ? `translateX(${-swipeDelta}px)` : "translateX(0)",
+              transition: isSwiping ? "none" : "transform 0.25s ease-out",
+            }}
+          >
+            {renderMonthGrid(currentDate, calendarWeeks)}
+          </div>
+
+          {/* Next month — slides in from the right when swiping left */}
+          {isSwiping && swipeDelta > 0 && (
             <div
-              className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
-              style={{ opacity: Math.min(Math.abs(swipeDelta) / SWIPE_THRESHOLD, 0.55) }}
+              className="absolute inset-0"
+              style={{
+                transform: `translateX(calc(100% - ${swipeDelta}px))`,
+                transition: "none",
+              }}
             >
-              <span className="text-2xl font-bold text-slate-400 dark:text-slate-500">
-                {swipeDelta > 0 ? nextMonthName : prevMonthName}
-              </span>
+              {renderMonthGrid(addMonths(currentDate, 1), computeWeeks(addMonths(currentDate, 1)))}
             </div>
           )}
-          <div className="bg-surface shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden rounded-2xl">
-          {/* Weekday Header */}
-          <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800 md:grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]">
-            <div className="hidden items-center justify-center border-r border-slate-100 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 md:flex md:py-3 md:text-xs">
-              {t("calendar.wk")}
+
+          {/* Previous month — slides in from the left when swiping right */}
+          {isSwiping && swipeDelta < 0 && (
+            <div
+              className="absolute inset-0"
+              style={{
+                transform: `translateX(calc(-100% - ${swipeDelta}px))`,
+                transition: "none",
+              }}
+            >
+              {renderMonthGrid(addMonths(currentDate, -1), computeWeeks(addMonths(currentDate, -1)))}
             </div>
-            {weekdayLabels.map((d) => (
-              <div
-                key={d}
-                className="border-r border-slate-100 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 last:border-r-0 dark:border-slate-800 md:py-3 md:text-xs"
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Calendar Cells */}
-          <div>
-            {calendarWeeks.map(({ weekNumber, days }) => (
-              <div
-                key={weekNumber + days[0].toISOString()}
-                className="grid grid-cols-7 md:grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]"
-              >
-                <div className="hidden items-center justify-center border-r border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-400 dark:border-slate-800 dark:bg-slate-800/50 md:flex md:text-xs">
-                  {weekNumber}
-                </div>
-                {days.map((day) => {
-                  const key = format(day, "yyyy-MM-dd");
-                  const dayData = calendarMap[key];
-                  const isSelected = isSameDay(day, selectedDate);
-                  const isTodayDay = isToday(day);
-                  const isCurrentMonthDay = isSameMonth(day, currentDate);
-                  const hasPlannedEntries = Boolean(
-                    dayData && (dayData.planned_duration_seconds > 0 || dayData.planned_units > 0)
-                  );
-
-                  return (
-                    <div
-                      key={key}
-                      onClick={() => handleSelectDay(day)}
-                      className={cn(
-                        "min-h-[4.5rem] cursor-pointer border-r border-b border-slate-100 p-1.5 transition-colors dark:border-slate-800 sm:min-h-[5.25rem] md:min-h-24 md:p-2",
-                        isSelected
-                          ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
-                          : isCurrentMonthDay
-                            ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                            : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60",
-                        hasPlannedEntries && !isSelected && "bg-amber-50/70 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)] dark:bg-amber-950/20"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "inline-flex items-center justify-center size-6 md:size-7 rounded-full text-xs md:text-sm font-bold mb-1 md:mb-2",
-                          isTodayDay
-                            ? "bg-primary text-white"
-                            : isSelected
-                              ? "text-primary font-extrabold"
-                              : isCurrentMonthDay
-                                ? "text-slate-700 dark:text-slate-200"
-                                : "text-slate-400 dark:text-slate-500"
-                        )}
-                      >
-                        {format(day, "d")}
-                      </span>
-
-                      {/* Desktop: show entry chips */}
-                      <div className="hidden md:block">
-                        {dayData?.entries.slice(0, 3).map((entry) => {
-                          const st = serviceTypeMap[entry.service_type_id];
-                          const isPlanned = isPlannedEntry(entry);
-                          return (
-                            <div
-                              key={entry.id}
-                              className="rounded-r p-1.5 mb-1 border-l-4"
-                              style={{
-                                borderColor: isPlanned ? "#f59e0b" : st?.color ?? "#2094f3",
-                                backgroundColor: isPlanned ? "rgba(245, 158, 11, 0.14)" : (st?.color ?? "#2094f3") + "1a",
-                              }}
-                            >
-                              <div className="flex items-center gap-1">
-                                <p
-                                  className="text-[10px] font-bold uppercase leading-none"
-                                  style={{ color: isPlanned ? "#b45309" : st?.color ?? "#2094f3" }}
-                                >
-                                  {entry.title}
-                                </p>
-                                {isPlanned && (
-                                  <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-200">
-                                    {t("calendar.plannedShort")}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[10px] text-slate-500 font-medium">
-                                {isUnitsEntry(entry)
-                                  ? `${entry.units_quantity} ${t("calendar.units")}`
-                                  : durationDisplay(computeDurationSeconds(entry))}
-                              </p>
-                            </div>
-                          );
-                        })}
-                        {(dayData?.entries.length ?? 0) > 3 && (
-                          <p className="text-[10px] text-slate-400 font-medium">
-                            +{dayData!.entries.length - 3} {t("calendar.more")}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Mobile: show dot indicators */}
-                      {dayData && dayData.entries.length > 0 && (
-                        <div className="flex gap-0.5 md:hidden mt-0.5">
-                          {dayData.entries.slice(0, 4).map((entry) => {
-                            const st = serviceTypeMap[entry.service_type_id];
-                            return (
-                              <div
-                                key={entry.id}
-                                className="size-1.5 rounded-full"
-                                style={{ backgroundColor: isPlannedEntry(entry) ? "#f59e0b" : st?.color ?? "#2094f3" }}
-                              />
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
+          )}
         </div>
 
         {/* Daily Entries */}
