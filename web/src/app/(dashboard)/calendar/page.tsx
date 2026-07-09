@@ -251,27 +251,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <div
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      className="flex flex-col h-full md:min-h-0 relative overflow-hidden select-none"
-      style={{
-        transform: isSwiping ? `translateX(${-swipeDelta}px)` : "translateX(0)",
-        transition: isSwiping ? "none" : "transform 0.25s ease-out",
-      }}
-    >
-      {/* Swipe preview overlay */}
-      {isSwiping && Math.abs(swipeDelta) > 20 && (
-        <div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
-          style={{ opacity: Math.min(Math.abs(swipeDelta) / SWIPE_THRESHOLD, 0.35) }}
-        >
-          <span className="text-2xl font-bold text-slate-400 dark:text-slate-500">
-            {swipeDelta > 0 ? nextMonthName : prevMonthName}
-          </span>
-        </div>
-      )}
+    <div className="flex flex-col h-full md:min-h-0">
       {/* Top Header */}
       <header className="border-b border-slate-200 bg-surface/80 px-4 py-3 backdrop-blur-md dark:border-slate-800 md:px-6 md:py-4">
         <div className="flex flex-col gap-3">
@@ -339,8 +319,29 @@ export default function CalendarPage() {
 
       {/* Calendar & Day View */}
       <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas">
-        {/* Calendar Grid */}
-        <div className="bg-surface rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+        {/* Calendar Grid — swipeable on mobile */}
+        <div
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          className="relative overflow-hidden select-none rounded-2xl"
+          style={{
+            transform: isSwiping ? `translateX(${-swipeDelta}px)` : "translateX(0)",
+            transition: isSwiping ? "none" : "transform 0.25s ease-out",
+          }}
+        >
+          {/* Swipe preview overlay */}
+          {isSwiping && Math.abs(swipeDelta) > 20 && (
+            <div
+              className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+              style={{ opacity: Math.min(Math.abs(swipeDelta) / SWIPE_THRESHOLD, 0.55) }}
+            >
+              <span className="text-2xl font-bold text-slate-400 dark:text-slate-500">
+                {swipeDelta > 0 ? nextMonthName : prevMonthName}
+              </span>
+            </div>
+          )}
+          <div className="bg-surface shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden rounded-2xl">
           {/* Weekday Header */}
           <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800 md:grid-cols-[2.25rem_repeat(7,minmax(0,1fr))]">
             <div className="hidden items-center justify-center border-r border-slate-100 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 md:flex md:py-3 md:text-xs">
@@ -468,6 +469,7 @@ export default function CalendarPage() {
               </div>
             ))}
           </div>
+        </div>
         </div>
 
         {/* Daily Entries */}
