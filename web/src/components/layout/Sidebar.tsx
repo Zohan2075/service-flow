@@ -41,7 +41,6 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="p-6 flex flex-col items-start gap-1">
         <h1 className="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">ServiceFlow</h1>
-        <p className="text-[11px] text-slate-400 font-medium">Field service, simplified.</p>
       </div>
 
       {/* Nav */}
