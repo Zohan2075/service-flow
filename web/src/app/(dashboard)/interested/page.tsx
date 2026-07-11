@@ -24,6 +24,7 @@ export default function InterestedPeoplePage() {
   const settings = useStore((s) => s.settings);
   const interestedPeople = useStore((s) => s.interestedPeople);
   const interestedStatuses = useStore((s) => s.interestedStatuses);
+  const updateInterestedPerson = useStore((s) => s.updateInterestedPerson);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState<InterestedPerson | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -96,9 +97,16 @@ export default function InterestedPeoplePage() {
                 className={cn(
                   "flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors",
                   statusFilter === option.id
-                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
+                    ? "text-slate-900 dark:text-white shadow-sm"
                     : "text-slate-500"
                 )}
+                style={
+                  statusFilter === option.id && option.color
+                    ? { backgroundColor: option.color + "20" }
+                    : statusFilter === option.id
+                      ? { backgroundColor: "var(--surface)" }
+                      : {}
+                }
               >
                 {option.color && (
                   <span
@@ -123,75 +131,97 @@ export default function InterestedPeoplePage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredPeople.map((person) => (
-              <button
-                key={person.id}
-                onClick={() => handleOpenEdit(person)}
-                className="w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors"
-                style={{ borderLeft: `4px solid ${GENDER_COLORS[person.gender]}` }}
-              >
-                <span
-                  className="size-3 rounded-full shrink-0"
-                  style={{ backgroundColor: getStatusInfo(person.status).color }}
-                  suppressHydrationWarning
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="text-xs"
-                      style={{ color: GENDER_COLORS[person.gender] }}
-                    >
-                      {person.gender === "male" ? "♂" : "♀"}
-                    </span>
-                    <p className="font-semibold text-sm truncate">
-                      {person.name} {person.last_name}
+            {filteredPeople.map((person) => {
+              const statusInfo = getStatusInfo(person.status);
+              return (
+                <button
+                  key={person.id}
+                  onClick={() => handleOpenEdit(person)}
+                  className={cn(
+                    "w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors",
+                    person.completed && "opacity-60"
+                  )}
+                  style={{ borderLeft: `4px solid ${statusInfo.color}` }}
+                >
+                  <span
+                    className="size-3 rounded-full shrink-0"
+                    style={{ backgroundColor: statusInfo.color }}
+                    suppressHydrationWarning
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="text-xs"
+                        style={{ color: GENDER_COLORS[person.gender] }}
+                      >
+                        {person.gender === "male" ? "♂" : "♀"}
+                      </span>
+                      <p className={cn("font-semibold text-sm truncate", person.completed && "line-through")}>
+                        {person.name} {person.last_name}
+                      </p>
+                    </div>
+                    <p className="text-xs truncate flex items-center gap-1" style={{ color: statusInfo.color }}>
+                      <span className="material-symbols-outlined text-xs" suppressHydrationWarning>
+                        {statusInfo.icon}
+                      </span>
+                      {statusInfo.name}
                     </p>
                   </div>
-                  <p className="text-xs text-slate-400 truncate flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs" style={{ color: getStatusInfo(person.status).color }} suppressHydrationWarning>
-                      {getStatusInfo(person.status).icon}
-                    </span>
-                    {getStatusInfo(person.status).name}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {person.latitude != null && person.longitude != null && (
-                    <a
-                      href={`https://www.google.com/maps?q=${person.latitude},${person.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center justify-center size-8 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                      title="Ver ubicación"
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Completed toggle */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateInterestedPerson(person.id, { completed: !person.completed });
+                      }}
+                      className={cn(
+                        "inline-flex items-center justify-center size-7 rounded-full transition-colors",
+                        person.completed
+                          ? "bg-green-500 text-white"
+                          : "text-slate-300 dark:text-slate-600 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                      )}
+                      title={person.completed ? t("interested.markActive") : t("interested.markCompleted")}
                     >
-                      <span className="material-symbols-outlined text-lg">location_on</span>
-                    </a>
-                  )}
-                  <div className="text-right shrink-0">
-                    {person.next_visit_weekly_day != null ? (
-                      <div className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs text-primary">
-                          event_repeat
-                        </span>
-                        <p className="text-xs text-primary font-semibold leading-tight">
-                          {WEEKDAYS[person.next_visit_weekly_day]}
-                          {person.next_visit_date &&
-                            ` ${new Date(person.next_visit_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
-                        </p>
-                      </div>
-                    ) : person.next_visit_date ? (
-                      <div className="flex flex-col items-end">
-                        <p className="text-xs text-slate-500 leading-tight">
-                          {dateTimeString(new Date(person.next_visit_date), settings.language)}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400">{t("interested.noDate")}</p>
+                      <span className="material-symbols-outlined text-base">{person.completed ? "check_circle" : "radio_button_unchecked"}</span>
+                    </button>
+                    {person.latitude != null && person.longitude != null && (
+                      <a
+                        href={`https://www.google.com/maps?q=${person.latitude},${person.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center justify-center size-8 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                        title="Ver ubicación"
+                      >
+                        <span className="material-symbols-outlined text-lg">location_on</span>
+                      </a>
                     )}
+                    <div className="text-right shrink-0">
+                      {person.next_visit_weekly_day != null ? (
+                        <div className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs text-primary">
+                            event_repeat
+                          </span>
+                          <p className="text-xs text-primary font-semibold leading-tight">
+                            {WEEKDAYS[person.next_visit_weekly_day]}
+                            {person.next_visit_date &&
+                              ` ${new Date(person.next_visit_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                          </p>
+                        </div>
+                      ) : person.next_visit_date ? (
+                        <div className="flex flex-col items-end">
+                          <p className="text-xs text-slate-500 leading-tight">
+                            {dateTimeString(new Date(person.next_visit_date), settings.language)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">{t("interested.noDate")}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

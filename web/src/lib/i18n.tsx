@@ -299,6 +299,14 @@ const translations = {
     "interested.edit": "Edit",
     "interested.delete": "Delete",
     "interested.all": "All",
+    "interested.addStatus": "Add Status",
+    "interested.statusDeleted": "Status deleted",
+    "interested.peopleReassigned": "{count} people moved to {status}",
+    "interested.lastStatusWarning": "At least one status is required",
+    "interested.deleteStatusConfirm": "Delete this status?",
+    "interested.completed": "Completed",
+    "interested.markCompleted": "Mark as completed",
+    "interested.markActive": "Mark as active",
 
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
@@ -596,6 +604,14 @@ const translations = {
     "interested.edit": "Editar",
     "interested.delete": "Eliminar",
     "interested.all": "Todos",
+    "interested.addStatus": "Agregar Estado",
+    "interested.statusDeleted": "Estado eliminado",
+    "interested.peopleReassigned": "{count} personas movidas a {status}",
+    "interested.lastStatusWarning": "Se requiere al menos un estado",
+    "interested.deleteStatusConfirm": "¿Eliminar este estado?",
+    "interested.completed": "Completado",
+    "interested.markCompleted": "Marcar como completado",
+    "interested.markActive": "Marcar como activo",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",

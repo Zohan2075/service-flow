@@ -139,6 +139,8 @@ export default function SettingsPage() {
   const interestedStatuses = useStore((s) => s.interestedStatuses);
   const updateInterestedStatus = useStore((s) => s.updateInterestedStatus);
   const reorderInterestedStatuses = useStore((s) => s.reorderInterestedStatuses);
+  const addInterestedStatus = useStore((s) => s.addInterestedStatus);
+  const deleteInterestedStatus = useStore((s) => s.deleteInterestedStatus);
   const viewedMonth = useStore((s) => s.uiState.viewedMonth);
   const addServiceType = useStore((s) => s.addServiceType);
   const addGoal = useStore((s) => s.addGoal);
@@ -1202,11 +1204,27 @@ export default function SettingsPage() {
                     key={status.id}
                     status={status}
                     onUpdate={(patch) => updateInterestedStatus(status.id, patch)}
+                    onDelete={() => {
+                      const result = deleteInterestedStatus(status.id);
+                      if (result === null) {
+                        toast.error(t("interested.lastStatusWarning"));
+                      } else if (result.affectedCount > 0) {
+                        const reassignedName = interestedStatuses.find((s) => s.id === result.reassignedTo)?.name ?? result.reassignedTo;
+                        toast.success(t("interested.statusDeleted") + " — " + t("interested.peopleReassigned").replace("{count}", String(result.affectedCount)).replace("{status}", reassignedName));
+                      } else {
+                        toast.success(t("interested.statusDeleted"));
+                      }
+                    }}
+                    canDelete={interestedStatuses.length > 1}
+                    interestedPeopleCount={interestedPeople.filter((p) => p.status === status.id).length}
                   />
                 ))}
               </div>
             </SortableContext>
           </DndContext>
+
+          {/* Add Status button */}
+          <AddStatusButton onAdd={addInterestedStatus} />
         </div>
 
         {/* ── Data Management ──────────────────────────────────────────────── */}
@@ -2017,12 +2035,19 @@ function SortableServiceTypeItem({
 function SortableStatusItem({
   status,
   onUpdate,
+  onDelete,
+  canDelete,
+  interestedPeopleCount,
 }: {
   status: InterestedStatusConfig;
   onUpdate: (patch: Partial<InterestedStatusConfig>) => void;
+  onDelete: () => void;
+  canDelete: boolean;
+  interestedPeopleCount: number;
 }) {
   const { t } = useT();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editName, setEditName] = useState(status.name);
   const [editColor, setEditColor] = useState(status.color);
   const [editIcon, setEditIcon] = useState(status.icon);
@@ -2080,13 +2105,48 @@ function SortableStatusItem({
             <p className="text-xs text-slate-400 capitalize">{status.id.replace(/_/g, " ")}</p>
           </div>
         </div>
-        <button
-          onClick={() => (editing ? handleCancel() : setEditing(true))}
-          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0"
-        >
-          <span className="material-symbols-outlined text-base">{editing ? "close" : "edit"}</span>
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => (editing ? handleCancel() : setEditing(true))}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            <span className="material-symbols-outlined text-base">{editing ? "close" : "edit"}</span>
+          </button>
+          {canDelete && !confirmDelete && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-slate-400 hover:text-red-500"
+              title={t("interested.delete")}
+            >
+              <span className="material-symbols-outlined text-base">delete</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <p className="text-sm text-red-500 font-medium text-center mb-3">
+            {t("interested.deleteStatusConfirm")}
+            {interestedPeopleCount > 0 && ` (${interestedPeopleCount} ${interestedPeopleCount === 1 ? "person" : "people"})`}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              {t("interested.cancel")}
+            </button>
+            <button
+              onClick={() => { onDelete(); setConfirmDelete(false); }}
+              className="flex-1 py-2 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-colors"
+            >
+              {t("interested.delete")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
@@ -2162,6 +2222,109 @@ function SortableStatusItem({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Add Status Button -------------------------------------------------------
+
+function AddStatusButton({ onAdd }: { onAdd: (name: string, color: string, icon: string) => void }) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(COLORS[0]);
+  const [icon, setIcon] = useState(ICONS[14] ?? "person");
+
+  const handleSave = () => {
+    if (!name.trim()) return;
+    onAdd(name.trim(), color, icon);
+    setName("");
+    setColor(COLORS[0]);
+    setIcon(ICONS[14] ?? "person");
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-500 hover:border-primary hover:text-primary transition-colors"
+      >
+        <span className="material-symbols-outlined text-base">add</span>
+        {t("interested.addStatus")}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-surface space-y-3">
+      <div>
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.name")}</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-sm focus:outline-none focus:border-primary"
+          placeholder="e.g. Phone Witnessing"
+          autoFocus
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.color")}</label>
+        <div className="flex gap-2 flex-wrap">
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              className={cn(
+                "size-7 rounded-full border-2 transition-all",
+                color === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
+              )}
+              style={{ backgroundColor: c }}
+              suppressHydrationWarning
+            />
+          ))}
+          <label className="size-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
+            <span className="material-symbols-outlined text-xs text-slate-400">palette</span>
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="sr-only" />
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.icon")}</label>
+        <div className="flex gap-2 flex-wrap max-h-32 overflow-y-auto">
+          {ICONS.map((ic) => (
+            <button
+              key={ic}
+              onClick={() => setIcon(ic)}
+              className={cn(
+                "size-8 rounded-lg border-2 flex items-center justify-center transition-all",
+                icon === ic ? "border-primary bg-primary/10 text-primary scale-110" : "border-slate-200 dark:border-slate-700 text-slate-500"
+              )}
+            >
+              <span className="material-symbols-outlined text-sm">{ic}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={!name.trim()}
+          className="flex-1 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-all"
+        >
+          {t("settings.save")}
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+        >
+          {t("settings.cancel")}
+        </button>
+      </div>
     </div>
   );
 }

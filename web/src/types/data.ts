@@ -91,7 +91,7 @@ export interface GoalDefinition {
   updated_at: string;
 }
 
-export type InterestedPersonStatus = "bible_student" | "return_visit" | "interested_person";
+export type InterestedPersonStatus = string;
 
 export interface InterestedPerson {
   id: string;
@@ -107,6 +107,7 @@ export interface InterestedPerson {
   next_visit_date: string | null;  // ISO 8601 date
   next_visit_weekly_day: number | null;  // 0=Sun…6=Sat — when set, next visit repeats weekly on this day
   status: InterestedPersonStatus;
+  completed: boolean;
   created_at: string;
   updated_at: string;
 }

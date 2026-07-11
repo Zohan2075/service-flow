@@ -96,6 +96,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
     person?.next_visit_weekly_day ?? null
   );
   const [comments, setComments] = useState(person?.comments ?? "");
+  const [completed, setCompleted] = useState(person?.completed ?? false);
   const [lat, setLat] = useState<number | null>(person?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(person?.longitude ?? null);
   const [userLat, setUserLat] = useState<number | null>(null);
@@ -196,6 +197,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           : null,
         next_visit_weekly_day: nextVisitWeeklyDay,
         status,
+        completed,
       };
 
       if (isEditing && person) {
@@ -504,6 +506,31 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
               )}
             </div>
           </div>
+
+          {/* Completed toggle */}
+          {isEditing && (
+            <div className="flex items-center justify-between gap-3 py-2">
+              <div>
+                <p className="text-sm font-semibold">{t("interested.completed")}</p>
+                <p className="text-xs text-slate-400">{t("interested.markCompleted")}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompleted(!completed)}
+                className={cn(
+                  "relative w-12 h-7 rounded-full transition-colors shrink-0",
+                  completed ? "bg-green-500" : "bg-slate-300 dark:bg-slate-700"
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 size-6 bg-white rounded-full shadow-sm transition-transform",
+                    completed ? "translate-x-[1.375rem]" : "translate-x-0.5"
+                  )}
+                />
+              </button>
+            </div>
+          )}
 
           <button
             type="submit"

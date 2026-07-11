@@ -111,6 +111,8 @@ interface AppState {
   deleteInterestedPerson: (id: string) => void;
 
   // interested status config actions
+  addInterestedStatus: (name: string, color: string, icon: string) => string;
+  deleteInterestedStatus: (id: string) => { reassignedTo: string; affectedCount: number } | null;
   updateInterestedStatus: (id: string, patch: Partial<InterestedStatusConfig>) => void;
   reorderInterestedStatuses: (orderedIds: string[]) => void;
 
@@ -817,6 +819,47 @@ export const useStore = create<AppState>()(
         ),
 
       // ── Interested Status Config ─────────────────────────────────────
+      addInterestedStatus: (name, color, icon) => {
+        const id = `custom_${crypto.randomUUID()}`;
+        set((s) =>
+          withPendingSync({
+            interestedStatuses: [
+              ...s.interestedStatuses,
+              {
+                id,
+                name,
+                color,
+                icon,
+                sort_order: s.interestedStatuses.length,
+              },
+            ],
+          })
+        );
+        return id;
+      },
+
+      deleteInterestedStatus: (id) => {
+        const state = get();
+        // Guard: prevent deleting the last status
+        if (state.interestedStatuses.length <= 1) return null;
+
+        const remaining = state.interestedStatuses
+          .filter((s) => s.id !== id)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        const fallbackStatusId = remaining[0]?.id ?? "interested_person";
+        const affectedCount = state.interestedPeople.filter((p) => p.status === id).length;
+
+        set(
+          withPendingSync({
+            interestedStatuses: remaining.map((s, i) => ({ ...s, sort_order: i })),
+            interestedPeople: state.interestedPeople.map((p) =>
+              p.status === id ? { ...p, status: fallbackStatusId } : p
+            ),
+          })
+        );
+        return { reassignedTo: fallbackStatusId, affectedCount };
+      },
+
       updateInterestedStatus: (id, patch) =>
         set((s) =>
           withPendingSync({
