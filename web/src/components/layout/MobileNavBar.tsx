@@ -75,14 +75,19 @@ export default function MobileNavBar() {
               key={href}
               href={href}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors",
+                "flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 transition-colors px-0.5",
                 active
                   ? "text-primary"
                   : "text-slate-400 dark:text-slate-500"
               )}
             >
-              <span className="material-symbols-outlined text-[22px] leading-none">{icon}</span>
-              <span className={cn("text-[10px] font-medium leading-none", active && "font-bold")}>
+              <span className="material-symbols-outlined text-[22px] leading-none shrink-0">{icon}</span>
+              <span
+                className={cn(
+                  "text-[9px] leading-tight text-center max-w-full line-clamp-2",
+                  active ? "font-bold" : "font-medium"
+                )}
+              >
                 {labelKey === "nav.interested" && interestedNavLabel ? interestedNavLabel : t(labelKey)}
               </span>
             </Link>
@@ -91,18 +96,18 @@ export default function MobileNavBar() {
         {user ? (
           <button
             onClick={handleSignOut}
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500"
+            className="flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500 px-0.5"
           >
-            <span className="material-symbols-outlined text-[22px] leading-none">logout</span>
-            <span className="text-[10px] font-medium leading-none">Sign Out</span>
+            <span className="material-symbols-outlined text-[22px] leading-none shrink-0">logout</span>
+            <span className="text-[9px] font-medium leading-tight text-center max-w-full line-clamp-2">Sign Out</span>
           </button>
         ) : (
           <Link
             href="/login"
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500"
+            className="flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500 px-0.5"
           >
-            <span className="material-symbols-outlined text-[22px] leading-none">login</span>
-            <span className="text-[10px] font-medium leading-none">{t("login.continueGoogle")}</span>
+            <span className="material-symbols-outlined text-[22px] leading-none shrink-0">login</span>
+            <span className="text-[9px] font-medium leading-tight text-center max-w-full line-clamp-2">{t("login.continueGoogle")}</span>
           </Link>
         )}
       </div>
