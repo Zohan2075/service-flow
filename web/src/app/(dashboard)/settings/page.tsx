@@ -173,6 +173,7 @@ export default function SettingsPage() {
   const [newEntryType, setNewEntryType] = useState<ServiceType["entry_type"]>("time");
   const [combinedGoalDrafts, setCombinedGoalDrafts] = useState<CombinedGoalDraft[]>([]);
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>("account");
+  const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
 
   const [driveLoading, setDriveLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -955,13 +956,15 @@ export default function SettingsPage() {
               <div>
                 <h4 className="font-semibold text-sm text-slate-500 uppercase tracking-wide">{t("settings.serviceGoals")}</h4>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {serviceTypes.map((serviceType) => (
                   <ServiceGoalCard
                     key={serviceType.id}
                     serviceType={serviceType}
                     goal={serviceGoalMap.get(serviceType.id)}
                     previewDate={viewedMonth}
+                    isExpanded={expandedGoalId === serviceType.id}
+                    onToggle={() => setExpandedGoalId(expandedGoalId === serviceType.id ? null : serviceType.id)}
                     onSave={(goalDraft) => handleSaveServiceGoal(serviceType.id, goalDraft)}
                     onClear={() => handleClearServiceGoal(serviceType.id)}
                   />
@@ -1596,12 +1599,16 @@ function ServiceGoalCard({
   serviceType,
   goal,
   previewDate,
+  isExpanded,
+  onToggle,
   onSave,
   onClear,
 }: {
   serviceType: ServiceType;
   goal: GoalDefinition | undefined;
   previewDate: Date;
+  isExpanded: boolean;
+  onToggle: () => void;
   onSave: (payload: ServiceGoalPayload) => void;
   onClear: () => void;
 }) {
@@ -1643,61 +1650,89 @@ function ServiceGoalCard({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-surface p-4 space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="size-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: serviceType.color + "1a" }}
-          >
-            <span className="material-symbols-outlined text-lg" style={{ color: serviceType.color }}>
-              {serviceType.icon}
-            </span>
+    <div
+      className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden transition-all duration-300 ease-out"
+      style={{
+        background: isExpanded
+          ? `linear-gradient(135deg, ${serviceType.color}12, ${serviceType.color}05, transparent)`
+          : `linear-gradient(135deg, ${serviceType.color}08, transparent)`,
+      }}
+    >
+      {/* Collapsed Header */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 p-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
+      >
+        <div
+          className="size-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ backgroundColor: serviceType.color + "1a" }}
+        >
+          <span className="material-symbols-outlined text-lg" style={{ color: serviceType.color }}>
+            {serviceType.icon}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="font-semibold text-sm truncate">{serviceType.name}</p>
+          <p className="text-xs text-slate-400">{t("settings.serviceGoals")}</p>
+        </div>
+        <span
+          className="material-symbols-outlined text-slate-400 transition-transform duration-300"
+          style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+        >
+          expand_more
+        </span>
+      </button>
+
+      {/* Expanded Content */}
+      <div
+        className="transition-all duration-300 ease-out overflow-hidden"
+        style={{
+          maxHeight: isExpanded ? "1000px" : "0",
+          opacity: isExpanded ? 1 : 0,
+        }}
+      >
+        <div className="px-4 pb-4 space-y-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalName")}</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={defaultGoalName}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            />
           </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-sm truncate">{serviceType.name}</p>
-            <p className="text-xs text-slate-400">{t("settings.serviceGoals")}</p>
+
+          <GoalMetricFields
+            monthlyHours={monthlyHours}
+            monthlyUnits={monthlyUnits}
+            yearlyHours={yearlyHours}
+            yearlyUnits={yearlyUnits}
+            yearlyStartMonth={yearlyStartMonth}
+            cyclePreview={cyclePreview}
+            setMonthlyHours={setMonthlyHours}
+            setMonthlyUnits={setMonthlyUnits}
+            setYearlyHours={setYearlyHours}
+            setYearlyUnits={setYearlyUnits}
+            setYearlyStartMonth={setYearlyStartMonth}
+          />
+
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={handleSave}
+              className="flex-1 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:opacity-90 transition-all"
+            >
+              {t("settings.save")}
+            </button>
+            <button
+              onClick={handleClear}
+              className="flex-1 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              {t("settings.clearGoal")}
+            </button>
           </div>
         </div>
-        <div className="flex gap-2 sm:shrink-0">
-          <button
-            onClick={handleSave}
-            className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:opacity-90 transition-all"
-          >
-            {t("settings.save")}
-          </button>
-          <button
-            onClick={handleClear}
-            className="flex-1 sm:flex-none px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-          >
-            {t("settings.clearGoal")}
-          </button>
-        </div>
       </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalName")}</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={defaultGoalName}
-          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-        />
-      </div>
-
-      <GoalMetricFields
-        monthlyHours={monthlyHours}
-        monthlyUnits={monthlyUnits}
-        yearlyHours={yearlyHours}
-        yearlyUnits={yearlyUnits}
-        yearlyStartMonth={yearlyStartMonth}
-        cyclePreview={cyclePreview}
-        setMonthlyHours={setMonthlyHours}
-        setMonthlyUnits={setMonthlyUnits}
-        setYearlyHours={setYearlyHours}
-        setYearlyUnits={setYearlyUnits}
-        setYearlyStartMonth={setYearlyStartMonth}
-      />
     </div>
   );
 }
