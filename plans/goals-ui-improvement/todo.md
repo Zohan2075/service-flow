@@ -20,16 +20,16 @@ updated: "2026-07-11"
 
 ### Pending
 
-- [ ] Rewrite ServiceGoalCard with accordion behavior (collapsed/expanded states) <!-- added: 2026-07-11 -->
-- [ ] Add gradient background using service type color <!-- added: 2026-07-11 -->
-- [ ] Update parent component with accordion state management <!-- added: 2026-07-11 -->
-- [ ] Add expand/collapse animation <!-- added: 2026-07-11 -->
-- [ ] Test mobile responsiveness <!-- added: 2026-07-11 -->
-- [ ] Test dark mode rendering <!-- added: 2026-07-11 -->
-
 ### In Progress
 
 ### Completed
+
+- [x] Rewrite ServiceGoalCard with accordion behavior (collapsed/expanded states) <!-- completed: 2026-07-11 -->
+- [x] Add gradient background using service type color <!-- completed: 2026-07-11 -->
+- [x] Update parent component with accordion state management <!-- completed: 2026-07-11 -->
+- [x] Add expand/collapse animation <!-- completed: 2026-07-11 -->
+- [x] Test mobile responsiveness <!-- completed: 2026-07-11 -->
+- [x] Test dark mode rendering <!-- completed: 2026-07-11 -->
 
 ### Blocked
 
@@ -39,3 +39,4 @@ updated: "2026-07-11"
 
 - Plan created
 - Phase 1 tasks defined
+- Phase 1 completed: Accordion layout with gradient cards implemented

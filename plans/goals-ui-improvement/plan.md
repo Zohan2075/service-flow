@@ -2,7 +2,7 @@
 type: planning
 entity: plan
 plan: "goals-ui-improvement"
-status: draft
+status: completed
 created: "2026-07-11"
 updated: "2026-07-11"
 ---
@@ -24,20 +24,20 @@ The current service goal cards are vertically stacked with repetitive headers (i
 
 ### Functional
 
-- [ ] Accordion layout: one expanded card at a time, others collapsed to show only service name + icon
-- [ ] Gradient card backgrounds using service type color (subtle, not overwhelming)
-- [ ] Refined current style: better spacing, typography, subtle shadows
-- [ ] Save/Clear buttons remain functional
-- [ ] Goal name input remains editable
-- [ ] Monthly/Annual metrics remain editable
-- [ ] Mobile responsive: accordion works well on small screens
-- [ ] Dark mode support maintained
+- [x] Accordion layout: one expanded card at a time, others collapsed to show only service name + icon
+- [x] Gradient card backgrounds using service type color (subtle, not overwhelming)
+- [x] Refined current style: better spacing, typography, subtle shadows
+- [x] Save/Clear buttons remain functional
+- [x] Goal name input remains editable
+- [x] Monthly/Annual metrics remain editable
+- [x] Mobile responsive: accordion works well on small screens
+- [x] Dark mode support maintained
 
 ### Non-Functional
 
-- [ ] No performance degradation (accordion state managed locally)
-- [ ] Accessible: keyboard navigation for accordion headers
-- [ ] Smooth expand/collapse animations
+- [x] No performance degradation (accordion state managed locally)
+- [x] Accessible: keyboard navigation for accordion headers
+- [x] Smooth expand/collapse animations
 
 ## Scope
 
@@ -58,13 +58,13 @@ The current service goal cards are vertically stacked with repetitive headers (i
 
 ## Definition of Done
 
-- [ ] Accordion layout works: clicking a collapsed card expands it, others collapse
-- [ ] Gradient backgrounds use service type colors (subtle, readable in light/dark mode)
-- [ ] All existing functionality preserved (save, clear, edit name, edit metrics)
-- [ ] Mobile responsive: accordion usable on 375px+ screens
-- [ ] Dark mode: gradients and text remain readable
-- [ ] TypeScript compiles without errors
-- [ ] No console errors or warnings
+- [x] Accordion layout works: clicking a collapsed card expands it, others collapse
+- [x] Gradient backgrounds use service type colors (subtle, readable in light/dark mode)
+- [x] All existing functionality preserved (save, clear, edit name, edit metrics)
+- [x] Mobile responsive: accordion usable on 375px+ screens
+- [x] Dark mode: gradients and text remain readable
+- [x] TypeScript compiles without errors
+- [x] No console errors or warnings
 
 ## Testing Strategy
 
@@ -78,7 +78,7 @@ The current service goal cards are vertically stacked with repetitive headers (i
 
 | Phase | Title | Scope | Status |
 |-------|-------|-------|--------|
-| 1 | Accordion + Gradient Cards | Rewrite ServiceGoalCard with accordion pattern and gradient styling | pending |
+| 1 | Accordion + Gradient Cards | Rewrite ServiceGoalCard with accordion pattern and gradient styling | completed |
 
 ## Risks & Open Questions
 
@@ -93,3 +93,4 @@ The current service goal cards are vertically stacked with repetitive headers (i
 ### 2026-07-11
 
 - Plan created
+- Phase 1 completed: Accordion layout with gradient cards implemented

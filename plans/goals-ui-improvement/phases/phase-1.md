@@ -3,7 +3,7 @@ type: planning
 entity: phase
 plan: "goals-ui-improvement"
 phase: 1
-status: pending
+status: completed
 created: "2026-07-11"
 updated: "2026-07-11"
 ---
