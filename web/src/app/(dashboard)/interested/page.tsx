@@ -88,21 +88,21 @@ export default function InterestedPeoplePage() {
 
         {/* Filter tabs — horizontally scrollable on mobile */}
         <div className="mt-3 overflow-x-auto">
-          <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 min-w-max">
+          <div className="flex gap-1.5 rounded-xl bg-slate-100 p-1.5 dark:bg-slate-800 min-w-max">
             {filterOptions.map((option) => (
               <button
                 key={option.id}
                 type="button"
                 onClick={() => setStatusFilter(option.id)}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors",
+                  "flex items-center justify-center gap-1.5 py-2 px-3.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-all",
                   statusFilter === option.id
-                    ? "text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500"
+                    ? "text-slate-900 dark:text-white shadow-sm scale-[1.02]"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
                 )}
                 style={
                   statusFilter === option.id && option.color
-                    ? { backgroundColor: option.color + "20" }
+                    ? { backgroundColor: option.color + "25" }
                     : statusFilter === option.id
                       ? { backgroundColor: "var(--surface)" }
                       : {}
@@ -110,8 +110,11 @@ export default function InterestedPeoplePage() {
               >
                 {option.color && (
                   <span
-                    className="size-2 rounded-full shrink-0"
-                    style={{ backgroundColor: option.color }}
+                    className="size-2.5 rounded-full shrink-0"
+                    style={{ 
+                      backgroundColor: option.color,
+                      boxShadow: statusFilter === option.id ? `0 0 0 2px ${option.color}40` : "none"
+                    }}
                     suppressHydrationWarning
                   />
                 )}
@@ -144,7 +147,7 @@ export default function InterestedPeoplePage() {
                   style={{
                     borderLeft: `4px solid ${statusInfo.color}`,
                     background: person.gender === "female"
-                      ? "linear-gradient(90deg, transparent 85%, rgba(236, 72, 153, 0.08) 100%)"
+                      ? "linear-gradient(90deg, transparent 70%, rgba(236, 72, 153, 0.15) 100%)"
                       : "linear-gradient(90deg, transparent 85%, rgba(59, 130, 246, 0.08) 100%)",
                   }}
                 >
@@ -156,7 +159,10 @@ export default function InterestedPeoplePage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-sm font-bold"
+                        className={cn(
+                          "font-bold leading-none",
+                          person.gender === "female" ? "text-lg" : "text-base"
+                        )}
                         style={{ color: GENDER_COLORS[person.gender] }}
                       >
                         {person.gender === "male" ? "♂" : "♀"}
