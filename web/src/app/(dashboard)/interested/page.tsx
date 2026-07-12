@@ -138,10 +138,15 @@ export default function InterestedPeoplePage() {
                   key={person.id}
                   onClick={() => handleOpenEdit(person)}
                   className={cn(
-                    "w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors",
+                    "w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors relative overflow-hidden",
                     person.completed && "opacity-60"
                   )}
-                  style={{ borderLeft: `4px solid ${statusInfo.color}` }}
+                  style={{
+                    borderLeft: `4px solid ${statusInfo.color}`,
+                    background: person.gender === "female"
+                      ? "linear-gradient(90deg, transparent 85%, rgba(236, 72, 153, 0.08) 100%)"
+                      : "linear-gradient(90deg, transparent 85%, rgba(59, 130, 246, 0.08) 100%)",
+                  }}
                 >
                   <span
                     className="size-3 rounded-full shrink-0"
@@ -149,9 +154,9 @@ export default function InterestedPeoplePage() {
                     suppressHydrationWarning
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       <span
-                        className="text-xs"
+                        className="text-sm font-bold"
                         style={{ color: GENDER_COLORS[person.gender] }}
                       >
                         {person.gender === "male" ? "♂" : "♀"}
