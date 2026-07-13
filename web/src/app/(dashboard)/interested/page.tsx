@@ -87,7 +87,7 @@ export default function InterestedPeoplePage() {
         </div>
 
         {/* Filter tabs — horizontally scrollable on mobile */}
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
           <div className="flex gap-1.5 rounded-xl bg-slate-100 p-1.5 dark:bg-slate-800 min-w-max">
             {filterOptions.map((option) => (
               <button

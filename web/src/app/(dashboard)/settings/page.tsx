@@ -1795,35 +1795,37 @@ function CombinedGoalCard({
 
   return (
     <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-surface p-4 space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex-1 min-w-0">
-          <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalName")}</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("settings.goalNamePlaceholder")}
-            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-          />
-        </div>
-        <div className="flex gap-2 sm:shrink-0">
-          <button
-            onClick={handleSave}
-            className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:opacity-90 transition-all"
-          >
-            {t("settings.save")}
-          </button>
-          <button
-            onClick={onDelete}
-            className="flex-1 sm:flex-none px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-          >
-            {isDraft ? t("settings.cancel") : t("settings.deleteGoal")}
-          </button>
-        </div>
+      {/* Name input - full width */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.goalName")}</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t("settings.goalNamePlaceholder")}
+          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+        />
       </div>
 
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          className="flex-1 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:opacity-90 transition-all"
+        >
+          {t("settings.save")}
+        </button>
+        <button
+          onClick={onDelete}
+          className="flex-1 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+        >
+          {isDraft ? t("settings.cancel") : t("settings.deleteGoal")}
+        </button>
+      </div>
+
+      {/* Service type chips - more compact */}
       <div>
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.goalServices")}</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {serviceTypes.map((serviceType) => {
             const selected = serviceTypeIds.includes(serviceType.id);
             return (
@@ -1832,14 +1834,14 @@ function CombinedGoalCard({
                 type="button"
                 onClick={() => toggleServiceType(serviceType.id)}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-all",
+                  "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-all",
                   selected
                     ? "border-transparent text-white shadow-sm"
                     : "border-slate-200 dark:border-slate-700 text-slate-500"
                 )}
                 style={selected ? { backgroundColor: serviceType.color } : undefined}
               >
-                <span className="material-symbols-outlined text-base">{serviceType.icon}</span>
+                <span className="material-symbols-outlined text-sm">{serviceType.icon}</span>
                 <span>{serviceType.name}</span>
               </button>
             );
@@ -2137,7 +2139,6 @@ function SortableStatusItem({
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate">{status.name}</p>
-            <p className="text-xs text-slate-400 capitalize">{status.id.replace(/_/g, " ")}</p>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
