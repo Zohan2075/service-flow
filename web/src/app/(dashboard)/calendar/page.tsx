@@ -365,18 +365,27 @@ export default function CalendarPage() {
   const touchStartX = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const SWIPE_THRESHOLD = 80;
+  const SWIPE_DEAD_ZONE = 25; // minimum px before swipe activates (prevents twitchy micro-swipes)
   const SWIPE_ANIM_MS = 300;
 
   const onTouchStart = (e: React.TouchEvent) => {
     if (swipeCompleting) return;
     touchStartX.current = e.touches[0].clientX;
     setSwipeDelta(0);
-    setIsSwiping(true);
+    // Don't set isSwiping yet — only activate once the dead zone is exceeded
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping || swipeCompleting) return;
-    setSwipeDelta(touchStartX.current - e.touches[0].clientX);
+    if (swipeCompleting) return;
+    const rawDelta = touchStartX.current - e.touches[0].clientX;
+    if (!isSwiping) {
+      // Dead zone: don't start swiping until the finger moves enough horizontally
+      if (Math.abs(rawDelta) < SWIPE_DEAD_ZONE) return;
+      setIsSwiping(true);
+    }
+    // Subtract dead zone so the visual movement starts smoothly from zero
+    const sign = rawDelta > 0 ? 1 : -1;
+    setSwipeDelta(rawDelta - sign * SWIPE_DEAD_ZONE);
   };
 
   const onTouchEnd = () => {
