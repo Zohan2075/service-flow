@@ -545,15 +545,15 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
                 type="button"
                 onClick={() => setCompleted(!completed)}
                 className={cn(
-                  "relative w-12 h-7 rounded-full transition-all duration-200 shrink-0 border-2",
+                  "relative w-12 h-7 rounded-full overflow-hidden transition-colors duration-200 shrink-0",
                   completed
-                    ? "bg-green-500 border-green-500"
-                    : "bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-600"
+                    ? "bg-green-500"
+                    : "bg-slate-300 dark:bg-slate-600"
                 )}
               >
                 <span
                   className={cn(
-                    "absolute top-0.5 size-5 bg-white rounded-full shadow-md transition-transform duration-200",
+                    "absolute top-0.5 size-6 bg-white rounded-full shadow-sm transition-transform duration-200",
                     completed ? "translate-x-[1.375rem]" : "translate-x-0.5"
                   )}
                 />
