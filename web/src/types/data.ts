@@ -97,7 +97,7 @@ export interface InterestedPerson {
   id: string;
   name: string;
   last_name: string;
-  gender: "male" | "female";
+  gender: "male" | "female" | "other";
   age: number | null;
   address: string | null;
   comments: string | null;

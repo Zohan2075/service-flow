@@ -69,7 +69,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
 
   const [name, setName] = useState(person?.name ?? "");
   const [lastName, setLastName] = useState(person?.last_name ?? "");
-  const [gender, setGender] = useState<"male" | "female">(person?.gender ?? "male");
+  const [gender, setGender] = useState<"male" | "female" | "other">(person?.gender ?? "other");
   const [age, setAge] = useState<string>(
     person?.age != null ? String(person.age) : ""
   );
@@ -103,6 +103,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const [userLng, setUserLng] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showMap, setShowMap] = useState(false);
 
   // Localized short weekday names (0=Sun…6=Sat)
   const WEEKDAYS_SHORT = useMemo(
@@ -269,20 +270,20 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           {/* Gender */}
           <div>
             <label className="block text-sm font-semibold mb-1">{t("interested.gender")}</label>
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-              {(["male", "female"] as const).map((g) => (
+            <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+              {(["male", "female", "other"] as const).map((g) => (
                 <button
                   key={g}
                   type="button"
                   onClick={() => setGender(g)}
                   className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
+                    "py-2 text-sm font-semibold rounded-lg transition-colors",
                     gender === g
                       ? "bg-surface text-slate-900 dark:text-white shadow-sm"
                       : "text-slate-500"
                   )}
                 >
-                  {g === "male" ? t("interested.male") : t("interested.female")}
+                  {g === "male" ? t("interested.male") : g === "female" ? t("interested.female") : t("interested.unspecified")}
                 </button>
               ))}
             </div>
@@ -334,16 +335,118 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             </div>
           </div>
 
-          {/* Address */}
-          <div>
-            <label className="block text-sm font-semibold mb-1">{t("interested.address")}</label>
-            <textarea
-              ref={addressRef}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              rows={1}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none overflow-hidden"
-            />
+          {/* Address + Location (collapsible) */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowMap(!showMap)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="material-symbols-outlined text-slate-400">location_on</span>
+                <span className="text-sm font-semibold truncate">
+                  {address ? address : t("interested.address")}
+                </span>
+              </div>
+              <span
+                className="material-symbols-outlined text-slate-400 shrink-0 transition-transform duration-200"
+                style={{ transform: showMap ? "rotate(180deg)" : "rotate(0deg)" }}
+              >
+                expand_more
+              </span>
+            </button>
+
+            {showMap && (
+              <div className="px-4 pb-4 space-y-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+                {/* Address input */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1">{t("interested.address")}</label>
+                  <textarea
+                    ref={addressRef}
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    rows={1}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none overflow-hidden"
+                  />
+                </div>
+
+                {/* Location / Map */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1">{t("interested.location")}</label>
+                  {typeof navigator !== "undefined" && !navigator.onLine ? (
+                    <div className="flex items-center justify-center h-[300px] rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      <div className="text-center">
+                        <span className="material-symbols-outlined text-3xl text-slate-400 mb-2 block">wifi_off</span>
+                        <p className="text-sm text-slate-500 font-medium">Map unavailable offline</p>
+                        <p className="text-xs text-slate-400 mt-1">Location fields are still editable</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <MapContainer
+                      center={center}
+                      zoom={zoom}
+                      style={{ height: "300px", width: "100%" }}
+                      className="rounded-xl"
+                    >
+                      <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution="&copy; OpenStreetMap contributors"
+                      />
+                      {hasPersonLocation && (
+                        <Marker
+                          position={[lat as number, lng as number]}
+                          draggable
+                          eventHandlers={{ dragend: handleMarkerDragEnd }}
+                        />
+                      )}
+                      {hasUserLocation && (
+                        <CircleMarker
+                          center={[userLat as number, userLng as number]}
+                          radius={8}
+                          pathOptions={{
+                            color: "#3b82f6",
+                            fillColor: "#3b82f6",
+                            fillOpacity: 0.5,
+                            weight: 3,
+                          }}
+                        />
+                      )}
+                      <MapClickHandler onLocationChange={handleLocationChange} />
+                      <MapController onMapReady={handleMapReady} />
+                    </MapContainer>
+                  )}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      {hasPersonLocation && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <span className="size-2 rounded-full bg-red-500 inline-block shrink-0" />
+                          {t("interested.personPin")}: {(lat as number).toFixed(4)}, {(lng as number).toFixed(4)}
+                        </p>
+                      )}
+                      {hasUserLocation && (
+                        <p className="text-xs text-blue-500 flex items-center gap-1">
+                          <span className="size-2 rounded-full bg-blue-500 inline-block shrink-0" />
+                          {t("interested.myLocation")}: {(userLat as number).toFixed(4)}, {(userLng as number).toFixed(4)}
+                        </p>
+                      )}
+                      {!hasPersonLocation && !hasUserLocation && (
+                        <p className="text-xs text-slate-400">{t("interested.selectLocation")}</p>
+                      )}
+                    </div>
+                    {typeof navigator !== "undefined" && navigator.onLine && (
+                      <button
+                        type="button"
+                        onClick={handleMyLocation}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                      >
+                        <span className="material-symbols-outlined text-base">my_location</span>
+                        {t("interested.myLocation")}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Initial Conversation Date */}
@@ -431,82 +534,6 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             />
           </div>
 
-          {/* Location */}
-          <div>
-            <label className="block text-sm font-semibold mb-1">{t("interested.location")}</label>
-            {typeof navigator !== "undefined" && !navigator.onLine ? (
-              <div className="flex items-center justify-center h-[300px] rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <div className="text-center">
-                  <span className="material-symbols-outlined text-3xl text-slate-400 mb-2 block">wifi_off</span>
-                  <p className="text-sm text-slate-500 font-medium">Map unavailable offline</p>
-                  <p className="text-xs text-slate-400 mt-1">Location fields are still editable</p>
-                </div>
-              </div>
-            ) : (
-              <MapContainer
-                center={center}
-                zoom={zoom}
-                style={{ height: "300px", width: "100%" }}
-                className="rounded-xl"
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution="&copy; OpenStreetMap contributors"
-                />
-                {hasPersonLocation && (
-                  <Marker
-                    position={[lat as number, lng as number]}
-                    draggable
-                    eventHandlers={{ dragend: handleMarkerDragEnd }}
-                  />
-                )}
-                {hasUserLocation && (
-                  <CircleMarker
-                    center={[userLat as number, userLng as number]}
-                    radius={8}
-                    pathOptions={{
-                      color: "#3b82f6",
-                      fillColor: "#3b82f6",
-                      fillOpacity: 0.5,
-                      weight: 3,
-                    }}
-                  />
-                )}
-                <MapClickHandler onLocationChange={handleLocationChange} />
-                <MapController onMapReady={handleMapReady} />
-              </MapContainer>
-            )}
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <div className="space-y-0.5">
-                {hasPersonLocation && (
-                  <p className="text-xs text-slate-500 flex items-center gap-1">
-                    <span className="size-2 rounded-full bg-red-500 inline-block shrink-0" />
-                    {t("interested.personPin")}: {(lat as number).toFixed(4)}, {(lng as number).toFixed(4)}
-                  </p>
-                )}
-                {hasUserLocation && (
-                  <p className="text-xs text-blue-500 flex items-center gap-1">
-                    <span className="size-2 rounded-full bg-blue-500 inline-block shrink-0" />
-                    {t("interested.myLocation")}: {(userLat as number).toFixed(4)}, {(userLng as number).toFixed(4)}
-                  </p>
-                )}
-                {!hasPersonLocation && !hasUserLocation && (
-                  <p className="text-xs text-slate-400">{t("interested.selectLocation")}</p>
-                )}
-              </div>
-              {typeof navigator !== "undefined" && navigator.onLine && (
-                <button
-                  type="button"
-                  onClick={handleMyLocation}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-                >
-                  <span className="material-symbols-outlined text-base">my_location</span>
-                  {t("interested.myLocation")}
-                </button>
-              )}
-            </div>
-          </div>
-
           {/* Completed toggle */}
           {isEditing && (
             <div className="flex items-center justify-between gap-3 py-2">
@@ -518,13 +545,15 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
                 type="button"
                 onClick={() => setCompleted(!completed)}
                 className={cn(
-                  "relative w-12 h-7 rounded-full transition-colors shrink-0",
-                  completed ? "bg-green-500" : "bg-slate-300 dark:bg-slate-700"
+                  "relative w-12 h-7 rounded-full transition-all duration-200 shrink-0 border-2",
+                  completed
+                    ? "bg-green-500 border-green-500"
+                    : "bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-600"
                 )}
               >
                 <span
                   className={cn(
-                    "absolute top-0.5 size-6 bg-white rounded-full shadow-sm transition-transform",
+                    "absolute top-0.5 size-5 bg-white rounded-full shadow-md transition-transform duration-200",
                     completed ? "translate-x-[1.375rem]" : "translate-x-0.5"
                   )}
                 />

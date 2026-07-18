@@ -12,9 +12,10 @@ const InterestedPersonModal = dynamic(
   { ssr: false }
 );
 
-const GENDER_COLORS: Record<"male" | "female", string> = {
+const GENDER_COLORS: Record<"male" | "female" | "other", string> = {
   male: "#3b82f6",
   female: "#ec4899",
+  other: "#94a3b8",
 };
 
 type StatusFilter = "all" | InterestedPersonStatus;
@@ -161,11 +162,11 @@ export default function InterestedPeoplePage() {
                       <span
                         className={cn(
                           "font-bold leading-none",
-                          person.gender === "female" ? "text-lg" : "text-base"
+                          person.gender === "female" ? "text-lg" : person.gender === "other" ? "text-sm" : "text-base"
                         )}
                         style={{ color: GENDER_COLORS[person.gender] }}
                       >
-                        {person.gender === "male" ? "♂" : "♀"}
+                        {person.gender === "male" ? "♂" : person.gender === "female" ? "♀" : "⚬"}
                       </span>
                       <p className={cn("font-semibold text-sm truncate", person.completed && "line-through")}>
                         {person.name} {person.last_name}
