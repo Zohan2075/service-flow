@@ -534,31 +534,26 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             />
           </div>
 
-          {/* Completed toggle */}
+          {/* Completed checkbox */}
           {isEditing && (
-            <div className="flex items-center justify-between gap-3 py-2">
-              <div>
-                <p className="text-sm font-semibold">{t("interested.completed")}</p>
-                <p className="text-xs text-slate-400">{t("interested.markCompleted")}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCompleted(!completed)}
-                className={cn(
-                  "relative w-12 h-7 rounded-full overflow-hidden transition-colors duration-200 shrink-0",
-                  completed
-                    ? "bg-green-500"
-                    : "bg-slate-300 dark:bg-slate-600"
-                )}
-              >
-                <span
-                  className={cn(
-                    "absolute top-0.5 size-6 bg-white rounded-full shadow-sm transition-transform duration-200",
-                    completed ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                  )}
-                />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setCompleted(!completed)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all",
+                completed
+                  ? "border-green-500 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300"
+                  : "border-slate-200 dark:border-slate-700 text-slate-500 hover:border-green-300 dark:hover:border-green-800"
+              )}
+            >
+              <span className={cn(
+                "material-symbols-outlined text-xl",
+                completed ? "text-green-500" : "text-slate-300 dark:text-slate-600"
+              )}>
+                {completed ? "check_circle" : "radio_button_unchecked"}
+              </span>
+              <span className="text-sm font-semibold">{t("interested.completed")}</span>
+            </button>
           )}
 
           <button
