@@ -335,18 +335,19 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             </div>
           </div>
 
-          {/* Address + Location (collapsible) */}
+          {/* Address & Location (collapsible) */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <button
               type="button"
               onClick={() => setShowMap(!showMap)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="material-symbols-outlined text-slate-400">location_on</span>
-                <span className="text-sm font-semibold truncate">
-                  {address ? address : t("interested.address")}
-                </span>
+              <span className="material-symbols-outlined text-slate-400 shrink-0">location_on</span>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-semibold">{t("interested.address")} &amp; {t("interested.location")}</p>
+                {address && (
+                  <p className="text-xs text-slate-400 truncate">{address}</p>
+                )}
               </div>
               <span
                 className="material-symbols-outlined text-slate-400 shrink-0 transition-transform duration-200"
@@ -370,9 +371,8 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
                   />
                 </div>
 
-                {/* Location / Map */}
+                {/* Map */}
                 <div>
-                  <label className="block text-sm font-semibold mb-1">{t("interested.location")}</label>
                   {typeof navigator !== "undefined" && !navigator.onLine ? (
                     <div className="flex items-center justify-center h-[300px] rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                       <div className="text-center">
