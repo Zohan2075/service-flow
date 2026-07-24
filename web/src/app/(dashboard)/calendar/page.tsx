@@ -394,8 +394,14 @@ export default function CalendarPage() {
   });
 
   // ── Weekly view ───────────────────────────────────────────────────────────
-  const weekStart = startOfWeek(viewMode === "weekly" ? currentDate : selectedDate, { weekStartsOn });
-  const weekEnd = endOfWeek(weekStart, { weekStartsOn });
+  const weekStart = useMemo(
+    () => startOfWeek(selectedDate, { weekStartsOn }),
+    [selectedDate, weekStartsOn]
+  );
+  const weekEnd = useMemo(
+    () => endOfWeek(weekStart, { weekStartsOn }),
+    [weekStart]
+  );
   const weekDays = useMemo(
     () => eachDayOfInterval({ start: weekStart, end: weekEnd }),
     [weekStart, weekEnd]
@@ -418,17 +424,19 @@ export default function CalendarPage() {
   }, [weekDays, calendarMap]);
 
   const goToPreviousWeek = () => {
-    setViewedMonth(subWeeks(currentDate, 1));
-    setSelectedDate((d) => subWeeks(d, 1));
+    const prev = subWeeks(selectedDate, 1);
+    setSelectedDate(prev);
+    setViewedMonth(prev);
   };
   const goToNextWeek = () => {
-    setViewedMonth(addWeeks(currentDate, 1));
-    setSelectedDate((d) => addWeeks(d, 1));
+    const next = addWeeks(selectedDate, 1);
+    setSelectedDate(next);
+    setViewedMonth(next);
   };
   const goToCurrentWeek = () => {
     const now = new Date();
-    goToToday();
     setSelectedDate(now);
+    goToToday();
   };
 
   // ── Interested people on calendar ────────────────────────────────────────
