@@ -730,51 +730,29 @@ export default function CalendarPage() {
           )}
         </div>
 
-        {/* Daily Entries — or Weekly Summary */}
+        {/* Daily Entries */}
         <div className="mt-6 md:mt-8">
           <div className="mb-3 flex flex-col gap-3 md:mb-4 sm:flex-row sm:items-start sm:justify-between">
             <h3 className="text-base font-bold md:text-lg">
-              {viewMode === "weekly"
-                ? `${t("calendar.week")} ${getWeek(weekStart, { weekStartsOn, firstWeekContainsDate })}`
-                : `${t("calendar.dailyEntries")} — ${shortDate(selectedDate, language)}`}
+              {t("calendar.dailyEntries")} — {shortDate(selectedDate, language)}
             </h3>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
               <div className="rounded-2xl bg-slate-100/80 px-3 py-2 text-left dark:bg-slate-900/40 sm:bg-transparent sm:px-0 sm:py-0 sm:text-right">
                 <p className="text-sm text-slate-500 font-medium">
-                  {t("calendar.total")}: {viewMode === "weekly"
-                    ? durationDisplay(weeklyTotals.totalDurationSeconds)
-                    : (selectedDayData?.total_duration_display ?? "0m")}
-                  {(viewMode === "weekly"
-                    ? weeklyTotals.totalUnits > 0
-                    : (selectedDayData?.total_units ?? 0) > 0) && (
-                    <span className="ml-1">· {viewMode === "weekly"
-                      ? weeklyTotals.totalUnits
-                      : selectedDayData!.total_units} {t("calendar.units")}</span>
+                  {t("calendar.total")}: {selectedDayData?.total_duration_display ?? "0m"}
+                  {(selectedDayData?.total_units ?? 0) > 0 && (
+                    <span className="ml-1">· {selectedDayData!.total_units} {t("calendar.units")}</span>
                   )}
                 </p>
-                {(viewMode === "weekly"
-                  ? (weeklyTotals.plannedDurationSeconds > 0 || weeklyTotals.plannedUnits > 0)
-                  : ((selectedDayData?.planned_duration_seconds ?? 0) > 0 || (selectedDayData?.planned_units ?? 0) > 0)) && (
+                {((selectedDayData?.planned_duration_seconds ?? 0) > 0 || (selectedDayData?.planned_units ?? 0) > 0) && (
                   <p className="text-xs font-medium text-amber-700 dark:text-amber-200">
-                    {t("calendar.planned")}: {viewMode === "weekly"
-                      ? durationDisplay(weeklyTotals.plannedDurationSeconds)
-                      : (selectedDayData?.planned_duration_display ?? "0m")}
-                    {(viewMode === "weekly"
-                      ? weeklyTotals.plannedUnits > 0
-                      : (selectedDayData?.planned_units ?? 0) > 0) && (
-                      <span className="ml-1">· {viewMode === "weekly"
-                        ? weeklyTotals.plannedUnits
-                        : selectedDayData!.planned_units} {t("calendar.units")}</span>
+                    {t("calendar.planned")}: {selectedDayData?.planned_duration_display ?? "0m"}
+                    {(selectedDayData?.planned_units ?? 0) > 0 && (
+                      <span className="ml-1">· {selectedDayData!.planned_units} {t("calendar.units")}</span>
                     )}
                   </p>
                 )}
-                {viewMode === "weekly" ? (
-                  <p className="text-xs text-slate-400 font-medium">
-                    {shortDate(weekStart, language)} – {shortDate(weekEnd, language)}
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-400 font-medium">{t("calendar.week")} {selectedWeekNumber}</p>
-                )}
+                <p className="text-xs text-slate-400 font-medium">{t("calendar.week")} {selectedWeekNumber}</p>
               </div>
               <button
                 onClick={handleOpenAddModal}
@@ -786,39 +764,7 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* Weekly: show all entries for the week */}
-          {viewMode === "weekly" ? (
-            (() => {
-              const weekEntries = weekDays.flatMap((d) => {
-                const dayData = calendarMap[format(d, "yyyy-MM-dd")];
-                return dayData?.entries ?? [];
-              });
-              if (weekEntries.length === 0) {
-                return (
-                  <div className="text-center py-10 md:py-12 text-slate-400">
-                    <span className="material-symbols-outlined text-4xl mb-2 block">event_busy</span>
-                    <p className="font-medium">{t("calendar.noEntries")}</p>
-                  </div>
-                );
-              }
-              return (
-                <div className="space-y-3">
-                  {weekEntries.map((entry) => {
-                    const st = serviceTypeMap[entry.service_type_id];
-                    return (
-                      <EntryCard
-                        key={entry.id}
-                        entry={entry}
-                        serviceType={st}
-                        onEdit={() => setEditingEntry(entry)}
-                        onDelete={() => handleDelete(entry.id)}
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })()
-          ) : !selectedDayData || selectedDayData.entries.length === 0 ? (
+          {!selectedDayData || selectedDayData.entries.length === 0 ? (
             <div className="text-center py-10 md:py-12 text-slate-400">
               <span className="material-symbols-outlined text-4xl mb-2 block">event_busy</span>
               <p className="font-medium">{t("calendar.noEntries")}</p>
