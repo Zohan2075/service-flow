@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   addMonths,
+  addWeeks,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -13,20 +15,28 @@ import {
   isToday,
   startOfMonth,
   startOfWeek,
+  subWeeks,
 } from "date-fns";
 import { useStore } from "@/lib/store";
 import { calendarDateKey, computeDurationSeconds, durationDisplay, isPlannedEntry, isUnitsEntry } from "@/types/data";
-import type { TimeEntry, ServiceType, CalendarDay } from "@/types/data";
+import type { TimeEntry, ServiceType, CalendarDay, InterestedPerson } from "@/types/data";
 import { cn } from "@/lib/utils";
 import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
 import AddEntryModal from "@/components/entries/AddEntryModal";
 import toast from "react-hot-toast";
+
+const InterestedPersonModal = dynamic(
+  () => import("@/components/interested/InterestedPersonModal"),
+  { ssr: false }
+);
 
 export default function CalendarPage() {
   const { t, language } = useT();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
+  const [editingInterestedPerson, setEditingInterestedPerson] = useState<InterestedPerson | null>(null);
+  const [viewMode, setViewMode] = useState<"monthly" | "weekly">("monthly");
 
   const currentDate = useStore((s) => s.uiState.viewedMonth);
   const setViewedMonth = useStore((s) => s.setViewedMonth);
@@ -40,6 +50,8 @@ export default function CalendarPage() {
   const planModeEnabled = useStore((s) => s.settings.planModeEnabled);
   const weekStartsOnSetting = useStore((s) => s.settings.weekStartsOn);
   const deleteTimeEntry = useStore((s) => s.deleteTimeEntry);
+  const interestedPeople = useStore((s) => s.interestedPeople);
+  const interestedStatuses = useStore((s) => s.interestedStatuses);
 
   useEffect(() => {
     if (serviceTypes.length === 0) {
@@ -308,6 +320,41 @@ export default function CalendarPage() {
                       })}
                     </div>
                   )}
+
+                  {/* Interested people mini cards */}
+                  {(() => {
+                    const people = interestedPeopleByDate.get(key);
+                    if (!people || people.length === 0) return null;
+                    const maxShow = viewMode === "weekly" ? 5 : 2;
+                    return (
+                      <div className="mt-1 space-y-0.5">
+                        {people.slice(0, maxShow).map((p) => {
+                          const st = statusMap.get(p.status) ?? { name: p.status, color: "#94a3b8", icon: "person" };
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={(e) => { e.stopPropagation(); setEditingInterestedPerson(p); }}
+                              className="text-[10px] px-1 py-0.5 rounded border-l-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                              style={{ borderColor: st.color, backgroundColor: st.color + "10" }}
+                            >
+                              <div className="flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[10px]" style={{ color: st.color }}>{st.icon}</span>
+                                <span className="truncate font-medium">{p.name} {p.last_name?.[0]}.</span>
+                              </div>
+                              {viewMode === "weekly" && p.next_visit_date && (
+                                <span className="text-[9px] text-slate-400">
+                                  {new Date(p.next_visit_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {people.length > maxShow && (
+                          <p className="text-[9px] text-slate-400 px-1">+{people.length - maxShow} more</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -345,6 +392,90 @@ export default function CalendarPage() {
     weekStartsOn,
     firstWeekContainsDate,
   });
+
+  // ── Weekly view ───────────────────────────────────────────────────────────
+  const weekStart = startOfWeek(viewMode === "weekly" ? currentDate : selectedDate, { weekStartsOn });
+  const weekEnd = endOfWeek(weekStart, { weekStartsOn });
+  const weekDays = useMemo(
+    () => eachDayOfInterval({ start: weekStart, end: weekEnd }),
+    [weekStart, weekEnd]
+  );
+
+  const weeklyTotals = useMemo(() => {
+    return weekDays.reduce(
+      (totals, day) => {
+        const key = format(day, "yyyy-MM-dd");
+        const dayData = calendarMap[key];
+        if (!dayData) return totals;
+        totals.totalDurationSeconds += dayData.total_duration_seconds;
+        totals.totalUnits += dayData.total_units;
+        totals.plannedDurationSeconds += dayData.planned_duration_seconds;
+        totals.plannedUnits += dayData.planned_units;
+        return totals;
+      },
+      { totalDurationSeconds: 0, totalUnits: 0, plannedDurationSeconds: 0, plannedUnits: 0 }
+    );
+  }, [weekDays, calendarMap]);
+
+  const goToPreviousWeek = () => {
+    setViewedMonth(subWeeks(currentDate, 1));
+    setSelectedDate((d) => subWeeks(d, 1));
+  };
+  const goToNextWeek = () => {
+    setViewedMonth(addWeeks(currentDate, 1));
+    setSelectedDate((d) => addWeeks(d, 1));
+  };
+  const goToCurrentWeek = () => {
+    const now = new Date();
+    goToToday();
+    setSelectedDate(now);
+  };
+
+  // ── Interested people on calendar ────────────────────────────────────────
+  const statusMap = useMemo(() => {
+    const map = new Map<string, { name: string; color: string; icon: string }>();
+    for (const s of interestedStatuses) {
+      map.set(s.id, { name: s.name, color: s.color, icon: s.icon });
+    }
+    return map;
+  }, [interestedStatuses]);
+
+  const interestedPeopleByDate = useMemo(() => {
+    const map = new Map<string, InterestedPerson[]>();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Show interested people for the visible range (month or week)
+    const rangeStart = viewMode === "weekly" ? weekStart : calendarStart;
+    const rangeEnd = viewMode === "weekly" ? weekEnd : calendarEnd;
+
+    for (const person of interestedPeople) {
+      // Specific next visit date
+      if (person.next_visit_date) {
+        const visitDate = new Date(person.next_visit_date);
+        if (visitDate >= today && visitDate >= rangeStart && visitDate <= rangeEnd) {
+          const key = format(visitDate, "yyyy-MM-dd");
+          if (!map.has(key)) map.set(key, []);
+          map.get(key)!.push(person);
+        }
+      }
+      // Weekly recurring visits
+      if (person.next_visit_weekly_day !== null) {
+        // Generate occurrences for the visible range
+        let cursor = new Date(Math.max(rangeStart.getTime(), today.getTime()));
+        while (cursor.getDay() !== person.next_visit_weekly_day) {
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        while (cursor <= rangeEnd) {
+          const key = format(cursor, "yyyy-MM-dd");
+          if (!map.has(key)) map.set(key, []);
+          map.get(key)!.push(person);
+          cursor.setDate(cursor.getDate() + 7);
+        }
+      }
+    }
+    return map;
+  }, [interestedPeople, weekStart, weekEnd, calendarStart, calendarEnd, viewMode]);
 
   const goToday = () => {
     const now = new Date();
@@ -419,7 +550,6 @@ export default function CalendarPage() {
 
   const handleSelectDay = (day: Date) => {
     setSelectedDate(day);
-
     if (!isSameMonth(day, currentDate)) {
       setViewedMonth(startOfMonth(day));
     }
@@ -433,57 +563,104 @@ export default function CalendarPage() {
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
               <button
-                onClick={goToPreviousViewedMonth}
+                onClick={viewMode === "monthly" ? goToPreviousViewedMonth : goToPreviousWeek}
                 className="rounded-lg p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <span className="material-symbols-outlined text-base">chevron_left</span>
               </button>
               <h2 className="min-w-0 flex-1 text-center text-base font-bold sm:min-w-[10rem] md:text-xl">
-                <span className="block truncate">{monthYear(currentDate, language)}</span>
+                <span className="block truncate">
+                  {viewMode === "monthly"
+                    ? monthYear(currentDate, language)
+                    : `${shortDate(weekStart, language)} – ${shortDate(weekEnd, language)}`}
+                </span>
               </h2>
               <button
-                onClick={goToNextViewedMonth}
+                onClick={viewMode === "monthly" ? goToNextViewedMonth : goToNextWeek}
                 className="rounded-lg p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <span className="material-symbols-outlined text-base">chevron_right</span>
               </button>
             </div>
+            {/* View mode toggle */}
+            <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800 shrink-0">
+              <button
+                onClick={() => setViewMode("monthly")}
+                className={cn(
+                  "px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors",
+                  viewMode === "monthly"
+                    ? "bg-surface text-primary shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                {t("calendar.month")}
+              </button>
+              <button
+                onClick={() => setViewMode("weekly")}
+                className={cn(
+                  "px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors",
+                  viewMode === "weekly"
+                    ? "bg-surface text-primary shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                {t("calendar.week")}
+              </button>
+            </div>
             <button
-              onClick={goToday}
+              onClick={viewMode === "monthly" ? goToday : goToCurrentWeek}
               className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
             >
               {t("calendar.today")}
             </button>
           </div>
 
+          {/* Totals — monthly or weekly */}
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
-              <span className="text-slate-500 dark:text-slate-400">{t("calendar.monthTotal")}</span>
-              <span className="ml-2 font-bold text-primary">{durationDisplay(monthlyTotals.totalDurationSeconds)}</span>
-              {monthlyTotals.totalUnits > 0 && (
-                <span className="ml-2 text-slate-500 dark:text-slate-400">· {monthlyTotals.totalUnits} {t("calendar.units")}</span>
+              <span className="text-slate-500 dark:text-slate-400">
+                {viewMode === "monthly" ? t("calendar.monthTotal") : t("calendar.weekTotal")}
+              </span>
+              <span className="ml-2 font-bold text-primary">
+                {durationDisplay(viewMode === "monthly" ? monthlyTotals.totalDurationSeconds : weeklyTotals.totalDurationSeconds)}
+              </span>
+              {(viewMode === "monthly" ? monthlyTotals.totalUnits > 0 : weeklyTotals.totalUnits > 0) && (
+                <span className="ml-2 text-slate-500 dark:text-slate-400">
+                  · {viewMode === "monthly" ? monthlyTotals.totalUnits : weeklyTotals.totalUnits} {t("calendar.units")}
+                </span>
               )}
             </div>
-            {(monthlyTotals.plannedDurationSeconds > 0 || monthlyTotals.plannedUnits > 0) && (
+            {((viewMode === "monthly" ? monthlyTotals.plannedDurationSeconds > 0 : weeklyTotals.plannedDurationSeconds > 0) ||
+              (viewMode === "monthly" ? monthlyTotals.plannedUnits > 0 : weeklyTotals.plannedUnits > 0)) && (
               <div className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                <span>{t("calendar.monthPlanned")}</span>
-                {monthlyTotals.plannedDurationSeconds > 0 && (
-                  <span className="ml-2 font-bold">{durationDisplay(monthlyTotals.plannedDurationSeconds)}</span>
+                <span>{viewMode === "monthly" ? t("calendar.monthPlanned") : t("calendar.weekPlanned")}</span>
+                {(viewMode === "monthly" ? monthlyTotals.plannedDurationSeconds > 0 : weeklyTotals.plannedDurationSeconds > 0) && (
+                  <span className="ml-2 font-bold">
+                    {durationDisplay(viewMode === "monthly" ? monthlyTotals.plannedDurationSeconds : weeklyTotals.plannedDurationSeconds)}
+                  </span>
                 )}
-                {monthlyTotals.plannedUnits > 0 && (
-                  <span className="ml-2">{monthlyTotals.plannedUnits} {t("calendar.units")}</span>
+                {(viewMode === "monthly" ? monthlyTotals.plannedUnits > 0 : weeklyTotals.plannedUnits > 0) && (
+                  <span className="ml-2">
+                    {viewMode === "monthly" ? monthlyTotals.plannedUnits : weeklyTotals.plannedUnits} {t("calendar.units")}
+                  </span>
                 )}
               </div>
             )}
-            {(monthlyTotals.plannedDurationSeconds > 0 || monthlyTotals.plannedUnits > 0) && (
+            {((viewMode === "monthly" ? monthlyTotals.plannedDurationSeconds > 0 : weeklyTotals.plannedDurationSeconds > 0) ||
+              (viewMode === "monthly" ? monthlyTotals.plannedUnits > 0 : weeklyTotals.plannedUnits > 0)) && (
               <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2 text-xs font-semibold text-slate-600 dark:border-primary/20 dark:bg-primary/10/40 dark:text-slate-200">
                 <span className="text-slate-500 dark:text-slate-400">{t("calendar.monthPlannedVsTotal")}</span>
                 <span className="ml-2 font-bold text-primary">
-                  {durationDisplay(monthlyTotals.plannedDurationSeconds + monthlyTotals.totalDurationSeconds)}
+                  {durationDisplay(
+                    (viewMode === "monthly" ? monthlyTotals.plannedDurationSeconds : weeklyTotals.plannedDurationSeconds) +
+                    (viewMode === "monthly" ? monthlyTotals.totalDurationSeconds : weeklyTotals.totalDurationSeconds)
+                  )}
                 </span>
-                {(monthlyTotals.plannedUnits > 0 || monthlyTotals.totalUnits > 0) && (
+                {((viewMode === "monthly" ? monthlyTotals.plannedUnits > 0 : weeklyTotals.plannedUnits > 0) ||
+                  (viewMode === "monthly" ? monthlyTotals.totalUnits > 0 : weeklyTotals.totalUnits > 0)) && (
                   <span className="ml-2 text-slate-500 dark:text-slate-400">
-                    · {monthlyTotals.plannedUnits + monthlyTotals.totalUnits} {t("calendar.units")}
+                    · {(viewMode === "monthly" ? monthlyTotals.plannedUnits : weeklyTotals.plannedUnits) +
+                       (viewMode === "monthly" ? monthlyTotals.totalUnits : weeklyTotals.totalUnits)} {t("calendar.units")}
                   </span>
                 )}
               </div>
@@ -502,14 +679,20 @@ export default function CalendarPage() {
           onTouchEnd={onTouchEnd}
           className="relative overflow-hidden select-none md:overflow-visible"
         >
-          {/* Current month — slides with the swipe */}
+          {/* Current view — slides with the swipe (monthly only) */}
           <div
             style={{
-              transform: (isSwiping || swipeCompleting) ? `translateX(${-swipeDelta}px)` : "translateX(0)",
-              transition: (isSwiping || swipeResetting) ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
+              transform: (viewMode === "monthly" && (isSwiping || swipeCompleting)) ? `translateX(${-swipeDelta}px)` : "translateX(0)",
+              transition: (viewMode === "monthly" && (isSwiping || swipeResetting)) ? "none" : `transform ${SWIPE_ANIM_MS}ms ease-out`,
             }}
           >
-            {renderMonthGrid(currentDate, calendarWeeks)}
+            {viewMode === "monthly"
+              ? renderMonthGrid(currentDate, calendarWeeks)
+              : renderMonthGrid(currentDate, calendarWeeks.filter((w) =>
+                  w.days.some((d) => isSameDay(d, weekStart))
+                ).slice(0, 1)
+              )
+            }
           </div>
 
           {/* Next month — slides in from the right when swiping left */}
@@ -620,6 +803,13 @@ export default function CalendarPage() {
           entry={editingEntry}
           onClose={() => setEditingEntry(null)}
           onSuccess={() => setEditingEntry(null)}
+        />
+      )}
+
+      {editingInterestedPerson && (
+        <InterestedPersonModal
+          person={editingInterestedPerson}
+          onClose={() => setEditingInterestedPerson(null)}
         />
       )}
     </div>

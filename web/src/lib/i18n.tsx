@@ -23,6 +23,9 @@ const translations = {
 
     // Calendar header
     "calendar.today": "Today",
+    "calendar.month": "Month",
+    "calendar.weekTotal": "Week",
+    "calendar.weekPlanned": "Planned",
     "calendar.wk": "Wk",
 
     // Daily Entries
@@ -329,6 +332,9 @@ const translations = {
 
     // Calendar header
     "calendar.today": "Hoy",
+    "calendar.month": "Mes",
+    "calendar.weekTotal": "Semana",
+    "calendar.weekPlanned": "Planif.",
     "calendar.wk": "Sem",
 
     // Daily Entries
