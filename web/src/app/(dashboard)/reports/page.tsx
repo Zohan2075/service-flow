@@ -5,7 +5,7 @@ import { endOfMonth, startOfMonth } from "date-fns";
 import { useStore } from "@/lib/store";
 import { calendarDateKey, computeDurationSeconds, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import type { GoalDefinition, ServiceType, TimeEntry } from "@/types/data";
-import { formatDuration } from "@/lib/utils";
+import { formatDuration, cn } from "@/lib/utils";
 import { monthShortYear, useT } from "@/lib/i18n";
 
 type ServiceTotals = {
@@ -284,6 +284,8 @@ export default function ReportsPage() {
   const goals = useStore((s) => s.goals);
   const accentColor = useStore((s) => s.settings.accentColor);
   const showYearTotals = useStore((s) => s.settings.showYearTotals);
+  const monthlyCapEnabled = useStore((s) => s.settings.monthlyCapEnabled);
+  const monthlyCapHours = useStore((s) => s.settings.monthlyCapHours);
   const actualTimeEntries = useMemo(
     () => filterActualEntries(timeEntries),
     [timeEntries]
@@ -489,6 +491,42 @@ export default function ReportsPage() {
             <SummaryCard key={label} label={label} value={value} icon={icon} />
           ))}
         </div>
+
+        {/* Monthly hour cap progress bar */}
+        {monthlyCapEnabled && monthlyCapHours > 0 && (() => {
+          const monthStart = startOfMonth(new Date());
+          const exemptIds = new Set(serviceTypes.filter((st) => st.cap_exempt).map((st) => st.id));
+          const usedHours = timeEntries
+            .filter((e) =>
+              !isPlannedEntry(e) &&
+              !isUnitsEntry(e) &&
+              !exemptIds.has(e.service_type_id) &&
+              new Date(e.start_time) >= monthStart
+            )
+            .reduce((s, e) => s + computeDurationSeconds(e), 0) / 3600;
+          return (
+            <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
+              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {Math.round(usedHours)} / {monthlyCapHours}h
+                </span>
+                <span className="text-slate-400 font-semibold">
+                  {Math.round((usedHours / monthlyCapHours) * 100)}%
+                </span>
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    usedHours >= monthlyCapHours ? "bg-red-500" : usedHours / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${Math.min(100, (usedHours / monthlyCapHours) * 100)}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
           <div>

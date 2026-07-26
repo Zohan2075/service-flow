@@ -57,6 +57,7 @@ export interface ServiceType {
   icon: string;           // Material Symbols name, e.g. "build"
   sort_order: number;
   is_active: boolean;
+  cap_exempt: boolean;  // hours under this type don't count toward the monthly cap
   created_at: string;     // ISO 8601
   updated_at: string;
 }

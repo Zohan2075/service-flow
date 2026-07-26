@@ -400,10 +400,16 @@ export default function CalendarPage() {
     if (!monthlyCapEnabled) return 0;
     const now = new Date();
     const monthStart = startOfMonth(now);
+    const exemptIds = new Set(serviceTypes.filter((st) => st.cap_exempt).map((st) => st.id));
     return timeEntries
-      .filter((e) => !isPlannedEntry(e) && !isUnitsEntry(e) && new Date(e.start_time) >= monthStart)
+      .filter((e) =>
+        !isPlannedEntry(e) &&
+        !isUnitsEntry(e) &&
+        !exemptIds.has(e.service_type_id) &&
+        new Date(e.start_time) >= monthStart
+      )
       .reduce((sum, e) => sum + computeDurationSeconds(e), 0) / 3600;
-  }, [timeEntries, monthlyCapEnabled]);
+  }, [timeEntries, monthlyCapEnabled, serviceTypes]);
 
   // ── Weekly view ───────────────────────────────────────────────────────────
   const weekStart = useMemo(

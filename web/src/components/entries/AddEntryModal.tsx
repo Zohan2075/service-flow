@@ -129,25 +129,34 @@ export default function AddEntryModal({
     // ── Monthly cap check ────────────────────────────────────────────────────
     const store = useStore.getState();
     if (store.settings.monthlyCapEnabled && effectiveEntryType !== "units" && !isEditing) {
-      const cap = store.settings.monthlyCapHours;
-      const monthStart = startOfMonth(new Date());
-      let currentHours = store.timeEntries
-        .filter((en) => !isPlannedEntry(en) && !isUnitsEntry(en) && new Date(en.start_time) >= monthStart)
-        .reduce((s, en) => s + computeDurationSeconds(en), 0) / 3600;
+      // Check if current service type is cap-exempt
+      const currentSt = store.serviceTypes.find((st) => st.id === serviceTypeId);
+      if (!currentSt?.cap_exempt) {
+        const cap = store.settings.monthlyCapHours;
+        const monthStart = startOfMonth(new Date());
+        const exemptIds = new Set(store.serviceTypes.filter((st) => st.cap_exempt).map((st) => st.id));
+        const currentHours = store.timeEntries
+          .filter((en) =>
+            !isPlannedEntry(en) &&
+            !isUnitsEntry(en) &&
+            !exemptIds.has(en.service_type_id) &&
+            new Date(en.start_time) >= monthStart
+          )
+          .reduce((s, en) => s + computeDurationSeconds(en), 0) / 3600;
 
-      // Subtract the current entry if editing (it's already counted)
-      const newHours = mode === "range"
-        ? (new Date(`${format(selectedDate, "yyyy-MM-dd")}T${endTimeStr}:00`).getTime() -
-           new Date(`${format(selectedDate, "yyyy-MM-dd")}T${startTimeStr}:00`).getTime()) / 3600000
-        : ((durationHours || 0) + (durationMinutes || 0) / 60);
+        const newHours = mode === "range"
+          ? (new Date(`${format(selectedDate, "yyyy-MM-dd")}T${endTimeStr}:00`).getTime() -
+             new Date(`${format(selectedDate, "yyyy-MM-dd")}T${startTimeStr}:00`).getTime()) / 3600000
+          : ((durationHours || 0) + (durationMinutes || 0) / 60);
 
-      if (currentHours + newHours > cap) {
-        toast.error(
-          t("settings.capExceeded")
-            .replace("{cap}", String(cap))
-            .replace("{current}", String(Math.round(currentHours)))
-        );
-        return;
+        if (currentHours + newHours > cap) {
+          toast.error(
+            t("settings.capExceeded")
+              .replace("{cap}", String(cap))
+              .replace("{current}", String(Math.round(currentHours)))
+          );
+          return;
+        }
       }
     }
 

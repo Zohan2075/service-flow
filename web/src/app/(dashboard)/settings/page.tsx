@@ -195,6 +195,7 @@ export default function SettingsPage() {
       entry_type: newEntryType,
       color: newColor,
       icon: newIcon,
+      cap_exempt: false,
     });
     setNewName("");
     setNewEntryType("time");
@@ -1918,6 +1919,7 @@ function SortableServiceTypeItem({
   const [editColor, setEditColor] = useState(serviceType.color);
   const [editIcon, setEditIcon] = useState(serviceType.icon);
   const [editEntryType, setEditEntryType] = useState<ServiceType["entry_type"]>(serviceType.entry_type);
+  const [editCapExempt, setEditCapExempt] = useState(serviceType.cap_exempt ?? false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: serviceType.id,
@@ -1925,7 +1927,7 @@ function SortableServiceTypeItem({
 
   const handleSave = () => {
     if (!editName.trim()) return;
-    onUpdate({ name: editName.trim(), color: editColor, icon: editIcon, entry_type: editEntryType });
+      onUpdate({ name: editName.trim(), color: editColor, icon: editIcon, entry_type: editEntryType, cap_exempt: editCapExempt });
     setEditing(false);
   };
 
@@ -1978,6 +1980,12 @@ function SortableServiceTypeItem({
               </span>
               {serviceType.description && (
                 <p className="text-xs text-slate-500 truncate">{serviceType.description}</p>
+              )}
+              {serviceType.cap_exempt && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                  <span className="material-symbols-outlined text-[12px]">verified</span>
+                  {t("settings.capExempt")}
+                </span>
               )}
             </div>
           </div>
@@ -2080,6 +2088,22 @@ function SortableServiceTypeItem({
                 </button>
               ))}
             </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 py-1">
+            <p className="text-xs font-semibold text-slate-500">{t("settings.capExempt")}</p>
+            <button
+              type="button"
+              onClick={() => setEditCapExempt(!editCapExempt)}
+              className={cn(
+                "relative w-11 h-6 rounded-full transition-colors shrink-0",
+                editCapExempt ? "bg-green-500" : "bg-slate-300 dark:bg-slate-700"
+              )}
+            >
+              <div className={cn(
+                "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
+                editCapExempt ? "translate-x-[1.375rem]" : "translate-x-0.5"
+              )} />
+            </button>
           </div>
           <div className="flex gap-2">
             <button

@@ -108,6 +108,7 @@ export async function pushServiceTypes(
     icon: s.icon,
     sort_order: s.sort_order,
     is_active: s.is_active,
+    cap_exempt: s.cap_exempt ?? false,
     created_at: s.created_at,
     updated_at: s.updated_at,
   }));
@@ -143,6 +144,7 @@ export async function pullServiceTypes(
       icon: r.icon,
       sort_order: r.sort_order,
       is_active: r.is_active,
+      cap_exempt: r.cap_exempt ?? false,
       created_at: r.created_at,
       updated_at: r.updated_at,
     }),

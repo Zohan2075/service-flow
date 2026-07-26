@@ -181,6 +181,7 @@ function createDefaultServiceType(
     icon: "category",
     sort_order: sortOrder,
     is_active: true,
+    cap_exempt: false,
     created_at: timestamp,
     updated_at: timestamp,
   };
