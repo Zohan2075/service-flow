@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { format, startOfMonth } from "date-fns";
 import { useStore } from "@/lib/store";
 import type { TimeEntry } from "@/types/data";
+import { computeDurationSeconds, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import { cn } from "@/lib/utils";
 import { longDate, useT } from "@/lib/i18n";
 import toast from "react-hot-toast";
@@ -124,6 +125,31 @@ export default function AddEntryModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ── Monthly cap check ────────────────────────────────────────────────────
+    const store = useStore.getState();
+    if (store.settings.monthlyCapEnabled && effectiveEntryType !== "units" && !isEditing) {
+      const cap = store.settings.monthlyCapHours;
+      const monthStart = startOfMonth(new Date());
+      let currentHours = store.timeEntries
+        .filter((en) => !isPlannedEntry(en) && !isUnitsEntry(en) && new Date(en.start_time) >= monthStart)
+        .reduce((s, en) => s + computeDurationSeconds(en), 0) / 3600;
+
+      // Subtract the current entry if editing (it's already counted)
+      const newHours = mode === "range"
+        ? (new Date(`${format(selectedDate, "yyyy-MM-dd")}T${endTimeStr}:00`).getTime() -
+           new Date(`${format(selectedDate, "yyyy-MM-dd")}T${startTimeStr}:00`).getTime()) / 3600000
+        : ((durationHours || 0) + (durationMinutes || 0) / 60);
+
+      if (currentHours + newHours > cap) {
+        toast.error(
+          t("settings.capExceeded")
+            .replace("{cap}", String(cap))
+            .replace("{current}", String(Math.round(currentHours)))
+        );
+        return;
+      }
+    }
 
     // Read the LIVE store state so we never use a stale ID
     const liveTypes = useStore.getState().serviceTypes;

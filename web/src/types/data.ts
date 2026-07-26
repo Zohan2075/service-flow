@@ -36,8 +36,11 @@ export interface AppSettings {
   planModeEnabled: boolean;
   // Reports
   showYearTotals: boolean;
-  // Auto-sync to Drive (opt-out)
+  // Auto-sync to Supabase (opt-out)
   autoSync: boolean;
+  // Monthly hour cap (self-imposed limit, opt-in)
+  monthlyCapEnabled: boolean;
+  monthlyCapHours: number;        // e.g. 55
   // Navigation labels (customizable)
   interestedNavLabel?: string;    // custom label for "Interested People" nav item
   interestedSettingsLabel?: string; // custom label for "Interested People" settings section heading

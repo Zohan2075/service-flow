@@ -939,6 +939,41 @@ export default function SettingsPage() {
               )} />
             </button>
           </div>
+
+          {/* Monthly Hour Cap */}
+          <div className="flex flex-col gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">{t("settings.monthlyCap")}</p>
+                <p className="text-xs text-slate-400">{t("settings.monthlyCapDesc")}</p>
+              </div>
+              <button
+                onClick={() => updateSettings({ monthlyCapEnabled: !settings.monthlyCapEnabled })}
+                className={cn(
+                  "relative w-11 h-6 rounded-full transition-colors shrink-0",
+                  settings.monthlyCapEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
+                )}
+              >
+                <div className={cn(
+                  "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
+                  settings.monthlyCapEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
+                )} />
+              </button>
+            </div>
+            {settings.monthlyCapEnabled && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.monthlyCapHours")}</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={settings.monthlyCapHours}
+                  onChange={(e) => updateSettings({ monthlyCapHours: Math.max(1, Number(e.target.value) || 55) })}
+                  className="w-24 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Goals ───────────────────────────────────────────────────────── */}

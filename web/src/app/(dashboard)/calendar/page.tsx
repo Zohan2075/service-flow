@@ -48,6 +48,8 @@ export default function CalendarPage() {
   const serviceTypes = useStore((s) => s.serviceTypes);
   const ensureDefaultServiceType = useStore((s) => s.ensureDefaultServiceType);
   const planModeEnabled = useStore((s) => s.settings.planModeEnabled);
+  const monthlyCapEnabled = useStore((s) => s.settings.monthlyCapEnabled);
+  const monthlyCapHours = useStore((s) => s.settings.monthlyCapHours);
   const weekStartsOnSetting = useStore((s) => s.settings.weekStartsOn);
   const deleteTimeEntry = useStore((s) => s.deleteTimeEntry);
   const interestedPeople = useStore((s) => s.interestedPeople);
@@ -393,6 +395,16 @@ export default function CalendarPage() {
     firstWeekContainsDate,
   });
 
+  // ── Monthly cap ───────────────────────────────────────────────────────────
+  const monthlyUsedHours = useMemo(() => {
+    if (!monthlyCapEnabled) return 0;
+    const now = new Date();
+    const monthStart = startOfMonth(now);
+    return timeEntries
+      .filter((e) => !isPlannedEntry(e) && !isUnitsEntry(e) && new Date(e.start_time) >= monthStart)
+      .reduce((sum, e) => sum + computeDurationSeconds(e), 0) / 3600;
+  }, [timeEntries, monthlyCapEnabled]);
+
   // ── Weekly view ───────────────────────────────────────────────────────────
   const weekStart = useMemo(
     () => startOfWeek(selectedDate, { weekStartsOn }),
@@ -674,6 +686,29 @@ export default function CalendarPage() {
               </div>
             )}
           </div>
+
+          {/* Monthly cap progress bar */}
+          {monthlyCapEnabled && monthlyCapHours > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 font-medium">
+                  {Math.round(monthlyUsedHours)} / {monthlyCapHours}h
+                </span>
+                <span className="text-slate-400 font-semibold">
+                  {Math.round((monthlyUsedHours / monthlyCapHours) * 100)}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    monthlyUsedHours >= monthlyCapHours ? "bg-red-500" : monthlyUsedHours / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${Math.min(100, (monthlyUsedHours / monthlyCapHours) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </header>
 

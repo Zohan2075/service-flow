@@ -237,6 +237,8 @@ const INITIAL_SETTINGS: AppSettings = {
   planModeEnabled: false,
   showYearTotals: true,
   autoSync: true,
+  monthlyCapEnabled: false,
+  monthlyCapHours: 55,
   lastSyncedAt: null,
 };
 
