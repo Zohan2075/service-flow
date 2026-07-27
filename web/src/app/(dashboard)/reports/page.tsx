@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { endOfMonth, startOfMonth } from "date-fns";
+import { endOfMonth, format, startOfMonth } from "date-fns";
 import { useStore } from "@/lib/store";
 import { calendarDateKey, computeDurationSeconds, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import type { GoalDefinition, ServiceType, TimeEntry } from "@/types/data";
@@ -379,16 +379,22 @@ export default function ReportsPage() {
     () => filterEntriesByRange(actualTimeEntries, annualBaselineRange),
     [actualTimeEntries, annualBaselineRange]
   );
+  // Annual totals: exclude cap-exempt service types
+  const annualBaselineEntriesCapped = useMemo(() => {
+    if (!monthlyCapEnabled) return annualBaselineEntries;
+    const exemptIds = new Set(serviceTypes.filter((st) => st.cap_exempt).map((st) => st.id));
+    return annualBaselineEntries.filter((e) => !exemptIds.has(e.service_type_id));
+  }, [annualBaselineEntries, monthlyCapEnabled, serviceTypes]);
   const annualBaselineTotals = useMemo(
     () => sumAllServiceTotals(
       serviceTypes.map((serviceType) =>
         aggregateServiceEntries(
-          annualBaselineEntries.filter((entry) => entry.service_type_id === serviceType.id),
+          annualBaselineEntriesCapped.filter((entry) => entry.service_type_id === serviceType.id),
           serviceType
         )
       )
     ),
-    [annualBaselineEntries, serviceTypes]
+    [annualBaselineEntriesCapped, serviceTypes]
   );
 
   const yearlyServiceTotals = useMemo(
@@ -494,12 +500,12 @@ export default function ReportsPage() {
 
         {/* Monthly hour cap progress bar */}
         {monthlyCapEnabled && monthlyCapHours > 0 && (() => {
-          const monthStart = startOfMonth(currentDate);
+          const monthKey = format(currentDate, "yyyy-MM");
           let capped = 0;
           let exempt = 0;
           for (const e of timeEntries) {
-            const entryDate = new Date(e.start_time);
-            if (isPlannedEntry(e) || isUnitsEntry(e) || entryDate < monthStart || entryDate >= endOfMonth(monthStart)) continue;
+            if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
+            if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
             const hours = computeDurationSeconds(e) / 3600;
             const st = serviceTypes.find((s) => s.id === e.service_type_id);
             if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
