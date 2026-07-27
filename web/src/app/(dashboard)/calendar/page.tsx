@@ -399,18 +399,15 @@ export default function CalendarPage() {
   const monthlyUsedHours = useMemo(() => {
     if (!monthlyCapEnabled) return { capped: 0, exempt: 0 };
     const now = new Date();
-    const monthStart = startOfMonth(now);
+    const monthKey = format(now, "yyyy-MM");
     let capped = 0;
     let exempt = 0;
     for (const e of timeEntries) {
-      if (isPlannedEntry(e) || isUnitsEntry(e) || new Date(e.start_time) < monthStart) continue;
+      if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
+      if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
       const hours = computeDurationSeconds(e) / 3600;
       const st = serviceTypeMap[e.service_type_id];
-      if (st?.cap_exempt) {
-        exempt += hours;
-      } else {
-        capped += hours;
-      }
+      if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
     }
     return { capped, exempt };
   }, [timeEntries, monthlyCapEnabled, serviceTypeMap]);
@@ -707,9 +704,8 @@ export default function CalendarPage() {
                 <span className={cn(
                   "font-semibold",
                   (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "text-red-500" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.8 ? "text-amber-500" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "text-emerald-500" :
-                  "text-primary"
+                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours > 0.8 ? "text-amber-500" :
+                  "text-slate-400"
                 )}>
                   {Math.min(100, Math.round(((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100))}%
                 </span>
@@ -719,8 +715,7 @@ export default function CalendarPage() {
                   className={cn(
                     "h-full rounded-full transition-all",
                     (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "bg-red-500" :
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.8 ? "bg-amber-500" :
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "bg-emerald-500" :
+                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours > 0.8 ? "bg-amber-500" :
                     "bg-primary"
                   )}
                   style={{ width: `${Math.min(100, ((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100)}%` }}
