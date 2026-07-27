@@ -837,9 +837,23 @@ export default function CalendarPage() {
           </div>
 
           {(() => {
-            const selectedDateKey = format(selectedDate, "yyyy-MM-dd");
-            const people = interestedPeopleByDate.get(selectedDateKey);
-            const returnVisits = people?.filter((p) => p.status === "return_visit") ?? [];
+            const returnVisits = interestedPeople.filter((p) => {
+              if (p.status !== "return_visit") return false;
+              if (p.next_visit_date) {
+                const visitDate = new Date(p.next_visit_date);
+                if (
+                  visitDate.getFullYear() === selectedDate.getFullYear() &&
+                  visitDate.getMonth() === selectedDate.getMonth() &&
+                  visitDate.getDate() === selectedDate.getDate()
+                ) {
+                  return true;
+                }
+              }
+              if (p.next_visit_weekly_day !== null && p.next_visit_weekly_day === selectedDate.getDay()) {
+                return true;
+              }
+              return false;
+            });
             const hasReturnVisits = returnVisits.length > 0;
             const hasEntries = selectedDayData && selectedDayData.entries.length > 0;
 
