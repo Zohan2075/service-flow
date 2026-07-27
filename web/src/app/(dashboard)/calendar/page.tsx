@@ -700,10 +700,9 @@ export default function CalendarPage() {
                 <span className="text-slate-500 font-medium">
                   {(() => {
                     const { capped, exempt } = monthlyUsedHours;
+                    // Preaching overflow: only preaching counts, credits ignored
+                    if (exempt >= monthlyCapHours) return `${Math.round(exempt)} / ${monthlyCapHours}h`;
                     const total = capped + exempt;
-                    // Preaching overflow: show full total (e.g. 70h/55h)
-                    if (exempt >= monthlyCapHours) return `${Math.round(total)} / ${monthlyCapHours}h`;
-                    // Capped (credits pushed it over): show capped value
                     if (total > monthlyCapHours) return `${monthlyCapHours}h (capped)`;
                     return `${Math.round(total)} / ${monthlyCapHours}h`;
                   })()}
@@ -716,9 +715,10 @@ export default function CalendarPage() {
                   "text-red-500"
                 )}>
                   {(() => {
-                    const total = monthlyUsedHours.capped + monthlyUsedHours.exempt;
-                    if (monthlyUsedHours.exempt >= monthlyCapHours) return `${Math.round((total / monthlyCapHours) * 100)}%`;
-                    return `${Math.min(100, Math.round((total / monthlyCapHours) * 100))}%`;
+                    const { capped, exempt } = monthlyUsedHours;
+                    const shown = exempt >= monthlyCapHours ? exempt : capped + exempt;
+                    const pct = (shown / monthlyCapHours) * 100;
+                    return exempt >= monthlyCapHours ? `${Math.round(pct)}%` : `${Math.min(100, Math.round(pct))}%`;
                   })()}
                 </span>
               </div>
@@ -731,7 +731,7 @@ export default function CalendarPage() {
                     (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "bg-emerald-500" :
                     "bg-red-500"
                   )}
-                  style={{ width: `${Math.min(100, ((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (((monthlyUsedHours.exempt >= monthlyCapHours ? monthlyUsedHours.exempt : monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100))}%` }}
                 />
               </div>
             </div>

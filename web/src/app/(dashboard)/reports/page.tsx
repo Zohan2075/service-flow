@@ -409,10 +409,10 @@ export default function ReportsPage() {
       const p = m.exempt; // preaching (unlimited)
       const c = m.capped; // credits
       const cap = monthlyCapHours;
-      // Overflow: preaching alone exceeds cap → all hours count
-      // Under cap: combined ≤ cap → all hours count
+      // Overflow: preaching exceeds cap → only preaching counts, credits ignored
+      // Under cap: combined ≤ cap → all count
       // Capped: combined > cap but preaching < cap → capped at cap
-      const capped = p >= cap ? p + c : p + c <= cap ? p + c : cap;
+      const capped = p >= cap ? p : p + c <= cap ? p + c : cap;
       totalSeconds += capped * 3600;
     }
     // Return same shape as sumAllServiceTotals
@@ -616,13 +616,14 @@ export default function ReportsPage() {
             if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
           }
           const total = exempt + capped;
+          const shown = exempt >= monthlyCapHours ? exempt : total;
           const capLabel = exempt >= monthlyCapHours
-            ? `${Math.round(total)} / ${monthlyCapHours}h`
+            ? `${Math.round(exempt)} / ${monthlyCapHours}h`
             : total > monthlyCapHours
               ? `${monthlyCapHours}h (capped)`
               : `${Math.round(total)} / ${monthlyCapHours}h`;
           const capPct = exempt >= monthlyCapHours
-            ? Math.round((total / monthlyCapHours) * 100)
+            ? Math.round((exempt / monthlyCapHours) * 100)
             : Math.min(100, Math.round((total / monthlyCapHours) * 100));
           return (
             <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 mt-6">
@@ -644,7 +645,7 @@ export default function ReportsPage() {
                     "h-full rounded-full transition-all",
                     exempt >= monthlyCapHours ? "bg-blue-500" : total > monthlyCapHours ? "bg-amber-500" : total / monthlyCapHours >= 0.5 ? "bg-emerald-500" : "bg-red-500"
                   )}
-                  style={{ width: `${Math.min(100, (total / monthlyCapHours) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (shown / monthlyCapHours) * 100)}%` }}
                 />
               </div>
             </div>
