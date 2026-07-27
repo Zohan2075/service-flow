@@ -495,8 +495,8 @@ export default function ReportsPage() {
         {/* Monthly hour cap progress bar */}
         {monthlyCapEnabled && monthlyCapHours > 0 && (() => {
           const monthKey = format(currentDate, "yyyy-MM");
-          let capped = 0;
           let exempt = 0;
+          let capped = 0;
           for (const e of timeEntries) {
             if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
             if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
@@ -504,6 +504,16 @@ export default function ReportsPage() {
             const st = serviceTypes.find((s) => s.id === e.service_type_id);
             if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
           }
+          const total = exempt + capped;
+          const isOverflow = exempt >= monthlyCapHours;
+          const isCapped = !isOverflow && total > monthlyCapHours;
+          const barPct = isOverflow ? 100 : Math.min(100, (total / monthlyCapHours) * 100);
+          const barColor = isOverflow ? "bg-purple-500" : isCapped ? "bg-red-500" : total / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary";
+          const capLabel = isOverflow
+            ? `${Math.round(exempt)}h (${Math.round(total)}h total)`
+            : isCapped
+              ? `${monthlyCapHours}h capped (+${Math.round(total - monthlyCapHours)}h over)`
+              : `${Math.round(total)}h`;
           return (
             <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
@@ -512,26 +522,22 @@ export default function ReportsPage() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
-                  {Math.round(capped)} / {monthlyCapHours}h
+                  {capLabel}
                 </span>
-                <span className="text-slate-400 font-semibold">
-                  {Math.round((capped / monthlyCapHours) * 100)}%
+                <span className={cn("font-semibold", isOverflow ? "text-purple-500" : isCapped ? "text-red-500" : "text-slate-400")}>
+                  {isOverflow ? "Overflow" : `${Math.round(barPct)}%`}
                 </span>
               </div>
               <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    capped >= monthlyCapHours ? "bg-red-500" : capped / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
-                  )}
-                  style={{ width: `${Math.min(100, (capped / monthlyCapHours) * 100)}%` }}
+                  className={cn("h-full rounded-full transition-all", barColor)}
+                  style={{ width: `${barPct}%` }}
                 />
               </div>
-              {exempt > 0 && (
-                <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                  +{Math.round(exempt)}h {t("settings.capExempt")}
-                </p>
-              )}
+              <div className="flex gap-3 text-[10px]">
+                <span className="text-purple-500 font-medium">Preaching: {Math.round(exempt)}h</span>
+                <span className="text-slate-400 font-medium">Credits: {Math.round(capped)}h</span>
+              </div>
             </div>
           );
         })()}
