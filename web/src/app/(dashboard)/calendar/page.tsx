@@ -702,23 +702,12 @@ export default function CalendarPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500 font-medium">
-                  {(() => {
-                    const { capped, exempt } = monthlyUsedHours;
-                    const total = capped + exempt;
-                    const isOverflow = exempt >= monthlyCapHours;
-                    const isCapped = !isOverflow && total > monthlyCapHours;
-                    return isOverflow
-                      ? `${Math.round(exempt)}h (${Math.round(total)}h total)`
-                      : isCapped
-                        ? `${monthlyCapHours}h capped (+${Math.round(total - monthlyCapHours)}h)`
-                        : `${Math.round(total)}h`;
-                  })()} / {monthlyCapHours}h
+                  {Math.round(monthlyUsedHours.capped + monthlyUsedHours.exempt)} / {monthlyCapHours}h
                 </span>
                 <span className={cn(
                   "font-semibold",
-                  monthlyUsedHours.exempt >= monthlyCapHours ? "text-purple-400" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) > monthlyCapHours ? "text-red-400" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours > 0.8 ? "text-amber-400" :
+                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "text-red-500" :
+                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours > 0.8 ? "text-amber-500" :
                   "text-slate-400"
                 )}>
                   {Math.round(((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100)}%
@@ -728,19 +717,13 @@ export default function CalendarPage() {
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    monthlyUsedHours.exempt >= monthlyCapHours ? "bg-purple-500" :
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) > monthlyCapHours ? "bg-red-500" :
+                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "bg-red-500" :
                     (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours > 0.8 ? "bg-amber-500" :
                     "bg-primary"
                   )}
                   style={{ width: `${Math.min(100, ((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100)}%` }}
                 />
               </div>
-              <p className="text-[10px] text-slate-400 font-medium">
-                <span className="text-purple-400">Preaching: {Math.round(monthlyUsedHours.exempt)}h</span>
-                <span className="mx-1.5">·</span>
-                <span>Credits: {Math.round(monthlyUsedHours.capped)}h</span>
-              </p>
             </div>
           )}
         </div>

@@ -391,6 +391,34 @@ export default function ReportsPage() {
     [annualBaselineEntries, serviceTypes]
   );
 
+  // Per-month capped annual totals: apply 55h cap per month
+  const annualBaselineTotalsCapped = useMemo(() => {
+    if (!monthlyCapEnabled) return annualBaselineTotals;
+    const monthMap = new Map<string, { exempt: number; capped: number }>();
+    for (const e of annualBaselineEntries) {
+      if (isUnitsEntry(e)) continue;
+      const monthKey = format(new Date(e.start_time), "yyyy-MM");
+      if (!monthMap.has(monthKey)) monthMap.set(monthKey, { exempt: 0, capped: 0 });
+      const m = monthMap.get(monthKey)!;
+      const hours = computeDurationSeconds(e) / 3600;
+      const st = serviceTypes.find((s) => s.id === e.service_type_id);
+      if (st?.cap_exempt) { m.exempt += hours; } else { m.capped += hours; }
+    }
+    let totalSeconds = 0;
+    for (const [, m] of monthMap) {
+      const p = m.exempt; // preaching (unlimited)
+      const c = m.capped; // credits
+      const cap = monthlyCapHours;
+      // Overflow: preaching alone exceeds cap → all hours count
+      // Under cap: combined ≤ cap → all hours count
+      // Capped: combined > cap but preaching < cap → capped at cap
+      const capped = p >= cap ? p + c : p + c <= cap ? p + c : cap;
+      totalSeconds += capped * 3600;
+    }
+    // Return same shape as sumAllServiceTotals
+    return { seconds: totalSeconds, units: 0, entries: 0 };
+  }, [annualBaselineEntries, monthlyCapEnabled, monthlyCapHours, serviceTypes]);
+
   const yearlyServiceTotals = useMemo(
     () => sortServiceTotals(
       serviceTypes
@@ -505,38 +533,28 @@ export default function ReportsPage() {
             if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
           }
           const total = exempt + capped;
-          const isOverflow = exempt >= monthlyCapHours;
-          const isCapped = !isOverflow && total > monthlyCapHours;
-          const barPct = isOverflow ? 100 : Math.min(100, (total / monthlyCapHours) * 100);
-          const barColor = isOverflow ? "bg-purple-500" : isCapped ? "bg-red-500" : total / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary";
-          const capLabel = isOverflow
-            ? `${Math.round(exempt)}h (${Math.round(total)}h total)`
-            : isCapped
-              ? `${monthlyCapHours}h capped (+${Math.round(total - monthlyCapHours)}h over)`
-              : `${Math.round(total)}h`;
           return (
             <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
-                <span className="text-[10px] text-slate-400">{monthShortYear(currentDate, language)}</span>
-              </div>
+              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
-                  {capLabel}
+                  {Math.round(total)} / {monthlyCapHours}h
                 </span>
-                <span className={cn("font-semibold", isOverflow ? "text-purple-500" : isCapped ? "text-red-500" : "text-slate-400")}>
-                  {isOverflow ? "Overflow" : `${Math.round(barPct)}%`}
+                <span className={cn(
+                  "font-semibold",
+                  total >= monthlyCapHours ? "text-red-500" : total / monthlyCapHours > 0.8 ? "text-amber-500" : "text-slate-400"
+                )}>
+                  {Math.round((total / monthlyCapHours) * 100)}%
                 </span>
               </div>
               <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
-                  className={cn("h-full rounded-full transition-all", barColor)}
-                  style={{ width: `${barPct}%` }}
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    total >= monthlyCapHours ? "bg-red-500" : total / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${Math.min(100, (total / monthlyCapHours) * 100)}%` }}
                 />
-              </div>
-              <div className="flex gap-3 text-[10px]">
-                <span className="text-purple-500 font-medium">Preaching: {Math.round(exempt)}h</span>
-                <span className="text-slate-400 font-medium">Credits: {Math.round(capped)}h</span>
               </div>
             </div>
           );
@@ -638,8 +656,8 @@ export default function ReportsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <MetricTile label={t("reports.totalHours")} value={formatDuration(annualBaselineTotals.seconds)} icon="schedule" color={accentColor} />
-              <MetricTile label={t("reports.totalUnits")} value={`${annualBaselineTotals.units} ${t("calendar.units")}`} icon="pin" color={accentColor} />
+              <MetricTile label={t("reports.totalHours")} value={formatDuration(annualBaselineTotalsCapped.seconds)} icon="schedule" color={accentColor} />
+              <MetricTile label={t("reports.totalUnits")} value={`${annualBaselineTotalsCapped.units} ${t("calendar.units")}`} icon="pin" color={accentColor} />
             </div>
 
             <div className="space-y-5">
