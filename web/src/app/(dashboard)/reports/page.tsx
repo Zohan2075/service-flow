@@ -949,8 +949,8 @@ function CombinedGoalProgressCard({
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
-      {showCelebration && capExceeded && <CapCelebratedRibbon label={t("reports.capMet")} />}
-      {showCelebration && !capExceeded && <GoalSeal label={t("reports.wellDone")} />}
+      {capExceeded && <CapCelebratedRibbon label={t("reports.capMet")} />}
+      {!capExceeded && showCelebration && <GoalSeal label={t("reports.wellDone")} />}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2 min-w-0">
