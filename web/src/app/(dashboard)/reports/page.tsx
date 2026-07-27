@@ -872,7 +872,7 @@ function ServiceTotalsCard({
   const showCelebration = period === "month" && Boolean(goalSummary?.isComplete);
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
+    <div className="relative rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
       {showCelebration && <GoalSeal label={t("reports.wellDone")} />}
 
       <div className="flex items-start justify-between gap-4">
@@ -988,7 +988,7 @@ function CombinedGoalProgressCard({
   const showCelebration = period === "month" && Boolean(goalSummary?.isComplete);
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
+    <div className="relative rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
       {capExceeded && <CapCelebratedRibbon label={t("reports.capMet")} />}
       {!capExceeded && showCelebration && <GoalSeal label={t("reports.wellDone")} />}
 
@@ -1166,8 +1166,8 @@ function GoalMetricRow({ metric, accentColor }: { metric: GoalMetric; accentColo
 
 function CapCelebratedRibbon({ label }: { label: string }) {
   return (
-    <div className="pointer-events-none absolute right-[-3.6rem] top-4 rotate-[31deg]">
-      <div className="relative overflow-hidden min-w-[12rem] border border-white/20 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 px-6 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.28em] text-white shadow-lg">
+    <div className="pointer-events-none absolute right-[-3.6rem] top-4 rotate-[31deg] z-10">
+      <div className="relative overflow-hidden min-w-[15rem] border border-white/20 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 px-6 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-lg">
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite]" />
         <span className="relative z-10">{label}</span>
       </div>

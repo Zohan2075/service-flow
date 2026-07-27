@@ -505,7 +505,7 @@ const translations = {
     "settings.reportsDisplay": "Reportes",
     "settings.showYearTotals": "Mostrar Totales del Año",
     "settings.showYearTotalsDesc": "Mostrar totales anuales por tipo de servicio en reportes",
-    "settings.monthlyCap": "Límite Mensual",
+    "settings.monthlyCap": "Límite Mensual De Tiempo Real + Crédito",
     "settings.monthlyCapDesc": "Límite de horas de servicio por mes. Se reinicia el día 1.",
     "settings.monthlyCapHours": "Horas máx.",
     "settings.capExempt": "Exento del límite",
