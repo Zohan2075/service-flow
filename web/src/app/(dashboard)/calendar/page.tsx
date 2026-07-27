@@ -323,7 +323,7 @@ export default function CalendarPage() {
                     </div>
                   )}
 
-                  {/* Interested people mini cards */}
+                  {/* Interested people mini cards — visual indicators only */}
                   {(() => {
                     const people = interestedPeopleByDate.get(key);
                     if (!people || people.length === 0) return null;
@@ -332,22 +332,10 @@ export default function CalendarPage() {
                       <div className="mt-1 space-y-0.5">
                         {people.slice(0, maxShow).map((p) => {
                           const st = statusMap.get(p.status) ?? { name: p.status, color: "#94a3b8", icon: "person" };
-                          const isReturnVisit = p.status === "return_visit";
                           return (
                             <div
                               key={p.id}
-                              onClick={(e) => {
-                                if (!isReturnVisit) {
-                                  e.stopPropagation();
-                                  setEditingInterestedPerson(p);
-                                }
-                              }}
-                              className={cn(
-                                "text-[10px] px-1 py-0.5 rounded border-l-2 transition-colors",
-                                isReturnVisit
-                                  ? "cursor-default"
-                                  : "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50"
-                              )}
+                              className="text-[10px] px-1 py-0.5 rounded border-l-2 transition-colors"
                               style={{ borderColor: st.color, backgroundColor: st.color + "10" }}
                             >
                               <div className="flex items-center gap-1">
@@ -837,8 +825,7 @@ export default function CalendarPage() {
           </div>
 
           {(() => {
-            const returnVisits = interestedPeople.filter((p) => {
-              if (p.status !== "return_visit") return false;
+            const dayPeople = interestedPeople.filter((p) => {
               if (p.next_visit_date) {
                 const visitDate = new Date(p.next_visit_date);
                 if (
@@ -854,10 +841,10 @@ export default function CalendarPage() {
               }
               return false;
             });
-            const hasReturnVisits = returnVisits.length > 0;
+            const hasPeople = dayPeople.length > 0;
             const hasEntries = selectedDayData && selectedDayData.entries.length > 0;
 
-            if (!hasEntries && !hasReturnVisits) {
+            if (!hasEntries && !hasPeople) {
               return (
                 <div className="text-center py-10 md:py-12 text-slate-400">
                   <span className="material-symbols-outlined text-4xl mb-2 block">event_busy</span>
@@ -881,7 +868,7 @@ export default function CalendarPage() {
                     />
                   );
                 })}
-                {returnVisits.map((person) => {
+                {dayPeople.map((person) => {
                   const st = statusMap.get(person.status) ?? { name: person.status, color: "#94a3b8", icon: "person" };
                   return (
                     <InterestedPersonCard
@@ -889,6 +876,7 @@ export default function CalendarPage() {
                       person={person}
                       statusConfig={st}
                       onEdit={() => setEditingInterestedPerson(person)}
+                      onDelete={() => useStore.getState().deleteInterestedPerson(person.id)}
                     />
                   );
                 })}
@@ -1030,12 +1018,15 @@ function InterestedPersonCard({
   person,
   statusConfig,
   onEdit,
+  onDelete,
 }: {
   person: InterestedPerson;
   statusConfig: { name: string; color: string; icon: string };
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   const { t } = useT();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div className="bg-surface p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -1078,6 +1069,24 @@ function InterestedPersonCard({
             <span className="material-symbols-outlined text-xl">edit</span>
             <span>{t("entry.editShort")}</span>
           </button>
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:text-slate-300 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 sm:flex-initial"
+              title={t("entry.delete")}
+            >
+              <span className="material-symbols-outlined text-xl">delete</span>
+              <span>{t("entry.delete")}</span>
+            </button>
+          ) : (
+            <button
+              onClick={onDelete}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-red-600 sm:flex-initial"
+            >
+              <span className="material-symbols-outlined text-lg">warning</span>
+              <span>{t("entry.confirmDelete")}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
