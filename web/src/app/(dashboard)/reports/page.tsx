@@ -494,18 +494,22 @@ export default function ReportsPage() {
 
         {/* Monthly hour cap progress bar */}
         {monthlyCapEnabled && monthlyCapHours > 0 && (() => {
-          const monthStart = startOfMonth(new Date());
+          const monthStart = startOfMonth(currentDate);
           let capped = 0;
           let exempt = 0;
           for (const e of timeEntries) {
-            if (isPlannedEntry(e) || isUnitsEntry(e) || new Date(e.start_time) < monthStart) continue;
+            const entryDate = new Date(e.start_time);
+            if (isPlannedEntry(e) || isUnitsEntry(e) || entryDate < monthStart || entryDate >= endOfMonth(monthStart)) continue;
             const hours = computeDurationSeconds(e) / 3600;
             const st = serviceTypes.find((s) => s.id === e.service_type_id);
             if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
           }
           return (
             <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
-              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
+                <span className="text-[10px] text-slate-400">{monthShortYear(currentDate, language)}</span>
+              </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
                   {Math.round(capped)} / {monthlyCapHours}h
