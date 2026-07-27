@@ -397,19 +397,23 @@ export default function CalendarPage() {
 
   // ── Monthly cap ───────────────────────────────────────────────────────────
   const monthlyUsedHours = useMemo(() => {
-    if (!monthlyCapEnabled) return 0;
+    if (!monthlyCapEnabled) return { capped: 0, exempt: 0 };
     const now = new Date();
     const monthStart = startOfMonth(now);
-    const exemptIds = new Set(serviceTypes.filter((st) => st.cap_exempt).map((st) => st.id));
-    return timeEntries
-      .filter((e) =>
-        !isPlannedEntry(e) &&
-        !isUnitsEntry(e) &&
-        !exemptIds.has(e.service_type_id) &&
-        new Date(e.start_time) >= monthStart
-      )
-      .reduce((sum, e) => sum + computeDurationSeconds(e), 0) / 3600;
-  }, [timeEntries, monthlyCapEnabled, serviceTypes]);
+    let capped = 0;
+    let exempt = 0;
+    for (const e of timeEntries) {
+      if (isPlannedEntry(e) || isUnitsEntry(e) || new Date(e.start_time) < monthStart) continue;
+      const hours = computeDurationSeconds(e) / 3600;
+      const st = serviceTypeMap[e.service_type_id];
+      if (st?.cap_exempt) {
+        exempt += hours;
+      } else {
+        capped += hours;
+      }
+    }
+    return { capped, exempt };
+  }, [timeEntries, monthlyCapEnabled, serviceTypeMap]);
 
   // ── Weekly view ───────────────────────────────────────────────────────────
   const weekStart = useMemo(
@@ -698,21 +702,26 @@ export default function CalendarPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500 font-medium">
-                  {Math.round(monthlyUsedHours)} / {monthlyCapHours}h
+                  {Math.round(monthlyUsedHours.capped)} / {monthlyCapHours}h
                 </span>
                 <span className="text-slate-400 font-semibold">
-                  {Math.round((monthlyUsedHours / monthlyCapHours) * 100)}%
+                  {Math.round((monthlyUsedHours.capped / monthlyCapHours) * 100)}%
                 </span>
               </div>
               <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    monthlyUsedHours >= monthlyCapHours ? "bg-red-500" : monthlyUsedHours / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
+                    monthlyUsedHours.capped >= monthlyCapHours ? "bg-red-500" : monthlyUsedHours.capped / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
                   )}
-                  style={{ width: `${Math.min(100, (monthlyUsedHours / monthlyCapHours) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (monthlyUsedHours.capped / monthlyCapHours) * 100)}%` }}
                 />
               </div>
+              {monthlyUsedHours.exempt > 0 && (
+                <p className="text-[10px] text-green-600 dark:text-green-400 font-medium">
+                  +{Math.round(monthlyUsedHours.exempt)}h exempt (cap-exempt services)
+                </p>
+              )}
             </div>
           )}
         </div>

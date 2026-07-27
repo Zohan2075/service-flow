@@ -495,35 +495,39 @@ export default function ReportsPage() {
         {/* Monthly hour cap progress bar */}
         {monthlyCapEnabled && monthlyCapHours > 0 && (() => {
           const monthStart = startOfMonth(new Date());
-          const exemptIds = new Set(serviceTypes.filter((st) => st.cap_exempt).map((st) => st.id));
-          const usedHours = timeEntries
-            .filter((e) =>
-              !isPlannedEntry(e) &&
-              !isUnitsEntry(e) &&
-              !exemptIds.has(e.service_type_id) &&
-              new Date(e.start_time) >= monthStart
-            )
-            .reduce((s, e) => s + computeDurationSeconds(e), 0) / 3600;
+          let capped = 0;
+          let exempt = 0;
+          for (const e of timeEntries) {
+            if (isPlannedEntry(e) || isUnitsEntry(e) || new Date(e.start_time) < monthStart) continue;
+            const hours = computeDurationSeconds(e) / 3600;
+            const st = serviceTypes.find((s) => s.id === e.service_type_id);
+            if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
+          }
           return (
             <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
-                  {Math.round(usedHours)} / {monthlyCapHours}h
+                  {Math.round(capped)} / {monthlyCapHours}h
                 </span>
                 <span className="text-slate-400 font-semibold">
-                  {Math.round((usedHours / monthlyCapHours) * 100)}%
+                  {Math.round((capped / monthlyCapHours) * 100)}%
                 </span>
               </div>
               <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    usedHours >= monthlyCapHours ? "bg-red-500" : usedHours / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
+                    capped >= monthlyCapHours ? "bg-red-500" : capped / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
                   )}
-                  style={{ width: `${Math.min(100, (usedHours / monthlyCapHours) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (capped / monthlyCapHours) * 100)}%` }}
                 />
               </div>
+              {exempt > 0 && (
+                <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                  +{Math.round(exempt)}h {t("settings.capExempt")}
+                </p>
+              )}
             </div>
           );
         })()}
