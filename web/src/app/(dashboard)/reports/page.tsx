@@ -520,46 +520,6 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Monthly hour cap progress bar */}
-        {monthlyCapEnabled && monthlyCapHours > 0 && (() => {
-          const monthKey = format(currentDate, "yyyy-MM");
-          let exempt = 0;
-          let capped = 0;
-          for (const e of timeEntries) {
-            if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
-            if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
-            const hours = computeDurationSeconds(e) / 3600;
-            const st = serviceTypes.find((s) => s.id === e.service_type_id);
-            if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
-          }
-          const total = exempt + capped;
-          return (
-            <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
-              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-bold text-slate-700 dark:text-slate-200">
-                  {Math.round(total)} / {monthlyCapHours}h
-                </span>
-                <span className={cn(
-                  "font-semibold",
-                  total >= monthlyCapHours ? "text-red-500" : total / monthlyCapHours > 0.8 ? "text-amber-500" : "text-slate-400"
-                )}>
-                  {Math.min(100, Math.round((total / monthlyCapHours) * 100))}%
-                </span>
-              </div>
-              <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    total >= monthlyCapHours ? "bg-red-500" : total / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
-                  )}
-                  style={{ width: `${Math.min(100, (total / monthlyCapHours) * 100)}%` }}
-                />
-              </div>
-            </div>
-          );
-        })()}
-
         <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
           <div>
             <h3 className="font-bold text-lg">{t("reports.byServiceType")}</h3>
@@ -642,6 +602,46 @@ export default function ReportsPage() {
             )}
           </div>
         </div>
+
+        {/* Monthly hour cap progress bar */}
+        {monthlyCapEnabled && monthlyCapHours > 0 && (() => {
+          const monthKey = format(currentDate, "yyyy-MM");
+          let exempt = 0;
+          let capped = 0;
+          for (const e of timeEntries) {
+            if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
+            if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
+            const hours = computeDurationSeconds(e) / 3600;
+            const st = serviceTypes.find((s) => s.id === e.service_type_id);
+            if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
+          }
+          const total = exempt + capped;
+          return (
+            <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 mt-6">
+              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {Math.round(total)} / {monthlyCapHours}h
+                </span>
+                <span className={cn(
+                  "font-semibold",
+                  total >= monthlyCapHours ? "text-red-500" : total / monthlyCapHours > 0.8 ? "text-amber-500" : "text-slate-400"
+                )}>
+                  {Math.min(100, Math.round((total / monthlyCapHours) * 100))}%
+                </span>
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    total >= monthlyCapHours ? "bg-red-500" : total / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${Math.min(100, (total / monthlyCapHours) * 100)}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         {showYearTotals && (
           <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
