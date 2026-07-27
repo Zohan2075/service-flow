@@ -273,6 +273,31 @@ function sumGoalEntries(entries: TimeEntry[], serviceTypes: ServiceType[], servi
   );
 }
 
+function computeCappedSeconds(
+  entries: TimeEntry[],
+  serviceTypes: ServiceType[],
+  monthlyCapHours: number,
+): number {
+  const monthMap = new Map<string, { exempt: number; capped: number }>();
+  for (const e of entries) {
+    if (isUnitsEntry(e)) continue;
+    const monthKey = format(new Date(e.start_time), "yyyy-MM");
+    if (!monthMap.has(monthKey)) monthMap.set(monthKey, { exempt: 0, capped: 0 });
+    const m = monthMap.get(monthKey)!;
+    const hours = computeDurationSeconds(e) / 3600;
+    const st = serviceTypes.find((s) => s.id === e.service_type_id);
+    if (st?.cap_exempt) { m.exempt += hours; } else { m.capped += hours; }
+  }
+  let total = 0;
+  for (const [, m] of monthMap) {
+    const { exempt, capped } = m;
+    if (exempt >= monthlyCapHours) total += exempt;
+    else if (exempt + capped > monthlyCapHours) total += monthlyCapHours;
+    else total += exempt + capped;
+  }
+  return total * 3600;
+}
+
 export default function ReportsPage() {
   const { t, language } = useT();
   const currentDate = useStore((s) => s.uiState.viewedMonth);
@@ -340,13 +365,15 @@ export default function ReportsPage() {
     if (!monthlyCapEnabled || !monthlyCapHours) return false;
     const monthKey = format(currentDate, "yyyy-MM");
     let exempt = 0;
+    let capped = 0;
     for (const e of timeEntries) {
       if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
       if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
+      const hours = computeDurationSeconds(e) / 3600;
       const st = serviceTypes.find((s) => s.id === e.service_type_id);
-      if (st?.cap_exempt) exempt += computeDurationSeconds(e) / 3600;
+      if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
     }
-    return exempt >= monthlyCapHours;
+    return exempt + capped >= monthlyCapHours;
   }, [monthlyCapEnabled, monthlyCapHours, currentDate, timeEntries, serviceTypes]);
 
   const monthlyDaysWorked = useMemo(
@@ -462,27 +489,32 @@ export default function ReportsPage() {
       .filter((goal) => hasPeriodGoal(goal, "year"))
       .map((goal) => {
         const cycleRange = getAnnualCycleRange(currentDate, goal.yearly_start_month);
-        const totals = sumGoalEntries(filterEntriesByRange(actualTimeEntries, cycleRange), serviceTypes, goal.service_type_ids);
+        const cycleEntries = filterEntriesByRange(actualTimeEntries, cycleRange);
+        const totals = sumGoalEntries(cycleEntries, serviceTypes, goal.service_type_ids);
         if (totals.serviceTags.length === 0) {
           return null;
         }
 
+        const cappedSeconds = (monthlyCapEnabled && monthlyCapHours)
+          ? computeCappedSeconds(cycleEntries, serviceTypes, monthlyCapHours)
+          : totals.seconds;
+
         return {
           goal,
           serviceTags: totals.serviceTags,
-          seconds: totals.seconds,
+          seconds: cappedSeconds,
           units: totals.units,
           cycleLabel: formatAnnualCycleLabel(cycleRange, language),
           metrics: buildGoalMetrics(
             goal,
             "year",
-            totals,
+            { seconds: cappedSeconds, units: totals.units },
             buildGradientFill(totals.serviceTags.map((serviceTag) => serviceTag.color), accentColor)
           ),
         } satisfies CombinedGoalCardData;
       })
       .filter(isDefined),
-    [accentColor, actualTimeEntries, combinedGoals, currentDate, language, serviceTypes]
+    [accentColor, actualTimeEntries, combinedGoals, currentDate, language, monthlyCapEnabled, monthlyCapHours, serviceTypes]
   );
 
   const monthlyTimeServices = monthlyServiceTotals.filter((serviceTotal) => serviceTotal.entryType === "time");
@@ -679,8 +711,8 @@ export default function ReportsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <MetricTile label={t("reports.totalHours")} value={formatDuration(annualBaselineTotalsCapped.seconds)} icon="schedule" color={accentColor} />
-              <MetricTile label={t("reports.totalUnits")} value={`${annualBaselineTotalsCapped.units} ${t("calendar.units")}`} icon="pin" color={accentColor} />
+              <MetricTile label={t("reports.totalHours")} value={formatDuration(annualBaselineTotals.seconds)} icon="schedule" color={accentColor} />
+              <MetricTile label={t("reports.totalUnits")} value={`${annualBaselineTotals.units} ${t("calendar.units")}`} icon="pin" color={accentColor} />
             </div>
 
             <div className="space-y-5">
@@ -1127,9 +1159,9 @@ function GoalMetricRow({ metric, accentColor }: { metric: GoalMetric; accentColo
 function CapCelebratedRibbon({ label }: { label: string }) {
   return (
     <div className="pointer-events-none absolute right-[-3.6rem] top-4 rotate-[31deg]">
-      <div className="relative min-w-[12rem] border border-white/20 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 px-6 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.28em] text-white shadow-lg">
-        <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 animate-[shimmer_2s_ease-in-out_infinite] bg-[length:200%_100%]" />
-        {label}
+      <div className="relative overflow-hidden min-w-[12rem] border border-white/20 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 px-6 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.28em] text-white shadow-lg">
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite]" />
+        <span className="relative z-10">{label}</span>
       </div>
     </div>
   );
