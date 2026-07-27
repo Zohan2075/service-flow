@@ -703,9 +703,10 @@ export default function CalendarPage() {
                 </span>
                 <span className={cn(
                   "font-semibold",
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "text-red-500" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours > 0.8 ? "text-amber-500" :
-                  "text-slate-400"
+                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "text-blue-500" :
+                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.8 ? "text-amber-500" :
+                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "text-emerald-500" :
+                  "text-red-500"
                 )}>
                   {Math.min(100, Math.round(((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100))}%
                 </span>
@@ -714,9 +715,10 @@ export default function CalendarPage() {
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "bg-red-500" :
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours > 0.8 ? "bg-amber-500" :
-                    "bg-primary"
+                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "bg-blue-500" :
+                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.8 ? "bg-amber-500" :
+                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "bg-emerald-500" :
+                    "bg-red-500"
                   )}
                   style={{ width: `${Math.min(100, ((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100)}%` }}
                 />
