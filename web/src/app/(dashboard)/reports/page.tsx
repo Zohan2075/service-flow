@@ -390,21 +390,29 @@ export default function ReportsPage() {
           return null;
         }
 
+        const cappedSeconds = (monthlyCapEnabled && monthlyCapHours)
+          ? computeCappedSeconds(
+              monthlyEntries.filter((e) => goal.service_type_ids.includes(e.service_type_id)),
+              serviceTypes,
+              monthlyCapHours,
+            )
+          : totals.seconds;
+
         return {
           goal,
           serviceTags: totals.serviceTags,
-          seconds: totals.seconds,
+          seconds: cappedSeconds,
           units: totals.units,
           metrics: buildGoalMetrics(
             goal,
             "month",
-            totals,
+            { seconds: cappedSeconds, units: totals.units },
             buildGradientFill(totals.serviceTags.map((serviceTag) => serviceTag.color), accentColor)
           ),
         } satisfies CombinedGoalCardData;
       })
       .filter(isDefined),
-    [accentColor, combinedGoals, monthlyEntries, serviceTypes]
+    [accentColor, combinedGoals, monthlyEntries, monthlyCapEnabled, monthlyCapHours, serviceTypes]
   );
 
   const annualBaselineRange = useMemo(
