@@ -36,8 +36,3 @@ body {
 body {
   min-height: 100dvh;
 }
-
-@keyframes shimmer {
-  0% { background-position: 200% center; }
-  100% { background-position: -200% center; }
-}
