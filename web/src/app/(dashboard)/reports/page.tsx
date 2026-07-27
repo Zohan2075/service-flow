@@ -1084,7 +1084,7 @@ function GoalValuePill({
 
 function GoalSeal({ label }: { label: string }) {
   return (
-    <div className="pointer-events-none absolute right-[-3.85rem] top-5 rotate-[31deg]">
+    <div className="pointer-events-none absolute right-[-3.25rem] top-5 rotate-[31deg]">
       <div className="min-w-[12rem] border border-white/20 bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.12em] text-white shadow-lg">
         {label}
       </div>
@@ -1166,7 +1166,7 @@ function GoalMetricRow({ metric, accentColor }: { metric: GoalMetric; accentColo
 
 function CapCelebratedRibbon({ label }: { label: string }) {
   return (
-    <div className="pointer-events-none absolute right-[-3.85rem] top-5 rotate-[31deg]">
+    <div className="pointer-events-none absolute right-[-3.25rem] top-5 rotate-[31deg]">
       <div className="relative overflow-hidden min-w-[12rem] border border-white/20 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 px-6 py-1.5 text-center text-[8px] font-black uppercase tracking-[0.08em] text-white shadow-lg">
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite]" />
         <span className="relative z-10">{label}</span>

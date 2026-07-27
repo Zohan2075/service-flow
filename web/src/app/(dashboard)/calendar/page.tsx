@@ -323,31 +323,22 @@ export default function CalendarPage() {
                     </div>
                   )}
 
-                  {/* Interested people mini cards */}
+                  {/* Interested people mini cards (exclude return visits — shown below in daily entries) */}
                   {(() => {
                     const people = interestedPeopleByDate.get(key);
                     if (!people || people.length === 0) return null;
+                    const nonReturnVisits = people.filter((p) => p.status !== "return_visit");
+                    if (nonReturnVisits.length === 0) return null;
                     const maxShow = viewMode === "weekly" ? 5 : 2;
                     return (
                       <div className="mt-1 space-y-0.5">
-                        {people.slice(0, maxShow).map((p) => {
+                        {nonReturnVisits.slice(0, maxShow).map((p) => {
                           const st = statusMap.get(p.status) ?? { name: p.status, color: "#94a3b8", icon: "person" };
-                          const isReturnVisit = p.status === "return_visit";
                           return (
                             <div
                               key={p.id}
-                              onClick={(e) => {
-                                if (!isReturnVisit) {
-                                  e.stopPropagation();
-                                  setEditingInterestedPerson(p);
-                                }
-                              }}
-                              className={cn(
-                                "text-[10px] px-1 py-0.5 rounded border-l-2 transition-colors",
-                                isReturnVisit
-                                  ? "cursor-default"
-                                  : "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50"
-                              )}
+                              onClick={(e) => { e.stopPropagation(); setEditingInterestedPerson(p); }}
+                              className="text-[10px] px-1 py-0.5 rounded border-l-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
                               style={{ borderColor: st.color, backgroundColor: st.color + "10" }}
                             >
                               <div className="flex items-center gap-1">
@@ -362,8 +353,8 @@ export default function CalendarPage() {
                             </div>
                           );
                         })}
-                        {people.length > maxShow && (
-                          <p className="text-[9px] text-slate-400 px-1">+{people.length - maxShow} more</p>
+                        {nonReturnVisits.length > maxShow && (
+                          <p className="text-[9px] text-slate-400 px-1">+{nonReturnVisits.length - maxShow} more</p>
                         )}
                       </div>
                     );
