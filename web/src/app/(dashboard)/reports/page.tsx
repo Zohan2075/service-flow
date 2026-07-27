@@ -336,6 +336,22 @@ export default function ReportsPage() {
     [monthlyServiceTotals]
   );
 
+  const monthlyDisplaySeconds = useMemo(() => {
+    if (!monthlyCapEnabled || !monthlyCapHours) return monthlyTotals.seconds;
+    const monthKey = format(currentDate, "yyyy-MM");
+    let exempt = 0;
+    let capped = 0;
+    for (const e of timeEntries) {
+      if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
+      if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
+      const hours = computeDurationSeconds(e) / 3600;
+      const st = serviceTypes.find((s) => s.id === e.service_type_id);
+      if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
+    }
+    const shown = exempt >= monthlyCapHours ? exempt : exempt + capped <= monthlyCapHours ? exempt + capped : monthlyCapHours;
+    return shown * 3600;
+  }, [monthlyTotals.seconds, monthlyCapEnabled, monthlyCapHours, currentDate, timeEntries, serviceTypes]);
+
   const monthlyDaysWorked = useMemo(
     () => countWorkedDays(monthlyEntries),
     [monthlyEntries]
@@ -508,7 +524,7 @@ export default function ReportsPage() {
       <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6 space-y-6 bg-canvas">
         <div className={`grid grid-cols-2 ${monthlyTotals.units > 0 ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4`}>
           {[
-            { label: t("reports.totalHours"), value: formatDuration(monthlyTotals.seconds), icon: "schedule" },
+            { label: t("reports.totalHours"), value: formatDuration(monthlyDisplaySeconds), icon: "schedule" },
             { label: t("reports.daysWorked"), value: monthlyDaysWorked.toString(), icon: "calendar_today" },
             { label: t("reports.totalEntries"), value: monthlyTotals.entries.toString(), icon: "list_alt" },
             { label: t("reports.avgDay"), value: monthlyDaysWorked > 0 ? formatDuration(Math.round(monthlyTotals.seconds / monthlyDaysWorked)) : "-", icon: "trending_up" },
@@ -573,7 +589,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <MetricTile label={t("reports.totalHours")} value={formatDuration(monthlyTotals.seconds)} icon="schedule" color={accentColor} />
+            <MetricTile label={t("reports.totalHours")} value={formatDuration(monthlyDisplaySeconds)} icon="schedule" color={accentColor} />
             <MetricTile label={t("reports.totalUnits")} value={`${monthlyTotals.units} ${t("calendar.units")}`} icon="pin" color={accentColor} />
           </div>
 
@@ -626,7 +642,8 @@ export default function ReportsPage() {
             ? Math.round((exempt / monthlyCapHours) * 100)
             : Math.min(100, Math.round((total / monthlyCapHours) * 100));
           return (
-            <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 mt-6">
+            <div className="relative overflow-hidden bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 mt-6">
+              {exempt >= monthlyCapHours && <CapCelebratedRibbon label={t("reports.capMet")} />}
               <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
@@ -1103,6 +1120,17 @@ function GoalMetricRow({ metric, accentColor }: { metric: GoalMetric; accentColo
           />
         </div>
       )}
+    </div>
+  );
+}
+
+function CapCelebratedRibbon({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none absolute right-[-3.6rem] top-4 rotate-[31deg]">
+      <div className="relative min-w-[12rem] border border-white/20 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 px-6 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.28em] text-white shadow-lg">
+        <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 animate-[shimmer_2s_ease-in-out_infinite] bg-[length:200%_100%]" />
+        {label}
+      </div>
     </div>
   );
 }

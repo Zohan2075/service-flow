@@ -695,12 +695,14 @@ export default function CalendarPage() {
 
           {/* Monthly cap progress bar */}
           {monthlyCapEnabled && monthlyCapHours > 0 && (
-            <div className="space-y-1">
+            <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/20 p-2 space-y-1">
+              {monthlyUsedHours.exempt >= monthlyCapHours && (
+                <CapCelebratedRibbon label={t("reports.capMet")} />
+              )}
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500 font-medium">
                   {(() => {
                     const { capped, exempt } = monthlyUsedHours;
-                    // Preaching overflow: only preaching counts, credits ignored
                     if (exempt >= monthlyCapHours) return `${Math.round(exempt)} / ${monthlyCapHours}h`;
                     const total = capped + exempt;
                     if (total > monthlyCapHours) return `${monthlyCapHours}h (capped)`;
@@ -974,6 +976,17 @@ function EntryCard({
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CapCelebratedRibbon({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none absolute right-[-3.6rem] top-4 rotate-[31deg]">
+      <div className="relative min-w-[12rem] border border-white/20 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 px-6 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.28em] text-white shadow-lg">
+        <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 animate-[shimmer_2s_ease-in-out_infinite] bg-[length:200%_100%]" />
+        {label}
       </div>
     </div>
   );

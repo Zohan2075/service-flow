@@ -111,6 +111,7 @@ const translations = {
     "reports.targetsCleared": "targets cleared",
     "reports.wellDone": "Well done!",
     "reports.monthlyGoalAchieved": "Monthly goal achieved",
+    "reports.capMet": "Outstanding!",
 
     // Settings
     "settings.title": "Settings",
@@ -425,6 +426,7 @@ const translations = {
     "reports.targetsCleared": "objetivos cumplidos",
     "reports.wellDone": "Bien hecho!",
     "reports.monthlyGoalAchieved": "Meta mensual cumplida",
+    "reports.capMet": "¡Sobresaliente!",
 
     // Settings
     "settings.title": "Ajustes",
