@@ -542,16 +542,16 @@ export default function ReportsPage() {
                 </span>
                 <span className={cn(
                   "font-semibold",
-                  total >= monthlyCapHours ? "text-red-500" : total / monthlyCapHours > 0.8 ? "text-amber-500" : "text-slate-400"
+                  total >= monthlyCapHours ? "text-red-500" : total / monthlyCapHours >= 0.8 ? "text-amber-500" : total / monthlyCapHours >= 0.5 ? "text-emerald-500" : "text-primary"
                 )}>
-                  {Math.round((total / monthlyCapHours) * 100)}%
+                  {Math.min(100, Math.round((total / monthlyCapHours) * 100))}%
                 </span>
               </div>
               <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    total >= monthlyCapHours ? "bg-red-500" : total / monthlyCapHours > 0.8 ? "bg-amber-500" : "bg-primary"
+                    total >= monthlyCapHours ? "bg-red-500" : total / monthlyCapHours >= 0.8 ? "bg-amber-500" : total / monthlyCapHours >= 0.5 ? "bg-emerald-500" : "bg-primary"
                   )}
                   style={{ width: `${Math.min(100, (total / monthlyCapHours) * 100)}%` }}
                 />
