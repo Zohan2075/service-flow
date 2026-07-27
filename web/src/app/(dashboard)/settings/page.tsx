@@ -2048,27 +2048,11 @@ function SortableServiceTypeItem({
               </button>
             </div>
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.color")}</p>
-            <div className="flex gap-2 flex-wrap">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setEditColor(c)}
-                  className={cn(
-                    "size-7 rounded-full border-2 transition-all",
-                    editColor === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
-                  )}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-              <label className="size-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
-                <span className="material-symbols-outlined text-xs text-slate-400">palette</span>
-                <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="sr-only" />
-              </label>
-            </div>
-          </div>
+          <ColorPickerField
+            label={t("settings.color")}
+            color={editColor}
+            onChange={setEditColor}
+          />
           <div>
             <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.icon")}</p>
             <div className="flex gap-2 flex-wrap">
@@ -2257,28 +2241,11 @@ function SortableStatusItem({
             />
           </div>
 
-          {/* Color */}
-          <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.color")}</label>
-            <div className="flex gap-2 flex-wrap">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setEditColor(c)}
-                  className={cn(
-                    "size-7 rounded-full border-2 transition-all",
-                    editColor === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
-                  )}
-                  style={{ backgroundColor: c }}
-                  suppressHydrationWarning
-                />
-              ))}
-              <label className="size-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
-                <span className="material-symbols-outlined text-xs text-slate-400">palette</span>
-                <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="sr-only" />
-              </label>
-            </div>
-          </div>
+          <ColorPickerField
+            label={t("settings.color")}
+            color={editColor}
+            onChange={setEditColor}
+          />
 
           {/* Icon */}
           <div>
@@ -2317,6 +2284,61 @@ function SortableStatusItem({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ColorPickerField({
+  color,
+  onChange,
+  label,
+}: {
+  color: string;
+  onChange: (color: string) => void;
+  label?: string;
+}) {
+  return (
+    <div>
+      {label && (
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">
+          {label}
+        </label>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            className={cn(
+              "size-8 sm:size-7 rounded-full border-2 transition-all",
+              color.toLowerCase() === c.toLowerCase()
+                ? "border-slate-900 dark:border-white scale-110"
+                : "border-transparent"
+            )}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+        <div className="relative size-8 sm:size-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 overflow-hidden hover:border-primary transition-colors shrink-0">
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => onChange(e.target.value)}
+            className="color-picker-input absolute inset-0 w-full h-full cursor-pointer"
+            title="Custom color"
+          />
+          <span className="material-symbols-outlined text-xs text-slate-400 absolute inset-0 flex items-center justify-center pointer-events-none">
+            palette
+          </span>
+        </div>
+        <input
+          type="text"
+          value={color}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-20 sm:w-24 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-xs font-mono uppercase tracking-wide focus:outline-none focus:border-primary"
+          placeholder="#2094f3"
+        />
+      </div>
     </div>
   );
 }
@@ -2365,27 +2387,11 @@ function AddStatusButton({ onAdd }: { onAdd: (name: string, color: string, icon:
         />
       </div>
 
-      <div>
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.color")}</label>
-        <div className="flex gap-2 flex-wrap">
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => setColor(c)}
-              className={cn(
-                "size-7 rounded-full border-2 transition-all",
-                color === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
-              )}
-              style={{ backgroundColor: c }}
-              suppressHydrationWarning
-            />
-          ))}
-          <label className="size-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
-            <span className="material-symbols-outlined text-xs text-slate-400">palette</span>
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="sr-only" />
-          </label>
-        </div>
-      </div>
+      <ColorPickerField
+        label={t("settings.color")}
+        color={color}
+        onChange={setColor}
+      />
 
       <div>
         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t("settings.icon")}</label>

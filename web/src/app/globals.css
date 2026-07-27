@@ -32,7 +32,6 @@ html,
 body {
   height: 100%;
 }
-
 body {
   min-height: 100dvh;
 }
@@ -40,4 +39,24 @@ body {
 @keyframes shimmer {
   0% { background-position: 200% center; }
   100% { background-position: -200% center; }
+}
+
+/* Native color input reset for custom color picker */
+.color-picker-input {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.color-picker-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.color-picker-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 9999px;
+}
+.color-picker-input::-moz-color-swatch {
+  border: 0;
+  border-radius: 9999px;
 }
