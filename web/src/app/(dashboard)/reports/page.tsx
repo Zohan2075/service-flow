@@ -336,21 +336,18 @@ export default function ReportsPage() {
     [monthlyServiceTotals]
   );
 
-  const monthlyDisplaySeconds = useMemo(() => {
-    if (!monthlyCapEnabled || !monthlyCapHours) return monthlyTotals.seconds;
+  const monthlyCapExceeded = useMemo(() => {
+    if (!monthlyCapEnabled || !monthlyCapHours) return false;
     const monthKey = format(currentDate, "yyyy-MM");
     let exempt = 0;
-    let capped = 0;
     for (const e of timeEntries) {
       if (isPlannedEntry(e) || isUnitsEntry(e)) continue;
       if (format(new Date(e.start_time), "yyyy-MM") !== monthKey) continue;
-      const hours = computeDurationSeconds(e) / 3600;
       const st = serviceTypes.find((s) => s.id === e.service_type_id);
-      if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
+      if (st?.cap_exempt) exempt += computeDurationSeconds(e) / 3600;
     }
-    const shown = exempt >= monthlyCapHours ? exempt : exempt + capped <= monthlyCapHours ? exempt + capped : monthlyCapHours;
-    return shown * 3600;
-  }, [monthlyTotals.seconds, monthlyCapEnabled, monthlyCapHours, currentDate, timeEntries, serviceTypes]);
+    return exempt >= monthlyCapHours;
+  }, [monthlyCapEnabled, monthlyCapHours, currentDate, timeEntries, serviceTypes]);
 
   const monthlyDaysWorked = useMemo(
     () => countWorkedDays(monthlyEntries),
@@ -524,7 +521,7 @@ export default function ReportsPage() {
       <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6 space-y-6 bg-canvas">
         <div className={`grid grid-cols-2 ${monthlyTotals.units > 0 ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4`}>
           {[
-            { label: t("reports.totalHours"), value: formatDuration(monthlyDisplaySeconds), icon: "schedule" },
+            { label: t("reports.totalHours"), value: formatDuration(monthlyTotals.seconds), icon: "schedule" },
             { label: t("reports.daysWorked"), value: monthlyDaysWorked.toString(), icon: "calendar_today" },
             { label: t("reports.totalEntries"), value: monthlyTotals.entries.toString(), icon: "list_alt" },
             { label: t("reports.avgDay"), value: monthlyDaysWorked > 0 ? formatDuration(Math.round(monthlyTotals.seconds / monthlyDaysWorked)) : "-", icon: "trending_up" },
@@ -589,7 +586,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <MetricTile label={t("reports.totalHours")} value={formatDuration(monthlyDisplaySeconds)} icon="schedule" color={accentColor} />
+            <MetricTile label={t("reports.totalHours")} value={formatDuration(monthlyTotals.seconds)} icon="schedule" color={accentColor} />
             <MetricTile label={t("reports.totalUnits")} value={`${monthlyTotals.units} ${t("calendar.units")}`} icon="pin" color={accentColor} />
           </div>
 
@@ -603,16 +600,17 @@ export default function ReportsPage() {
             ) : (
               <div className="space-y-3">
                 {monthlyCombinedGoalCards.map((goalCard) => (
-                  <CombinedGoalProgressCard
-                    key={goalCard.goal.id}
-                    title={goalCard.goal.name}
-                    serviceTags={goalCard.serviceTags}
-                    seconds={goalCard.seconds}
-                    units={goalCard.units}
-                    metrics={goalCard.metrics}
-                    period="month"
-                    accentColor={accentColor}
-                  />
+                    <CombinedGoalProgressCard
+                      key={goalCard.goal.id}
+                      title={goalCard.goal.name}
+                      serviceTags={goalCard.serviceTags}
+                      seconds={goalCard.seconds}
+                      units={goalCard.units}
+                      metrics={goalCard.metrics}
+                      period="month"
+                      accentColor={accentColor}
+                      capExceeded={monthlyCapExceeded}
+                    />
                 ))}
               </div>
             )}
@@ -642,8 +640,7 @@ export default function ReportsPage() {
             ? Math.round((exempt / monthlyCapHours) * 100)
             : Math.min(100, Math.round((total / monthlyCapHours) * 100));
           return (
-            <div className="relative overflow-hidden bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 mt-6">
-              {exempt >= monthlyCapHours && <CapCelebratedRibbon label={t("reports.capMet")} />}
+            <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 mt-6">
               <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
@@ -932,6 +929,7 @@ function CombinedGoalProgressCard({
   period,
   cycleLabel,
   accentColor,
+  capExceeded,
 }: {
   title: string;
   serviceTags: ServiceTag[];
@@ -941,6 +939,7 @@ function CombinedGoalProgressCard({
   period: "month" | "year";
   cycleLabel?: string;
   accentColor: string;
+  capExceeded?: boolean;
 }) {
   const { t } = useT();
   const goalSummary = summarizeGoalMetrics(metrics);
@@ -950,7 +949,8 @@ function CombinedGoalProgressCard({
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
-      {showCelebration && <GoalSeal label={t("reports.wellDone")} />}
+      {showCelebration && capExceeded && <CapCelebratedRibbon label={t("reports.capMet")} />}
+      {showCelebration && !capExceeded && <GoalSeal label={t("reports.wellDone")} />}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2 min-w-0">
