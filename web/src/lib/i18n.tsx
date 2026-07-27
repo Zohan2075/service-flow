@@ -189,7 +189,7 @@ const translations = {
     "settings.reportsDisplay": "Reports",
     "settings.showYearTotals": "Show Yearly Totals",
     "settings.showYearTotalsDesc": "Display yearly totals per service type in reports",
-    "settings.monthlyCap": "Monthly Hour Cap",
+    "settings.monthlyCap": "Monthly Hour Cap + Other services (credit)",
     "settings.monthlyCapDesc": "Limit total service hours per month. Resets on the 1st.",
     "settings.monthlyCapHours": "Max hours",
     "settings.capExempt": "Cap-exempt",
