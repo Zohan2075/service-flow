@@ -616,25 +616,33 @@ export default function ReportsPage() {
             if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
           }
           const total = exempt + capped;
+          const capLabel = exempt >= monthlyCapHours
+            ? `${Math.round(total)} / ${monthlyCapHours}h`
+            : total > monthlyCapHours
+              ? `${monthlyCapHours}h (capped)`
+              : `${Math.round(total)} / ${monthlyCapHours}h`;
+          const capPct = exempt >= monthlyCapHours
+            ? Math.round((total / monthlyCapHours) * 100)
+            : Math.min(100, Math.round((total / monthlyCapHours) * 100));
           return (
             <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 mt-6">
               <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{t("settings.monthlyCap")}</p>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
-                  {Math.round(total)} / {monthlyCapHours}h
+                  {capLabel}
                 </span>
                 <span className={cn(
                   "font-semibold",
-                  total >= monthlyCapHours ? "text-blue-500" : total / monthlyCapHours >= 0.8 ? "text-amber-500" : total / monthlyCapHours >= 0.5 ? "text-emerald-500" : "text-red-500"
+                  exempt >= monthlyCapHours ? "text-blue-500" : total > monthlyCapHours ? "text-amber-500" : total / monthlyCapHours >= 0.5 ? "text-emerald-500" : "text-red-500"
                 )}>
-                  {Math.min(100, Math.round((total / monthlyCapHours) * 100))}%
+                  {capPct}%
                 </span>
               </div>
               <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    total >= monthlyCapHours ? "bg-blue-500" : total / monthlyCapHours >= 0.8 ? "bg-amber-500" : total / monthlyCapHours >= 0.5 ? "bg-emerald-500" : "bg-red-500"
+                    exempt >= monthlyCapHours ? "bg-blue-500" : total > monthlyCapHours ? "bg-amber-500" : total / monthlyCapHours >= 0.5 ? "bg-emerald-500" : "bg-red-500"
                   )}
                   style={{ width: `${Math.min(100, (total / monthlyCapHours) * 100)}%` }}
                 />

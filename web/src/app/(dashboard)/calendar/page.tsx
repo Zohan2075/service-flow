@@ -698,24 +698,36 @@ export default function CalendarPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500 font-medium">
-                  {Math.round(monthlyUsedHours.capped + monthlyUsedHours.exempt)} / {monthlyCapHours}h
+                  {(() => {
+                    const { capped, exempt } = monthlyUsedHours;
+                    const total = capped + exempt;
+                    // Preaching overflow: show full total (e.g. 70h/55h)
+                    if (exempt >= monthlyCapHours) return `${Math.round(total)} / ${monthlyCapHours}h`;
+                    // Capped (credits pushed it over): show capped value
+                    if (total > monthlyCapHours) return `${monthlyCapHours}h (capped)`;
+                    return `${Math.round(total)} / ${monthlyCapHours}h`;
+                  })()}
                 </span>
                 <span className={cn(
                   "font-semibold",
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "text-blue-500" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.8 ? "text-amber-500" :
+                  monthlyUsedHours.exempt >= monthlyCapHours ? "text-blue-500" :
+                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) > monthlyCapHours ? "text-amber-500" :
                   (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "text-emerald-500" :
                   "text-red-500"
                 )}>
-                  {Math.min(100, Math.round(((monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100))}%
+                  {(() => {
+                    const total = monthlyUsedHours.capped + monthlyUsedHours.exempt;
+                    if (monthlyUsedHours.exempt >= monthlyCapHours) return `${Math.round((total / monthlyCapHours) * 100)}%`;
+                    return `${Math.min(100, Math.round((total / monthlyCapHours) * 100))}%`;
+                  })()}
                 </span>
               </div>
               <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) >= monthlyCapHours ? "bg-blue-500" :
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.8 ? "bg-amber-500" :
+                    monthlyUsedHours.exempt >= monthlyCapHours ? "bg-blue-500" :
+                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) > monthlyCapHours ? "bg-amber-500" :
                     (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "bg-emerald-500" :
                     "bg-red-500"
                   )}
