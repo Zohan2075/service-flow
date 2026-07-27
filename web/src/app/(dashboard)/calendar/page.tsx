@@ -332,11 +332,22 @@ export default function CalendarPage() {
                       <div className="mt-1 space-y-0.5">
                         {people.slice(0, maxShow).map((p) => {
                           const st = statusMap.get(p.status) ?? { name: p.status, color: "#94a3b8", icon: "person" };
+                          const isReturnVisit = p.status === "return_visit";
                           return (
                             <div
                               key={p.id}
-                              onClick={(e) => { e.stopPropagation(); setEditingInterestedPerson(p); }}
-                              className="text-[10px] px-1 py-0.5 rounded border-l-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                              onClick={(e) => {
+                                if (!isReturnVisit) {
+                                  e.stopPropagation();
+                                  setEditingInterestedPerson(p);
+                                }
+                              }}
+                              className={cn(
+                                "text-[10px] px-1 py-0.5 rounded border-l-2 transition-colors",
+                                isReturnVisit
+                                  ? "cursor-default"
+                                  : "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                              )}
                               style={{ borderColor: st.color, backgroundColor: st.color + "10" }}
                             >
                               <div className="flex items-center gap-1">
@@ -847,6 +858,30 @@ export default function CalendarPage() {
               })}
             </div>
           )}
+
+          {/* Return visit interested persons */}
+          {(() => {
+            const selectedDateKey = format(selectedDate, "yyyy-MM-dd");
+            const people = interestedPeopleByDate.get(selectedDateKey);
+            if (!people || people.length === 0) return null;
+            const returnVisits = people.filter((p) => p.status === "return_visit");
+            if (returnVisits.length === 0) return null;
+            return (
+              <div className="mt-4 space-y-3">
+                {returnVisits.map((person) => {
+                  const st = statusMap.get(person.status) ?? { name: person.status, color: "#94a3b8", icon: "person" };
+                  return (
+                    <InterestedPersonCard
+                      key={person.id}
+                      person={person}
+                      statusConfig={st}
+                      onEdit={() => setEditingInterestedPerson(person)}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -972,6 +1007,64 @@ function EntryCard({
               <span>{t("entry.confirmDelete")}</span>
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InterestedPersonCard({
+  person,
+  statusConfig,
+  onEdit,
+}: {
+  person: InterestedPerson;
+  statusConfig: { name: string; color: string; icon: string };
+  onEdit: () => void;
+}) {
+  const { t } = useT();
+
+  return (
+    <div className="bg-surface p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <div
+            className="size-10 md:size-12 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: statusConfig.color + "1a" }}
+          >
+            <span
+              className="material-symbols-outlined text-lg md:text-2xl"
+              style={{ color: statusConfig.color }}
+            >
+              {statusConfig.icon}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <h4 className="font-bold text-sm md:text-base truncate">
+              {person.name} {person.last_name}
+            </h4>
+            <p className="text-xs text-slate-500 font-medium">{statusConfig.name}</p>
+          </div>
+        </div>
+        <div className="ml-0 flex w-full flex-wrap items-center gap-2 sm:ml-2 sm:w-auto sm:justify-end shrink-0">
+          {person.next_visit_date && (
+            <div className="text-right min-w-[4.5rem]">
+              <p className="font-bold text-sm md:text-base" style={{ color: statusConfig.color }}>
+                {new Date(person.next_visit_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                {t("calendar.logged")}
+              </p>
+            </div>
+          )}
+          <button
+            onClick={onEdit}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary/40 dark:hover:bg-primary/15 sm:flex-initial"
+            title={t("entry.edit")}
+          >
+            <span className="material-symbols-outlined text-xl">edit</span>
+            <span>{t("entry.editShort")}</span>
+          </button>
         </div>
       </div>
     </div>
