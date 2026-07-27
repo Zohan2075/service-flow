@@ -379,22 +379,16 @@ export default function ReportsPage() {
     () => filterEntriesByRange(actualTimeEntries, annualBaselineRange),
     [actualTimeEntries, annualBaselineRange]
   );
-  // Annual totals: exclude cap-exempt service types
-  const annualBaselineEntriesCapped = useMemo(() => {
-    if (!monthlyCapEnabled) return annualBaselineEntries;
-    const exemptIds = new Set(serviceTypes.filter((st) => st.cap_exempt).map((st) => st.id));
-    return annualBaselineEntries.filter((e) => !exemptIds.has(e.service_type_id));
-  }, [annualBaselineEntries, monthlyCapEnabled, serviceTypes]);
   const annualBaselineTotals = useMemo(
     () => sumAllServiceTotals(
       serviceTypes.map((serviceType) =>
         aggregateServiceEntries(
-          annualBaselineEntriesCapped.filter((entry) => entry.service_type_id === serviceType.id),
+          annualBaselineEntries.filter((entry) => entry.service_type_id === serviceType.id),
           serviceType
         )
       )
     ),
-    [annualBaselineEntriesCapped, serviceTypes]
+    [annualBaselineEntries, serviceTypes]
   );
 
   const yearlyServiceTotals = useMemo(
