@@ -905,7 +905,7 @@ function ServiceTotalsCard({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-start justify-end gap-2 shrink-0 text-right">
+        <div className="flex items-start justify-end gap-2 shrink-0 text-right">
           {durationMetric ? (
             <GoalValuePill
               label={t("settings.goalHours")}
@@ -1017,7 +1017,7 @@ function CombinedGoalProgressCard({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-start justify-end gap-2 shrink-0 text-right">
+        <div className="flex items-start justify-end gap-2 shrink-0 text-right">
           {durationMetric ? (
             <GoalValuePill
               label={t("settings.goalHours")}
