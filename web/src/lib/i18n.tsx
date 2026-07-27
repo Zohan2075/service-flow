@@ -424,7 +424,7 @@ const translations = {
     "reports.annualServiceCycleDesc": "Cada servicio usa su propio mes de inicio anual.",
     "reports.goalProgress": "Progreso de la Meta",
     "reports.targetsCleared": "objetivos cumplidos",
-    "reports.wellDone": "Bien hecho!",
+    "reports.wellDone": "¡Bien hecho!",
     "reports.monthlyGoalAchieved": "Meta mensual cumplida",
     "reports.capMet": "¡Sobresaliente!",
 

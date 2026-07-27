@@ -323,22 +323,31 @@ export default function CalendarPage() {
                     </div>
                   )}
 
-                  {/* Interested people mini cards (exclude return visits — shown below in daily entries) */}
+                  {/* Interested people mini cards */}
                   {(() => {
                     const people = interestedPeopleByDate.get(key);
                     if (!people || people.length === 0) return null;
-                    const nonReturnVisits = people.filter((p) => p.status !== "return_visit");
-                    if (nonReturnVisits.length === 0) return null;
                     const maxShow = viewMode === "weekly" ? 5 : 2;
                     return (
                       <div className="mt-1 space-y-0.5">
-                        {nonReturnVisits.slice(0, maxShow).map((p) => {
+                        {people.slice(0, maxShow).map((p) => {
                           const st = statusMap.get(p.status) ?? { name: p.status, color: "#94a3b8", icon: "person" };
+                          const isReturnVisit = p.status === "return_visit";
                           return (
                             <div
                               key={p.id}
-                              onClick={(e) => { e.stopPropagation(); setEditingInterestedPerson(p); }}
-                              className="text-[10px] px-1 py-0.5 rounded border-l-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                              onClick={(e) => {
+                                if (!isReturnVisit) {
+                                  e.stopPropagation();
+                                  setEditingInterestedPerson(p);
+                                }
+                              }}
+                              className={cn(
+                                "text-[10px] px-1 py-0.5 rounded border-l-2 transition-colors",
+                                isReturnVisit
+                                  ? "cursor-default"
+                                  : "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                              )}
                               style={{ borderColor: st.color, backgroundColor: st.color + "10" }}
                             >
                               <div className="flex items-center gap-1">
@@ -353,8 +362,8 @@ export default function CalendarPage() {
                             </div>
                           );
                         })}
-                        {nonReturnVisits.length > maxShow && (
-                          <p className="text-[9px] text-slate-400 px-1">+{nonReturnVisits.length - maxShow} more</p>
+                        {people.length > maxShow && (
+                          <p className="text-[9px] text-slate-400 px-1">+{people.length - maxShow} more</p>
                         )}
                       </div>
                     );
@@ -827,38 +836,37 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {!selectedDayData || selectedDayData.entries.length === 0 ? (
-            <div className="text-center py-10 md:py-12 text-slate-400">
-              <span className="material-symbols-outlined text-4xl mb-2 block">event_busy</span>
-              <p className="font-medium">{t("calendar.noEntries")}</p>
-              <p className="text-sm">{t("calendar.addHint")}</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {selectedDayData.entries.map((entry) => {
-                const st = serviceTypeMap[entry.service_type_id];
-                return (
-                  <EntryCard
-                    key={entry.id}
-                    entry={entry}
-                    serviceType={st}
-                    onEdit={() => setEditingEntry(entry)}
-                    onDelete={() => handleDelete(entry.id)}
-                  />
-                );
-              })}
-            </div>
-          )}
-
-          {/* Return visit interested persons */}
           {(() => {
             const selectedDateKey = format(selectedDate, "yyyy-MM-dd");
             const people = interestedPeopleByDate.get(selectedDateKey);
-            if (!people || people.length === 0) return null;
-            const returnVisits = people.filter((p) => p.status === "return_visit");
-            if (returnVisits.length === 0) return null;
+            const returnVisits = people?.filter((p) => p.status === "return_visit") ?? [];
+            const hasReturnVisits = returnVisits.length > 0;
+            const hasEntries = selectedDayData && selectedDayData.entries.length > 0;
+
+            if (!hasEntries && !hasReturnVisits) {
+              return (
+                <div className="text-center py-10 md:py-12 text-slate-400">
+                  <span className="material-symbols-outlined text-4xl mb-2 block">event_busy</span>
+                  <p className="font-medium">{t("calendar.noEntries")}</p>
+                  <p className="text-sm">{t("calendar.addHint")}</p>
+                </div>
+              );
+            }
+
             return (
-              <div className="mt-4 space-y-3">
+              <div className="space-y-3">
+                {selectedDayData?.entries.map((entry) => {
+                  const st = serviceTypeMap[entry.service_type_id];
+                  return (
+                    <EntryCard
+                      key={entry.id}
+                      entry={entry}
+                      serviceType={st}
+                      onEdit={() => setEditingEntry(entry)}
+                      onDelete={() => handleDelete(entry.id)}
+                    />
+                  );
+                })}
                 {returnVisits.map((person) => {
                   const st = statusMap.get(person.status) ?? { name: person.status, color: "#94a3b8", icon: "person" };
                   return (
