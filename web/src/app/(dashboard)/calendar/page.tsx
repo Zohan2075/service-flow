@@ -398,8 +398,7 @@ export default function CalendarPage() {
   // ── Monthly cap ───────────────────────────────────────────────────────────
   const monthlyUsedHours = useMemo(() => {
     if (!monthlyCapEnabled) return { capped: 0, exempt: 0 };
-    const now = new Date();
-    const monthKey = format(now, "yyyy-MM");
+    const monthKey = format(currentDate, "yyyy-MM");
     let capped = 0;
     let exempt = 0;
     for (const e of timeEntries) {
@@ -410,7 +409,7 @@ export default function CalendarPage() {
       if (st?.cap_exempt) { exempt += hours; } else { capped += hours; }
     }
     return { capped, exempt };
-  }, [timeEntries, monthlyCapEnabled, serviceTypeMap]);
+  }, [timeEntries, monthlyCapEnabled, serviceTypeMap, currentDate]);
 
   // ── Weekly view ───────────────────────────────────────────────────────────
   const weekStart = useMemo(
