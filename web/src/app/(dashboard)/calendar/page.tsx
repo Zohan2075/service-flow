@@ -491,10 +491,16 @@ export default function CalendarPage() {
         while (cursor.getDay() !== person.next_visit_weekly_day) {
           cursor.setDate(cursor.getDate() + 1);
         }
+        const skipDate = person.next_visit_date
+          ? format(new Date(person.next_visit_date), "yyyy-MM-dd")
+          : null;
         while (cursor <= rangeEnd) {
           const key = format(cursor, "yyyy-MM-dd");
-          if (!map.has(key)) map.set(key, []);
-          map.get(key)!.push(person);
+          // Skip if this date already appears as a specific visit
+          if (key !== skipDate) {
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(person);
+          }
           cursor.setDate(cursor.getDate() + 7);
         }
       }

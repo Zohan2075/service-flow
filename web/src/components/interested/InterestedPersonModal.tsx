@@ -193,9 +193,24 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
         latitude: lat,
         longitude: lng,
         initial_conversation_date: initialConversationDate || null,
-        next_visit_date: nextVisitDate
-          ? new Date(`${nextVisitDate}T${nextVisitTime || "00:00"}:00`).toISOString()
-          : null,
+        next_visit_date: (() => {
+          if (nextVisitDate) {
+            return new Date(`${nextVisitDate}T${nextVisitTime || "00:00"}:00`).toISOString();
+          }
+          // Time-only with weekly day: compute next occurrence starting tomorrow
+          if (nextVisitTime && nextVisitWeeklyDay !== null) {
+            const now = new Date();
+            const target = nextVisitWeeklyDay;
+            const next = new Date(now);
+            next.setDate(next.getDate() + 1);
+            while (next.getDay() !== target) {
+              next.setDate(next.getDate() + 1);
+            }
+            const ds = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+            return new Date(`${ds}T${nextVisitTime}:00`).toISOString();
+          }
+          return null;
+        })(),
         next_visit_weekly_day: nextVisitWeeklyDay,
         status,
         completed,
@@ -482,23 +497,29 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
               />
             </div>
 
-            {/* Weekly toggle */}
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => setNextVisitWeeklyDay(nextVisitWeeklyDay !== null ? null : 0)}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors",
-                  nextVisitWeeklyDay !== null
-                    ? "bg-primary text-white border-primary"
-                    : "border-slate-200 dark:border-slate-700 text-slate-500 hover:border-primary/50",
+              {/* Weekly toggle */}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setNextVisitWeeklyDay(nextVisitWeeklyDay !== null ? null : 0)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors",
+                    nextVisitWeeklyDay !== null
+                      ? "bg-primary text-white border-primary"
+                      : "border-slate-200 dark:border-slate-700 text-slate-500 hover:border-primary/50",
+                  )}
+                >
+                  <span className="material-symbols-outlined text-base">
+                    {nextVisitWeeklyDay !== null ? "event_repeat" : "repeat"}
+                  </span>
+                  {t("interested.weekly")}
+                </button>
+
+                {nextVisitWeeklyDay !== null && !nextVisitDate && (
+                  <p className="mt-1 text-[10px] text-slate-400 px-1">
+                    Time will apply to all weekly occurrences
+                  </p>
                 )}
-              >
-                <span className="material-symbols-outlined text-base">
-                  {nextVisitWeeklyDay !== null ? "event_repeat" : "repeat"}
-                </span>
-                {t("interested.weekly")}
-              </button>
 
               {nextVisitWeeklyDay !== null && (
                 <div className="mt-2 flex gap-1">
