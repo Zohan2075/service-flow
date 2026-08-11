@@ -346,7 +346,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   }
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-canvas">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-canvas">
       {/* ===== HEADER: Week selector + info ===== */}
       <div className="shrink-0 px-4 pt-4 pb-2 space-y-3">
         {/* Week selector */}
@@ -422,7 +422,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
       )}
 
       {/* ===== PROGRAM BODY ===== */}
-      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-6 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-6 space-y-4">
         <TimerLegend isEs={isEs} lbl={lbl} />
 
         {/* Opening section */}
@@ -744,23 +744,24 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteL
   };
   return (
     <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/70">
-      <button onClick={() => setShow(!show)}
+      <button type="button" onClick={() => setShow((current) => !current)} aria-expanded={show}
+        aria-controls="session-review-log"
         className="w-full flex items-center justify-between px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <span>⏱ {lbl.sessionLog} {sessionLog.length > 0 && `(${sessionLog.length})`}</span>
         <span className="text-slate-400">{show ? "▲" : "▼"}</span>
       </button>
       {show && (
-        <div className="px-5 pb-5 max-h-80 overflow-y-auto space-y-2">
+        <div id="session-review-log" className="min-h-0 max-h-[min(20rem,50vh)] overflow-y-auto overscroll-contain px-5 pb-5 space-y-2">
           {reviewEntries.length === 0 ? (
             <p className="text-xs text-slate-400 py-2">{lbl.logEmpty}</p>
           ) : (
             reviewEntries.map(({ entry, date }, i) => {
               const cf = (iso: string) => { const d = new Date(iso); return fmtClock(d.getHours() * 60 + d.getMinutes(), prefs.timeFormat === "24h"); };
               return (
-                <div key={i} className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-canvas px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-canvas px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
                    <span className="w-5 text-slate-400 text-[10px]">{i + 1}.</span>
                    {date && <span className="text-[10px] text-slate-400">{date}</span>}
-                  <span className="flex-1 truncate">{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span>
+                   <span className="min-w-0 flex-1 basis-[10rem] truncate">{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span>
                   <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-500">{roleName(entry)}</span>
                   <span className="font-mono text-slate-400">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
                    <span className={cn("font-mono font-semibold", entry.wasOvertime ? "text-red-500" : "text-emerald-600")}>

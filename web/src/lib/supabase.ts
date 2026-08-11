@@ -690,6 +690,15 @@ export async function pullAll(
     pullProgram(userId),
   ]);
 
+  // Program schema failures must not be treated as an empty remote program.
+  // This keeps missing tables/schema-cache issues visible to the sync caller.
+  const programResult = results[7];
+  if (programResult.status === "rejected") {
+    throw programResult.reason instanceof Error
+      ? programResult.reason
+      : new Error(String(programResult.reason));
+  }
+
   const get = <T>(index: number, fallback: T): T => {
     const r = results[index];
     return r.status === "fulfilled" ? (r.value as T) : fallback;

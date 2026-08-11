@@ -45,7 +45,7 @@ export default function PresidingPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <ProgramView
         lang={lang}
         config={config}
