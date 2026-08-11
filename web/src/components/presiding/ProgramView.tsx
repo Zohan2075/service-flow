@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useStore } from "@/lib/store";
+import { useSync } from "@/lib/sync";
 import type {
   PresidingSection,
   PresidingConfig,
@@ -188,6 +189,7 @@ const L = {
     stop: "Stop",
     overtime: "Overtime", complete: "Complete", restart: "Restart",
      totalTime: "Total", sessionLog: "Session Log", logEmpty: "No parts timed yet.", end: "End", editLog: "Edit log", deleteLog: "Delete log", save: "Save", cancel: "Cancel",
+     saving: "Saving", saved: "Saved", offline: "Offline — saved locally", saveError: "Save error", resetUnsaved: "Reset unsaved time",
     noSections: "No parts. Reset in Settings.", 
     weekLabel: "Week", newWeek: "New Week", deleteWeek: "Delete Week",
     deleteWeekConfirm: "Delete this week's program?",
@@ -203,7 +205,8 @@ const L = {
     assignee: "Asignado", presiding: "Presidente", reader: "Lector", conductor: "Conductor",
     stop: "Detener",
     overtime: "Excedido", complete: "Completa", restart: "Reiniciar",
-     totalTime: "Total", sessionLog: "Registro", logEmpty: "Aún no se ha medido ninguna parte.", end: "Fin", editLog: "Editar registro", deleteLog: "Eliminar registro", save: "Guardar", cancel: "Cancelar",
+      totalTime: "Total", sessionLog: "Registro", logEmpty: "Aún no se ha medido ninguna parte.", end: "Fin", editLog: "Editar registro", deleteLog: "Eliminar registro", save: "Guardar", cancel: "Cancelar",
+     saving: "Guardando", saved: "Guardado", offline: "Sin conexión — guardado localmente", saveError: "Error al guardar", resetUnsaved: "Restablecer tiempo sin guardar",
     noSections: "No hay partes. Restablecer en Configuración.",
     weekLabel: "Semana", newWeek: "Nueva Semana", deleteWeek: "Eliminar Semana",
     deleteWeekConfirm: "¿Eliminar el programa de esta semana?",
@@ -215,8 +218,8 @@ const L = {
 /* ---------- ascending role timers ---------- */
 
 interface TimerRecord {
-  elapsedSec: number;
-  startedAtISO: string | null;
+  persistedSec: number;
+  unsavedSec: number;
 }
 
 interface ActiveTimer {
@@ -234,11 +237,51 @@ function timerKey(sectionId: string, role: TimerRole | null): string {
   return `${sectionId}:${role ?? "single"}`;
 }
 
-function useProgramTimers(sections: PresidingSection[], onLog: (entry: TimerLogEntry) => void) {
+function logDurationSec(entry: TimerLogEntry): number {
+  if (typeof entry.actualDurationSec === "number" && Number.isFinite(entry.actualDurationSec)) {
+    return Math.max(0, Math.round(entry.actualDurationSec));
+  }
+  return Math.max(0, Math.round(entry.actualDurationMin * 60));
+}
+
+function hydrateTimerRecords(sessionLog: TimerLogEntry[], sessionHistory: MeetingSession[]): Record<string, TimerRecord> {
+  const records: Record<string, TimerRecord> = {};
+  const seen = new Set<string>();
+  const entries = [
+    ...sessionHistory.flatMap((session) => session.log),
+    ...sessionLog,
+  ];
+
+  for (const entry of entries) {
+    const durationSec = logDurationSec(entry);
+    const identity = entry.id
+      ? `id:${entry.id}`
+      : `${entry.sectionId}:${entry.role ?? "single"}:${entry.actualStartISO}:${entry.actualEndISO}:${durationSec}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+
+    const key = timerKey(entry.sectionId, entry.role ?? null);
+    const current = records[key] ?? { persistedSec: 0, unsavedSec: 0 };
+    records[key] = { persistedSec: current.persistedSec + durationSec, unsavedSec: 0 };
+  }
+
+  return records;
+}
+
+function useProgramTimers(
+  sections: PresidingSection[],
+  sessionLog: TimerLogEntry[],
+  sessionHistory: MeetingSession[],
+  onLog: (entry: TimerLogEntry) => void,
+) {
   const flat = useMemo(() => flattenAll(sections), [sections]);
-  const [records, setRecords] = useState<Record<string, TimerRecord>>({});
+  const hydratedRecords = useMemo(
+    () => hydrateTimerRecords(sessionLog, sessionHistory),
+    [sessionHistory, sessionLog],
+  );
+  const [records, setRecords] = useState<Record<string, TimerRecord>>(() => hydratedRecords);
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const recordsR = useRef<Record<string, TimerRecord>>({});
+  const recordsR = useRef<Record<string, TimerRecord>>(records);
   const activeR = useRef<ActiveTimer | null>(null);
   const intvR = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -257,19 +300,20 @@ function useProgramTimers(sections: PresidingSection[], onLog: (entry: TimerLogE
   const refreshActive = useCallback(() => {
     const active = activeR.current;
     if (!active) return;
-    const current = recordsR.current[active.key] ?? { elapsedSec: 0, startedAtISO: active.startedAtISO };
-    const elapsedSec = Math.max(0, Math.floor((Date.now() - active.startedAtMs) / 1000));
-    commitRecords({ ...recordsR.current, [active.key]: { ...current, elapsedSec } });
+    const current = recordsR.current[active.key] ?? { persistedSec: 0, unsavedSec: 0 };
+    const unsavedSec = Math.max(0, Math.floor((Date.now() - active.startedAtMs) / 1000));
+    commitRecords({ ...recordsR.current, [active.key]: { ...current, unsavedSec } });
   }, [commitRecords]);
 
   const finalizeActive = useCallback(() => {
     const active = activeR.current;
     if (!active) return;
     stopInterval();
-    const elapsedSec = Math.max(0, Math.floor((Date.now() - active.startedAtMs) / 1000));
+    const segmentSec = Math.max(0, Math.floor((Date.now() - active.startedAtMs) / 1000));
+    const current = recordsR.current[active.key] ?? { persistedSec: 0, unsavedSec: 0 };
     const next = {
       ...recordsR.current,
-      [active.key]: { elapsedSec, startedAtISO: active.startedAtISO },
+      [active.key]: { persistedSec: current.persistedSec + segmentSec, unsavedSec: 0 },
     };
     activeR.current = null;
     setActiveKey(null);
@@ -281,10 +325,10 @@ function useProgramTimers(sections: PresidingSection[], onLog: (entry: TimerLogE
       scheduledDurationMin: active.scheduledDurationMin,
       actualStartISO: active.startedAtISO,
       actualEndISO: new Date().toISOString(),
-      actualDurationMin: Math.round(elapsedSec / 60),
-      actualDurationSec: elapsedSec,
+      actualDurationMin: Math.round(segmentSec / 60),
+      actualDurationSec: segmentSec,
       role: active.role ?? undefined,
-      wasOvertime: elapsedSec > active.scheduledDurationMin * 60,
+      wasOvertime: segmentSec > active.scheduledDurationMin * 60,
     });
   }, [commitRecords, onLog, stopInterval]);
 
@@ -310,20 +354,46 @@ function useProgramTimers(sections: PresidingSection[], onLog: (entry: TimerLogE
       scheduledDurationMin: Math.round(item.durationSec / 60),
     };
     activeR.current = active;
+    const current = recordsR.current[key] ?? { persistedSec: 0, unsavedSec: 0 };
     commitRecords({
       ...recordsR.current,
-      [key]: { elapsedSec: 0, startedAtISO: active.startedAtISO },
+      [key]: { ...current, unsavedSec: 0 },
     });
     setActiveKey(key);
     intvR.current = setInterval(refreshActive, 1000);
   }, [commitRecords, finalizeActive, flat, refreshActive]);
 
+  const resetTimer = useCallback((sectionId: string, role: TimerRole | null) => {
+    const key = timerKey(sectionId, role);
+    if (activeR.current?.key === key) {
+      stopInterval();
+      activeR.current = null;
+      setActiveKey(null);
+    }
+
+    const current = recordsR.current[key];
+    if (!current || current.unsavedSec === 0) return;
+    commitRecords({ ...recordsR.current, [key]: { ...current, unsavedSec: 0 } });
+  }, [commitRecords, stopInterval]);
+
+  useEffect(() => {
+    const active = activeR.current;
+    const activeUnsavedSec = active ? recordsR.current[active.key]?.unsavedSec ?? 0 : 0;
+    const next = { ...hydratedRecords };
+    if (active) {
+      const current = next[active.key] ?? { persistedSec: 0, unsavedSec: 0 };
+      next[active.key] = { ...current, unsavedSec: activeUnsavedSec };
+    }
+    commitRecords(next);
+  }, [commitRecords, hydratedRecords]);
+
   useEffect(() => () => stopInterval(), [stopInterval]);
 
   const getTimerState = useCallback((sectionId: string, role: TimerRole | null) => {
     const key = timerKey(sectionId, role);
+    const record = records[key];
     return {
-      elapsedSec: records[key]?.elapsedSec ?? 0,
+      elapsedSec: record ? record.persistedSec + record.unsavedSec : 0,
       running: activeKey === key,
     };
   }, [activeKey, records]);
@@ -333,10 +403,13 @@ function useProgramTimers(sections: PresidingSection[], onLog: (entry: TimerLogE
     ...activeR.current,
     titleEn: activeItem.titleEn,
     titleEs: activeItem.titleEs,
-    elapsedSec: records[activeR.current.key]?.elapsedSec ?? 0,
+    elapsedSec: (() => {
+      const record = records[activeR.current.key];
+      return record ? record.persistedSec + record.unsavedSec : 0;
+    })(),
   } : null;
 
-  return { getTimerState, toggleTimer, stopActive: finalizeActive, activeTimer };
+  return { getTimerState, toggleTimer, resetTimer, stopActive: finalizeActive, activeTimer };
 }
 
 /* ---------- main component ---------- */
@@ -455,8 +528,8 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
     if (i === 0) legacyOffset += 5;
   }
 
-  const timer = useProgramTimers(sections, onLogEntry);
-  const { getTimerState, toggleTimer, stopActive, activeTimer } = timer;
+  const timer = useProgramTimers(sections, sessionLog, sessionHistory, onLogEntry);
+  const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timer;
 
   if (sections.length === 0) {
     return <div className="flex items-center justify-center h-full"><p className="text-sm text-slate-500">{lbl.noSections}</p></div>;
@@ -505,6 +578,9 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
             <span className="material-symbols-outlined text-xl">{activeTimer ? "stop" : "timer"}</span>
           </button>
         </div>
+        <div className="flex justify-end">
+          <SaveStatus lbl={lbl} />
+        </div>
 
         {/* Week info is catalog-driven; only the selector above changes weeks. */}
         <div className="text-center">
@@ -552,8 +628,10 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                 placeholder="————" className="w-full bg-transparent text-sm italic text-slate-500 dark:text-slate-400 focus:outline-none border-b border-dashed border-slate-200 dark:border-slate-700 pb-0.5" />
             </div>
             <TimerButton role={null} label={lbl.timer}
-              {...getTimerState(sections[0]?.id ?? "", null)}
-              onClick={() => toggleTimer(sections[0]?.id ?? "", null)} />
+               {...getTimerState(sections[0]?.id ?? "", null)}
+               onClick={() => toggleTimer(sections[0]?.id ?? "", null)}
+               onReset={() => resetTimer(sections[0]?.id ?? "", null)}
+               actionLabels={lbl} />
           </div>
           <div className="flex justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <span>{lbl.song}</span>
@@ -584,9 +662,11 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">{sec.duration} {lbl.min} · ♫ {lbl.song}</p>
                     </div>
-                    <TimerButton role={null} label={lbl.timer}
-                      {...getTimerState(sec.id, null)}
-                      onClick={() => toggleTimer(sec.id, null)} />
+                     <TimerButton role={null} label={lbl.timer}
+                       {...getTimerState(sec.id, null)}
+                       onClick={() => toggleTimer(sec.id, null)}
+                       onReset={() => resetTimer(sec.id, null)}
+                       actionLabels={lbl} />
                   </div>
                 </div>
               );
@@ -624,9 +704,10 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                         onTap={() => { setInlineId(sub.id); setInlineField("title"); }}
                         onEditField={(f) => { setInlineId(sub.id); setInlineField(f); }}
                         onClose={() => setInlineId(null)}
-                        onUpdate={(fn) => updateSection(sub.id, fn)}
-                        onRemove={() => removeSection(sub.id)}
-                        onToggleTimer={(role) => toggleTimer(sub.id, role)} />;
+                         onUpdate={(fn) => updateSection(sub.id, fn)}
+                         onRemove={() => removeSection(sub.id)}
+                         onToggleTimer={(role) => toggleTimer(sub.id, role)}
+                         onResetTimer={(role) => resetTimer(sub.id, role)} />;
                     })}
                   </div>
                   {/* Add part */}
@@ -648,10 +729,11 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                   onTap={() => { setInlineId(sec.id); setInlineField("title"); }}
                   onEditField={(f) => { setInlineId(sec.id); setInlineField(f); }}
                   onClose={() => setInlineId(null)}
-                  onUpdate={(fn) => updateSection(sec.id, fn)}
-                  onRemove={() => removeSection(sec.id)}
-                  onToggleTimer={(role) => toggleTimer(sec.id, role)}
-                  standalone />
+                   onUpdate={(fn) => updateSection(sec.id, fn)}
+                   onRemove={() => removeSection(sec.id)}
+                   onToggleTimer={(role) => toggleTimer(sec.id, role)}
+                   onResetTimer={(role) => resetTimer(sec.id, role)}
+                   standalone />
               );
             }
           }
@@ -688,22 +770,53 @@ function roleLabel(role: TimerRole | null, section: PresidingSection, lbl: typeo
   return role === "assignee" ? lbl.assignee : lbl.presiding;
 }
 
-function TimerButton({ role, label, elapsedSec, running, onClick }: {
+function SaveStatus({ lbl }: { lbl: typeof L.en }) {
+  const { status, error, isOnline } = useSync();
+  const hasPendingChanges = useStore((state) => state.syncMetadata.hasPendingChanges);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const isSaving = mounted && isOnline && (status === "syncing" || hasPendingChanges);
+  const isError = mounted && isOnline && status === "error";
+  const isOffline = mounted && !isOnline;
+  const icon = isSaving ? "sync" : isError ? "error" : isOffline ? "cloud_off" : "cloud_done";
+  const text = isSaving ? lbl.saving : isError ? lbl.saveError : isOffline ? lbl.offline : lbl.saved;
+
+  return (
+    <div role="status" aria-live="polite" title={isError ? (error ?? lbl.saveError) : text}
+      className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold", isError ? "text-red-500" : isOffline ? "text-amber-600" : isSaving ? "text-primary" : "text-emerald-600")}>
+      <span className={cn("material-symbols-outlined text-sm", isSaving && "animate-spin")}>{icon}</span>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function TimerButton({ role, label, elapsedSec, running, onClick, onReset, actionLabels }: {
   role: TimerRole | null; label: string; elapsedSec: number; running: boolean;
-  onClick: () => void;
+  onClick: () => void; onReset: () => void;
+  actionLabels: Pick<typeof L.en, "start" | "resume" | "stop" | "reset" | "resetUnsaved">;
 }) {
   const presiding = role === "presiding";
+  const actionLabel = running ? actionLabels.stop : elapsedSec > 0 ? actionLabels.resume : actionLabels.start;
   return (
-    <button onClick={(event) => { event.stopPropagation(); onClick(); }}
-      className={cn(
-        "size-12 sm:size-14 rounded-full flex flex-col items-center justify-center gap-0 shadow-sm transition-all active:scale-95 shrink-0",
-        running ? "bg-amber-500 text-black" : presiding ? "bg-violet-600" : "bg-primary",
-        !running && (presiding ? "active:bg-violet-800" : "active:bg-primary/80"),
-      )}
-      aria-label={`${label} ${running ? "stop" : "start"}`}>
-      <span className="material-symbols-outlined text-xs sm:text-sm leading-none">{running ? "stop" : "play_arrow"}</span>
-      <span className="font-mono text-[9px] sm:text-[10px] font-bold leading-none tabular-nums">{fmtTime(elapsedSec)}</span>
-    </button>
+    <div className="flex shrink-0 items-center gap-1">
+      <button type="button" onClick={(event) => { event.stopPropagation(); onClick(); }}
+        className={cn(
+          "size-12 sm:size-14 rounded-full flex flex-col items-center justify-center gap-0 shadow-sm transition-all active:scale-95 shrink-0",
+          running ? "bg-amber-500 text-black" : presiding ? "bg-violet-600" : "bg-primary",
+          !running && (presiding ? "active:bg-violet-800" : "active:bg-primary/80"),
+        )}
+        aria-label={`${label} ${actionLabel}`} aria-pressed={running}>
+        <span className="material-symbols-outlined text-xs sm:text-sm leading-none">{running ? "stop" : "play_arrow"}</span>
+        <span className="font-mono text-[10px] sm:text-[11px] font-bold leading-none tabular-nums">{fmtTime(elapsedSec)}</span>
+      </button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onReset(); }}
+        className="size-11 rounded-full border border-slate-200 bg-surface text-slate-400 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 active:scale-95 dark:border-slate-700 dark:hover:border-red-800 dark:hover:bg-red-950/20"
+        aria-label={`${actionLabels.resetUnsaved}: ${label}`} title={actionLabels.resetUnsaved}>
+        <span className="material-symbols-outlined text-base leading-none">restart_alt</span>
+      </button>
+    </div>
   );
 }
 
@@ -722,7 +835,7 @@ function TimerLegend({ isEs, lbl }: { isEs: boolean; lbl: typeof L.en }) {
 
 function InterventionRow({
   num, section, color, startTime, endTime, meetingStartMinute, timerRoles, getTimerState, isEs, lbl,
-  inlineId, inlineField, onTap, onEditField, onClose, onUpdate, onRemove, onToggleTimer,
+  inlineId, inlineField, onTap, onEditField, onClose, onUpdate, onRemove, onToggleTimer, onResetTimer,
   standalone = false,
 }: {
   num: number; section: PresidingSection; color: string; startTime: string; endTime: string; meetingStartMinute: number;
@@ -732,7 +845,7 @@ function InterventionRow({
   inlineId: string | null; inlineField: "title" | "assignee" | "duration" | "start" | "end" | null;
   onTap: () => void; onEditField: (f: "title" | "assignee" | "duration" | "start" | "end") => void;
   onClose: () => void; onUpdate: (fn: (s: PresidingSection) => PresidingSection) => void;
-  onRemove: () => void; onToggleTimer: (role: TimerRole | null) => void;
+  onRemove: () => void; onToggleTimer: (role: TimerRole | null) => void; onResetTimer: (role: TimerRole | null) => void;
   standalone?: boolean;
 }) {
   const isThisInline = inlineId === section.id;
@@ -850,7 +963,7 @@ function InterventionRow({
             {timerRoles.map((role) => {
               const state = getTimerState(section.id, role);
               return <TimerButton key={role} role={role} label={roleLabel(role, section, lbl)} {...state}
-                onClick={() => onToggleTimer(role)} />;
+                onClick={() => onToggleTimer(role)} onReset={() => onResetTimer(role)} actionLabels={lbl} />;
             })}
           </div>
         </div>
