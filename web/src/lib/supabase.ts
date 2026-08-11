@@ -10,6 +10,15 @@ import type {
   InterestedPerson,
   InterestedStatusConfig,
 } from "@/types/data";
+import type {
+  MeetingSession,
+  PresidingConfig,
+  PresidingPrefs,
+  PresidingSection,
+  ProgramWeek,
+  TimerLogEntry,
+} from "@/types/presiding";
+import { getDefaultPresidingConfig, getDefaultPresidingPrefs, getTimerRoles } from "@/types/presiding";
 
 // ─── Client Singleton ────────────────────────────────────────────────────────
 
@@ -427,6 +436,175 @@ export async function pullInterestedStatuses(
   );
 }
 
+// ─── Program / Presiding ──────────────────────────────────────────────────────
+
+export interface ProgramSyncState {
+  config: PresidingConfig;
+  prefs: PresidingPrefs;
+  sessions: MeetingSession[];
+}
+
+function flattenProgramSections(sections: PresidingSection[], userId: string, weekId: string, parentId: string | null = null) {
+  const rows: Record<string, unknown>[] = [];
+  sections.forEach((section, index) => {
+    rows.push({
+      user_id: userId, week_id: weekId, section_id: section.id, parent_section_id: parentId, sort_order: index,
+      title_en: section.titleEn, title_es: section.titleEs, duration_min: section.duration, group_name: section.group,
+      scheduled_start_minute: section.scheduledStartMinute ?? 0, timer_roles: getTimerRoles(section),
+    });
+    rows.push(...flattenProgramSections(section.subsections, userId, weekId, section.id));
+  });
+  return rows;
+}
+
+function sanitizeProgramSections(sections: PresidingSection[]): unknown[] {
+  return sections.map(({ assigneeName: _assigneeName, subsections, ...section }) => ({
+    ...section,
+    subsections: sanitizeProgramSections(subsections),
+  }));
+}
+
+function sectionsFromRows(rows: Record<string, unknown>[]): PresidingSection[] {
+  const byParent = new Map<string | null, Record<string, unknown>[]>();
+  rows.forEach((row) => {
+    const parent = typeof row.parent_section_id === "string" ? row.parent_section_id : null;
+    const list = byParent.get(parent) ?? [];
+    list.push(row);
+    byParent.set(parent, list);
+  });
+  const build = (parent: string | null): PresidingSection[] => (byParent.get(parent) ?? [])
+    .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+    .map((row) => ({
+      id: String(row.section_id), titleEn: String(row.title_en ?? ""), titleEs: String(row.title_es ?? ""),
+      duration: Number(row.duration_min ?? 0), assigneeName: "",
+      group: (row.group_name as PresidingSection["group"]) ?? null,
+      scheduledStartMinute: Number(row.scheduled_start_minute ?? 0),
+      timerRoles: Array.isArray(row.timer_roles) ? row.timer_roles as PresidingSection["timerRoles"] : undefined,
+      subsections: build(String(row.section_id)),
+    }));
+  return build(null);
+}
+
+function sectionsFromLegacyJson(value: unknown): PresidingSection[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((row) => {
+    const item = row as Record<string, unknown>;
+    return {
+      id: String(item.id ?? crypto.randomUUID()), titleEn: String(item.titleEn ?? item.title_en ?? ""), titleEs: String(item.titleEs ?? item.title_es ?? ""),
+      duration: Number(item.duration ?? item.duration_min ?? 0), assigneeName: "",
+      group: (item.group as PresidingSection["group"]) ?? null, scheduledStartMinute: Number(item.scheduledStartMinute ?? item.scheduled_start_minute ?? 0),
+      timerRoles: Array.isArray(item.timerRoles) ? item.timerRoles as PresidingSection["timerRoles"] : undefined,
+      subsections: sectionsFromLegacyJson(item.subsections),
+    };
+  });
+}
+
+export async function pushProgram(program: ProgramSyncState, userId: string): Promise<void> {
+  const client = getSupabase();
+  const { error: prefsError } = await client.from("program_preferences").upsert({
+    user_id: userId, active_week_id: program.config.activeWeekId, auto_advance: program.prefs.autoAdvance,
+    meeting_start_hour: program.prefs.meetingStartHour, meeting_start_minute: program.prefs.meetingStartMinute,
+    time_format: program.prefs.timeFormat, updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  if (prefsError) throw new Error(`pushProgram preferences: ${prefsError.message}`);
+
+  const weeks = program.config.weeks.map((week) => ({
+    user_id: userId, week_id: week.weekId, week_range_en: week.weekRangeEn, week_range_es: week.weekRangeEs,
+    bible_reading: week.bibleReading, sections_json: sanitizeProgramSections(week.sections), updated_at: new Date().toISOString(),
+  }));
+  if (weeks.length > 0) {
+    const { error } = await client.from("program_weeks").upsert(weeks, { onConflict: "user_id,week_id" });
+    if (error) throw new Error(`pushProgram weeks: ${error.message}`);
+  }
+  const interventions = program.config.weeks.flatMap((week) => flattenProgramSections(week.sections, userId, week.weekId));
+  if (interventions.length > 0) {
+    const { error } = await client.from("program_interventions").upsert(interventions, { onConflict: "user_id,week_id,section_id" });
+    if (error) throw new Error(`pushProgram interventions: ${error.message}`);
+  }
+
+  const sessions = program.sessions.map((session) => ({
+    id: session.id ?? crypto.randomUUID(), user_id: userId, week_id: session.weekId ?? program.config.activeWeekId ?? "default",
+    session_date: session.date, started_at: session.startedAt, log_json: session.log,
+  }));
+  if (sessions.length > 0) {
+    const { error } = await client.from("program_sessions").upsert(sessions, { onConflict: "id" });
+    if (error) throw new Error(`pushProgram sessions: ${error.message}`);
+  }
+  const sessionIds = new Map(program.sessions.map((session, index) => [session, sessions[index].id]));
+  const logs = program.sessions.flatMap((session, index) => session.log.map((entry, logIndex) => ({
+    id: entry.id ?? `${sessions[index].id}-${logIndex}`, user_id: userId,
+    week_id: session.weekId ?? program.config.activeWeekId ?? "default", session_id: sessionIds.get(session),
+    section_id: entry.sectionId, title_en: entry.titleEn, title_es: entry.titleEs, role: entry.role ?? null,
+    scheduled_duration_min: entry.scheduledDurationMin, actual_start: entry.actualStartISO, actual_end: entry.actualEndISO,
+    actual_duration_sec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60), was_overtime: entry.wasOvertime,
+  })));
+  if (logs.length > 0) {
+    const { error } = await client.from("program_timer_logs").upsert(logs, { onConflict: "id" });
+    if (error) throw new Error(`pushProgram logs: ${error.message}`);
+  }
+
+  const currentInterventionKeys = new Set(interventions.map((row) => `${row.week_id}:${row.section_id}`));
+  const { data: existingInterventions } = await client.from("program_interventions").select("week_id,section_id").eq("user_id", userId);
+  await Promise.all((existingInterventions ?? [])
+    .filter((row) => !currentInterventionKeys.has(`${row.week_id}:${row.section_id}`))
+    .map((row) => client.from("program_interventions").delete().eq("user_id", userId).eq("week_id", row.week_id).eq("section_id", row.section_id)));
+  const currentSessionIds = new Set(sessions.map((row) => row.id));
+  const currentLogIds = new Set(logs.map((row) => row.id));
+  const { data: existingLogs } = await client.from("program_timer_logs").select("id").eq("user_id", userId);
+  const staleLogs = (existingLogs ?? []).map((row) => row.id).filter((id) => !currentLogIds.has(id));
+  if (staleLogs.length > 0) await client.from("program_timer_logs").delete().eq("user_id", userId).in("id", staleLogs);
+  const { data: existingSessions } = await client.from("program_sessions").select("id").eq("user_id", userId);
+  const staleSessions = (existingSessions ?? []).map((row) => row.id).filter((id) => !currentSessionIds.has(id));
+  if (staleSessions.length > 0) await client.from("program_sessions").delete().eq("user_id", userId).in("id", staleSessions);
+
+  const currentWeekKeys = new Set(weeks.map((row) => row.week_id));
+  const { data: existingWeeks } = await client.from("program_weeks").select("week_id").eq("user_id", userId);
+  const staleWeeks = (existingWeeks ?? []).map((row) => row.week_id).filter((id) => !currentWeekKeys.has(id));
+  if (staleWeeks.length > 0) await client.from("program_weeks").delete().eq("user_id", userId).in("week_id", staleWeeks);
+}
+
+export async function pullProgram(userId: string): Promise<ProgramSyncState | null> {
+  const client = getSupabase();
+  const [prefsResult, weeksResult, interventionsResult, sessionsResult, logsResult] = await Promise.all([
+    client.from("program_preferences").select("*").eq("user_id", userId).maybeSingle(),
+    client.from("program_weeks").select("*").eq("user_id", userId).order("week_id"),
+    client.from("program_interventions").select("*").eq("user_id", userId).order("sort_order"),
+    client.from("program_sessions").select("*").eq("user_id", userId).order("session_date", { ascending: false }),
+    client.from("program_timer_logs").select("*").eq("user_id", userId).order("actual_start"),
+  ]);
+  const error = [prefsResult, weeksResult, interventionsResult, sessionsResult, logsResult].find((result) => result.error)?.error;
+  if (error) throw new Error(`pullProgram: ${error.message}`);
+  if (!prefsResult.data && (weeksResult.data ?? []).length === 0) return null;
+
+  const weekRows = (weeksResult.data ?? []) as Record<string, unknown>[];
+  const interventionRows = (interventionsResult.data ?? []) as Record<string, unknown>[];
+  const weeks: ProgramWeek[] = weekRows.map((row) => ({
+    weekId: String(row.week_id), weekRangeEn: String(row.week_range_en ?? ""), weekRangeEs: String(row.week_range_es ?? ""),
+    bibleReading: String(row.bible_reading ?? ""), sections: interventionRows.some((item) => item.week_id === row.week_id)
+      ? sectionsFromRows(interventionRows.filter((item) => item.week_id === row.week_id))
+      : sectionsFromLegacyJson(row.sections_json),
+  }));
+  const prefs = prefsResult.data ? {
+    autoAdvance: Boolean(prefsResult.data.auto_advance), meetingStartHour: Number(prefsResult.data.meeting_start_hour ?? 19),
+    meetingStartMinute: Number(prefsResult.data.meeting_start_minute ?? 30), timeFormat: prefsResult.data.time_format === "12h" ? "12h" : "24h",
+  } satisfies PresidingPrefs : getDefaultPresidingPrefs();
+  const logsBySession = new Map<string, TimerLogEntry[]>();
+  (logsResult.data ?? []).forEach((row) => {
+    const key = String(row.session_id); const list = logsBySession.get(key) ?? [];
+    list.push({ id: String(row.id), sectionId: String(row.section_id), titleEn: String(row.title_en ?? ""), titleEs: String(row.title_es ?? ""),
+      role: row.role === "assignee" || row.role === "presiding" ? row.role : undefined, scheduledDurationMin: Number(row.scheduled_duration_min ?? 0),
+      actualStartISO: String(row.actual_start), actualEndISO: String(row.actual_end), actualDurationMin: Math.round(Number(row.actual_duration_sec ?? 0) / 60),
+      actualDurationSec: Number(row.actual_duration_sec ?? 0), wasOvertime: Boolean(row.was_overtime) });
+    logsBySession.set(key, list);
+  });
+  const sessions: MeetingSession[] = ((sessionsResult.data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id), weekId: String(row.week_id), date: String(row.session_date), startedAt: String(row.started_at),
+    log: logsBySession.get(String(row.id)) ?? (Array.isArray(row.log_json) ? row.log_json as TimerLogEntry[] : []),
+  }));
+  const config = weeks.length > 0 ? { weeks, activeWeekId: prefsResult.data?.active_week_id ?? weeks[0].weekId } : getDefaultPresidingConfig();
+  return { config, prefs, sessions };
+}
+
 // ─── Bulk Push (full sync upload) ────────────────────────────────────────────
 
 export interface SyncState {
@@ -437,6 +615,7 @@ export interface SyncState {
   goals: GoalDefinition[];
   interestedPeople: InterestedPerson[];
   interestedStatuses: InterestedStatusConfig[];
+  program: ProgramSyncState | null;
 }
 
 export async function pushAll(state: SyncState, userId: string): Promise<void> {
@@ -461,6 +640,7 @@ export async function pushAll(state: SyncState, userId: string): Promise<void> {
   tasks.push({ label: "goals", fn: () => pushGoals(state.goals, userId) });
   tasks.push({ label: "interestedPeople", fn: () => pushInterestedPeople(state.interestedPeople, userId) });
   tasks.push({ label: "interestedStatuses", fn: () => pushInterestedStatuses(state.interestedStatuses, userId) });
+  if (state.program) tasks.push({ label: "program", fn: () => pushProgram(state.program!, userId) });
 
   const results = await Promise.allSettled(tasks.map((t) => t.fn()));
   results.forEach((r, i) => {
@@ -489,6 +669,7 @@ export async function pullAll(
     pullGoals(userId),
     pullInterestedPeople(userId),
     pullInterestedStatuses(userId),
+    pullProgram(userId),
   ]);
 
   const get = <T>(index: number, fallback: T): T => {
@@ -503,9 +684,10 @@ export async function pullAll(
   const goals = get<GoalDefinition[]>(4, []);
   const interestedPeople = get<InterestedPerson[]>(5, []);
   const interestedStatuses = get<InterestedStatusConfig[]>(6, []);
+  const program = get<ProgramSyncState | null>(7, null);
 
   // Log per-table failures
-  const labels = ["profile", "settings", "serviceTypes", "timeEntries", "goals", "interestedPeople", "interestedStatuses"];
+  const labels = ["profile", "settings", "serviceTypes", "timeEntries", "goals", "interestedPeople", "interestedStatuses", "program"];
   results.forEach((r, i) => {
     if (r.status === "rejected") {
       console.error(`[ServiceFlow] pullAll ${labels[i]}:`, r.reason instanceof Error ? r.reason.message : r.reason);
@@ -543,5 +725,6 @@ export async function pullAll(
     goals,
     interestedPeople,
     interestedStatuses: interestedStatuses.length > 0 ? interestedStatuses : [],
+    program,
   };
 }

@@ -7,6 +7,7 @@ import type {
   PresidingConfig,
   PresidingPrefs,
   ProgramWeek,
+  MeetingSession,
   SectionGroup,
   TimerLogEntry,
   TimerRole,
@@ -230,10 +231,11 @@ function useProgramTimers(sections: PresidingSection[], onLog: (entry: TimerLogE
 
 interface Props {
   lang: "en" | "es"; config: PresidingConfig; prefs: PresidingPrefs;
-  sessionLog: TimerLogEntry[]; onConfigChange: (cfg: PresidingConfig) => void; onLogEntry: (entry: TimerLogEntry) => void;
+  sessionLog: TimerLogEntry[]; sessionHistory?: MeetingSession[]; onConfigChange: (cfg: PresidingConfig) => void; onLogEntry: (entry: TimerLogEntry) => void;
+  onDeleteLog?: (logId: string) => void;
 }
 
-export default function ProgramView({ lang, config, prefs, sessionLog, onConfigChange, onLogEntry }: Props) {
+export default function ProgramView({ lang, config, prefs, sessionLog, sessionHistory = [], onConfigChange, onLogEntry, onDeleteLog }: Props) {
   const isEs = lang === "es"; const lbl = L[lang];
 
   const activeWeek = useMemo(() =>
@@ -273,7 +275,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, onConfigC
 
   // Inline editing state
   const [inlineId, setInlineId] = useState<string | null>(null);
-  const [inlineField, setInlineField] = useState<"title" | "assignee" | "duration" | null>(null);
+  const [inlineField, setInlineField] = useState<"title" | "assignee" | "duration" | "start" | null>(null);
 
   const updateSection = (id: string, fn: (s: PresidingSection) => PresidingSection) => {
     const walk = (list: PresidingSection[]): PresidingSection[] => list.map(s => {
@@ -318,13 +320,22 @@ export default function ProgramView({ lang, config, prefs, sessionLog, onConfigC
   const clock = (m: number) => fmtClock(m, prefs.timeFormat === "24h");
   const startMinTotal = prefs.meetingStartHour * 60 + prefs.meetingStartMinute;
 
-  let acc = 0; const startTimes: number[] = [];
+  let legacyOffset = 0; const startTimes: number[] = [];
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
-    if (s.subsections.length > 0) { for (const sub of s.subsections) { startTimes.push(startMinTotal + acc); acc += sub.duration; } }
-    else { startTimes.push(startMinTotal + acc); acc += s.duration; }
+    if (s.subsections.length > 0) {
+      for (const sub of s.subsections) {
+        const offset = sub.scheduledStartMinute ?? legacyOffset;
+        startTimes.push(startMinTotal + offset);
+        legacyOffset = Math.max(legacyOffset, offset + sub.duration);
+      }
+    } else {
+      const offset = s.scheduledStartMinute ?? legacyOffset;
+      startTimes.push(startMinTotal + offset);
+      legacyOffset = Math.max(legacyOffset, offset + s.duration);
+    }
     // Song & Prayer offset: first timed part after opening starts 5 min later
-    if (i === 0) acc += 5;
+    if (i === 0) legacyOffset += 5;
   }
 
   const timer = useProgramTimers(sections, onLogEntry);
@@ -490,7 +501,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, onConfigC
                       const flatIdx = intIdx++; const num = partNum++;
                       const timerRoles = getTimerRoles(sub, grp);
                       return <InterventionRow key={sub.id} num={num} section={sub} color={col}
-                        startTime={clock(startTimes[flatIdx] ?? 0)} timerRoles={timerRoles}
+                         startTime={clock(startTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
                         getTimerState={getTimerState} isEs={isEs} lbl={lbl}
                         inlineId={inlineId} inlineField={inlineField}
                         onTap={() => { setInlineId(sub.id); setInlineField("title"); }}
@@ -514,7 +525,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, onConfigC
               const timerRoles = getTimerRoles(sec);
               cards.push(
                 <InterventionRow key={sec.id} num={num} section={sec} color={col}
-                  startTime={clock(startTimes[flatIdx] ?? 0)} timerRoles={timerRoles}
+                  startTime={clock(startTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
                   getTimerState={getTimerState} isEs={isEs} lbl={lbl}
                   inlineId={inlineId} inlineField={inlineField}
                   onTap={() => { setInlineId(sec.id); setInlineField("title"); }}
@@ -543,7 +554,8 @@ export default function ProgramView({ lang, config, prefs, sessionLog, onConfigC
       </div>
 
       {/* ===== SESSION REVIEW ===== */}
-      <SessionReview sessionLog={sessionLog} prefs={prefs} isEs={isEs} lbl={lbl} />
+      <SessionReview sessionLog={sessionLog} sessionHistory={sessionHistory} prefs={prefs} isEs={isEs} lbl={lbl}
+        onDeleteLog={onDeleteLog} />
     </div>
   );
 }
@@ -591,22 +603,27 @@ function TimerLegend({ isEs, lbl }: { isEs: boolean; lbl: typeof L.en }) {
 /* ---------- InterventionRow (card-based) ---------- */
 
 function InterventionRow({
-  num, section, color, startTime, timerRoles, getTimerState, isEs, lbl,
+  num, section, color, startTime, meetingStartMinute, timerRoles, getTimerState, isEs, lbl,
   inlineId, inlineField, onTap, onEditField, onClose, onUpdate, onRemove, onToggleTimer,
   standalone = false,
 }: {
-  num: number; section: PresidingSection; color: string; startTime: string;
+  num: number; section: PresidingSection; color: string; startTime: string; meetingStartMinute: number;
   timerRoles: TimerRole[];
   getTimerState: (sectionId: string, role: TimerRole | null) => { elapsedSec: number; running: boolean };
   isEs: boolean; lbl: typeof L.en;
-  inlineId: string | null; inlineField: "title" | "assignee" | "duration" | null;
-  onTap: () => void; onEditField: (f: "title" | "assignee" | "duration") => void;
+  inlineId: string | null; inlineField: "title" | "assignee" | "duration" | "start" | null;
+  onTap: () => void; onEditField: (f: "title" | "assignee" | "duration" | "start") => void;
   onClose: () => void; onUpdate: (fn: (s: PresidingSection) => PresidingSection) => void;
   onRemove: () => void; onToggleTimer: (role: TimerRole | null) => void;
   standalone?: boolean;
 }) {
   const isThisInline = inlineId === section.id;
   const title = isEs ? (section.titleEs || section.titleEn || "") : (section.titleEn || section.titleEs || "");
+  const startOffset = section.scheduledStartMinute ?? 0;
+  const startInput = (() => {
+    const minute = (meetingStartMinute + startOffset) % (24 * 60);
+    return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+  })();
 
   const wrapperClass = standalone
     ? "rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface shadow-sm"
@@ -625,11 +642,11 @@ function InterventionRow({
           </div>
           {/* Field tabs */}
           <div className="flex gap-1 flex-wrap">
-            {(["title", "assignee", "duration"] as const).map(f => (
+            {(["title", "assignee", "duration", "start"] as const).map(f => (
               <button key={f} onClick={() => onEditField(f)}
                 className={cn("rounded-lg px-3 py-1 text-xs font-medium transition-colors",
                   inlineField === f ? "bg-primary text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500")}>
-                {f === "title" ? (isEs ? "ES/EN" : "EN/ES") : f === "assignee" ? (isEs ? "Nombre" : "Name") : lbl.min}
+                  {f === "title" ? (isEs ? "ES/EN" : "EN/ES") : f === "assignee" ? (isEs ? "Nombre" : "Name") : f === "start" ? (isEs ? "Inicio" : "Start") : lbl.min}
               </button>
             ))}
           </div>
@@ -637,6 +654,16 @@ function InterventionRow({
           {inlineField === "duration" ? (
             <input type="number" min={1} max={120} value={section.duration}
               onChange={e => onUpdate(s => ({ ...s, duration: Math.max(1, parseInt(e.target.value) || 1) }))}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary" autoFocus />
+          ) : inlineField === "start" ? (
+            <input type="time" value={startInput}
+              onChange={e => {
+                const [hours, minutes] = e.target.value.split(":").map(Number);
+                if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
+                const target = hours * 60 + minutes;
+                const offset = (target - meetingStartMinute + 24 * 60) % (24 * 60);
+                onUpdate(s => ({ ...s, scheduledStartMinute: offset }));
+              }}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary" autoFocus />
           ) : inlineField === "assignee" ? (
             <input type="text" value={section.assigneeName}
@@ -701,10 +728,14 @@ function InterventionRow({
 
 /* ---------- Session Review ---------- */
 
-function SessionReview({ sessionLog, prefs, isEs, lbl }: {
-  sessionLog: TimerLogEntry[]; prefs: PresidingPrefs; isEs: boolean; lbl: typeof L.en;
+function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteLog }: {
+  sessionLog: TimerLogEntry[]; sessionHistory: MeetingSession[]; prefs: PresidingPrefs; isEs: boolean; lbl: typeof L.en;
+  onDeleteLog?: (logId: string) => void;
 }) {
   const [show, setShow] = useState(true);
+  const reviewEntries = sessionHistory.length > 0
+    ? sessionHistory.flatMap((session) => session.log.map((entry) => ({ entry, date: session.date })))
+    : sessionLog.map((entry) => ({ entry, date: "" }));
   const roleName = (entry: TimerLogEntry) => {
     if (!entry.role) return lbl.timer;
     const bible = isBibleReading({ id: entry.sectionId, titleEn: entry.titleEn, titleEs: entry.titleEs });
@@ -720,20 +751,28 @@ function SessionReview({ sessionLog, prefs, isEs, lbl }: {
       </button>
       {show && (
         <div className="px-5 pb-5 max-h-80 overflow-y-auto space-y-2">
-          {sessionLog.length === 0 ? (
+          {reviewEntries.length === 0 ? (
             <p className="text-xs text-slate-400 py-2">{lbl.logEmpty}</p>
           ) : (
-            sessionLog.map((entry, i) => {
+            reviewEntries.map(({ entry, date }, i) => {
               const cf = (iso: string) => { const d = new Date(iso); return fmtClock(d.getHours() * 60 + d.getMinutes(), prefs.timeFormat === "24h"); };
               return (
                 <div key={i} className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-canvas px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
-                  <span className="w-5 text-slate-400 text-[10px]">{i + 1}.</span>
+                   <span className="w-5 text-slate-400 text-[10px]">{i + 1}.</span>
+                   {date && <span className="text-[10px] text-slate-400">{date}</span>}
                   <span className="flex-1 truncate">{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span>
                   <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-500">{roleName(entry)}</span>
                   <span className="font-mono text-slate-400">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
-                  <span className={cn("font-mono font-semibold", entry.wasOvertime ? "text-red-500" : "text-emerald-600")}>
-                    {fmtTime(entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60))}{entry.wasOvertime ? ` (+${Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60) > 0 ? fmtTime(Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60)) : "0:00"})` : ""}
-                  </span>
+                   <span className={cn("font-mono font-semibold", entry.wasOvertime ? "text-red-500" : "text-emerald-600")}>
+                     {fmtTime(entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60))}{entry.wasOvertime ? ` (+${Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60) > 0 ? fmtTime(Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60)) : "0:00"})` : ""}
+                   </span>
+                   {onDeleteLog && entry.id && (
+                     <button onClick={(e) => { e.stopPropagation(); onDeleteLog(entry.id!); }}
+                       className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                       title="Delete log">
+                       <span className="material-symbols-outlined text-[14px]">close</span>
+                     </button>
+                   )}
                 </div>
               );
             })

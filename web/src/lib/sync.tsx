@@ -46,12 +46,14 @@ function isRemoteEmpty(state: {
   timeEntries: unknown[];
   goals: unknown[];
   interestedPeople: unknown[];
+  program?: { config?: { weeks?: unknown[] }; sessions?: unknown[] } | null;
 }) {
   return (
     state.serviceTypes.length === 0 &&
     state.timeEntries.length === 0 &&
     state.goals.length === 0 &&
     state.interestedPeople.length === 0
+    && (!state.program || ((state.program.config?.weeks ?? []).length === 0 && (state.program.sessions ?? []).length === 0))
   );
 }
 
@@ -128,6 +130,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
               goals: remote.goals,
               interested_people: remote.interestedPeople,
               interested_statuses: remote.interestedStatuses,
+              program: remote.program,
             },
             { source: "remote" },
           );
@@ -153,6 +156,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         goals: store.goals,
         interestedPeople: store.interestedPeople,
         interestedStatuses: store.interestedStatuses,
+        program: { config: store.presidingConfig, prefs: store.presidingPrefs, sessions: store.presidingSessions },
       },
       userId,
     );
@@ -250,6 +254,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
                 goals: remote.goals,
                 interested_people: remote.interestedPeople,
                 interested_statuses: remote.interestedStatuses,
+                program: remote.program,
               },
               { source: "remote" },
             );
@@ -309,6 +314,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
                   goals: remote.goals,
                   interested_people: remote.interestedPeople,
                   interested_statuses: remote.interestedStatuses,
+                  program: remote.program,
                 },
                 { source: "remote" },
               );

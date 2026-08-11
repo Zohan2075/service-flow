@@ -27,6 +27,8 @@ import {
   getDefaultPresidingConfig,
   getDefaultPresidingPrefs,
   getTimerRoles,
+  getProgramWeekId,
+  getJwWolWeekCatalogEntry,
 } from "@/types/presiding";
 
 // ─── IndexedDB storage adapter for Zustand ──────────────────────────────────
@@ -98,6 +100,7 @@ interface AppState {
   presidingConfig: PresidingConfig;
   presidingPrefs: PresidingPrefs;
   presidingSession: MeetingSession | null;
+  presidingSessions: MeetingSession[];
 
   // auth actions
   setProfile: (p: UserProfile | null) => void;
@@ -152,7 +155,9 @@ interface AppState {
   setPresidingPrefs: (patch: Partial<PresidingPrefs>) => void;
   startPresidingSession: () => void;
   addPresidingLogEntry: (entry: TimerLogEntry) => void;
+  deletePresidingLogEntry: (logId: string) => void;
   resetPresidingConfig: () => void;
+  ensureActiveProgramWeek: (date?: Date) => void;
 }
 
 interface SyncMetadata {
@@ -165,6 +170,12 @@ interface UiState {
 
 interface ImportDataOptions {
   source?: "local" | "remote";
+}
+
+interface RemoteProgramPayload {
+  config?: unknown;
+  prefs?: Partial<PresidingPrefs>;
+  sessions?: unknown[];
 }
 
 function uuid(): string {
@@ -324,15 +335,23 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   };
 }
 
-function migratePresidingConfig(raw: unknown): PresidingConfig {
+function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): PresidingConfig {
   const cfg = raw as Record<string, unknown> | null;
-  const normalizeSections = (sections: unknown[], inheritedGroup: SectionGroup = null): PresidingSection[] =>
-    sections.map((value) => {
+  const normalizeSections = (sections: unknown[], inheritedGroup: SectionGroup = null, initialOffset = 0): PresidingSection[] => {
+    let cursor = initialOffset;
+    return sections.map((value, index) => {
       const section = value as Partial<PresidingSection>;
       const group = section.group ?? inheritedGroup;
+      const explicitOffset = typeof section.scheduledStartMinute === "number"
+        ? Math.max(0, Math.floor(section.scheduledStartMinute))
+        : cursor;
+      const subsections = Array.isArray(section.subsections)
+        ? normalizeSections(section.subsections, group, explicitOffset)
+        : [];
       const normalized = {
         ...section,
         group: section.group ?? null,
+        scheduledStartMinute: explicitOffset,
         timerRoles: getTimerRoles({
           id: section.id ?? "",
           titleEn: section.titleEn ?? "",
@@ -340,39 +359,61 @@ function migratePresidingConfig(raw: unknown): PresidingConfig {
           group,
           timerRoles: section.timerRoles,
         }, inheritedGroup),
-        subsections: Array.isArray(section.subsections)
-          ? normalizeSections(section.subsections, group)
-          : [],
-      };
-      return normalized as PresidingSection;
+        subsections,
+      } as PresidingSection;
+      const end = subsections.length > 0
+        ? subsections.reduce((max, child) => Math.max(max, (child.scheduledStartMinute ?? explicitOffset) + child.duration), explicitOffset)
+        : explicitOffset + Math.max(0, normalized.duration ?? 0);
+      cursor = Math.max(cursor, end) + (index === 0 ? 5 : 0);
+      return normalized;
     });
+  };
+
+  const normalizeWeek = (value: unknown): ProgramWeek => {
+    const week = value as Partial<ProgramWeek>;
+    return {
+      ...week,
+      weekId: typeof week.weekId === "string" && week.weekId ? week.weekId : "default",
+      weekRangeEn: week.weekRangeEn ?? "",
+      weekRangeEs: week.weekRangeEs ?? "",
+      bibleReading: week.bibleReading ?? "",
+      sections: Array.isArray(week.sections) ? normalizeSections(week.sections) : [],
+    } as ProgramWeek;
+  };
 
   // Migrate old format: { sections, weekRangeEn, ... } → { weeks: [{ ... }], activeWeekId }
   if (cfg && Array.isArray(cfg.sections) && !Array.isArray(cfg.weeks)) {
     const defaultConfig = getDefaultPresidingConfig();
-    return {
+    return migratePresidingConfig({
       weeks: [{
         weekId: "default",
         weekRangeEn: (cfg.weekRangeEn as string) ?? defaultConfig.weeks[0].weekRangeEn,
         weekRangeEs: (cfg.weekRangeEs as string) ?? defaultConfig.weeks[0].weekRangeEs,
         bibleReading: (cfg.bibleReading as string) ?? defaultConfig.weeks[0].bibleReading,
-        sections: normalizeSections(cfg.sections),
+         sections: normalizeSections(cfg.sections),
       }],
       activeWeekId: "default",
-    };
+    });
   }
 
   if (!cfg || !Array.isArray(cfg.weeks)) return getDefaultPresidingConfig();
-  return {
-    ...cfg,
-    weeks: (cfg.weeks as unknown[]).map((value) => {
-      const week = value as Partial<ProgramWeek>;
-      return {
-        ...week,
-        sections: Array.isArray(week.sections) ? normalizeSections(week.sections) : [],
-      };
-    }),
-  } as PresidingConfig;
+  const weeks = (cfg.weeks as unknown[]).map(normalizeWeek);
+  if (!rollToCurrentWeek) {
+    return { weeks, activeWeekId: typeof cfg.activeWeekId === "string" ? cfg.activeWeekId : weeks[0]?.weekId ?? null };
+  }
+  const currentWeekId = getProgramWeekId();
+  const defaultWeek = weeks.find((week) => week.weekId === "default");
+  const currentWeek = weeks.find((week) => week.weekId === currentWeekId);
+  if (defaultWeek && !currentWeek) {
+    defaultWeek.weekId = currentWeekId;
+    const catalog = getJwWolWeekCatalogEntry(currentWeekId);
+    if (catalog) Object.assign(defaultWeek, catalog);
+  } else if (!currentWeek) {
+    const template = getDefaultPresidingConfig().weeks[0];
+    const catalog = getJwWolWeekCatalogEntry(currentWeekId);
+    weeks.push({ ...template, ...(catalog ?? {}), weekId: currentWeekId, sections: normalizeSections(template.sections) });
+  }
+  return { weeks, activeWeekId: currentWeekId };
 }
 
 function migratePresidingSession(raw: unknown): MeetingSession | null {
@@ -381,18 +422,47 @@ function migratePresidingSession(raw: unknown): MeetingSession | null {
   if (!Array.isArray(session.log)) return null;
 
   return {
+    id: session.id ?? uuid(),
+    weekId: session.weekId ?? getProgramWeekId(),
     date: session.date ?? new Date().toISOString().slice(0, 10),
     startedAt: session.startedAt ?? new Date().toISOString(),
     log: session.log.map((entry) => {
       const log = entry as TimerLogEntry;
       return {
         ...log,
+        id: log.id ?? uuid(),
         actualDurationSec: typeof log.actualDurationSec === "number"
           ? log.actualDurationSec
           : Math.max(0, (log.actualDurationMin ?? 0) * 60),
       };
     }),
   };
+}
+
+function migratePresidingSessions(raw: unknown, current: MeetingSession | null): MeetingSession[] {
+  const values = Array.isArray(raw) ? raw : [];
+  const sessions = values
+    .map((value) => migratePresidingSession(value))
+    .filter((value): value is MeetingSession => Boolean(value));
+  if (current && !sessions.some((session) => session.id === current.id)) sessions.push(current);
+  return sessions;
+}
+
+function preserveLocalAssigneeNames(local: PresidingConfig, remote: PresidingConfig): PresidingConfig {
+  const names = new Map<string, string>();
+  local.weeks.forEach((week) => {
+    const collect = (sections: PresidingSection[]) => sections.forEach((section) => {
+      if (section.assigneeName) names.set(`${week.weekId}:${section.id}`, section.assigneeName);
+      collect(section.subsections);
+    });
+    collect(week.sections);
+  });
+  const copy = (weekId: string, sections: PresidingSection[]): PresidingSection[] => sections.map((section) => ({
+    ...section,
+    assigneeName: names.get(`${weekId}:${section.id}`) ?? "",
+    subsections: copy(weekId, section.subsections),
+  }));
+  return { ...remote, weeks: remote.weeks.map((week) => ({ ...week, sections: copy(week.weekId, week.sections) })) };
 }
 
 function normalizeTimeEntry(entry: TimeEntry): TimeEntry {
@@ -610,6 +680,7 @@ export const useStore = create<AppState>()(
       presidingConfig: getDefaultPresidingConfig(),
       presidingPrefs: getDefaultPresidingPrefs(),
       presidingSession: null,
+      presidingSessions: [],
 
       // ── Auth ────────────────────────────────────────────────────────────
       setProfile: (p) =>
@@ -634,8 +705,9 @@ export const useStore = create<AppState>()(
               syncMetadata: INITIAL_SYNC_METADATA,
               uiState: INITIAL_UI_STATE,
               presidingConfig: getDefaultPresidingConfig(),
-              presidingPrefs: getDefaultPresidingPrefs(),
-              presidingSession: null,
+               presidingPrefs: getDefaultPresidingPrefs(),
+               presidingSession: null,
+               presidingSessions: [],
             };
           }
 
@@ -653,8 +725,9 @@ export const useStore = create<AppState>()(
           syncMetadata: INITIAL_SYNC_METADATA,
           uiState: INITIAL_UI_STATE,
           presidingConfig: getDefaultPresidingConfig(),
-          presidingPrefs: getDefaultPresidingPrefs(),
-          presidingSession: null,
+           presidingPrefs: getDefaultPresidingPrefs(),
+           presidingSession: null,
+           presidingSessions: [],
         }),
 
       // ── Settings / Profile ──────────────────────────────────────────────
@@ -1050,6 +1123,7 @@ export const useStore = create<AppState>()(
       // ── Bulk ───────────────────────────────────────────────────────────
       importData: (file, options) =>
         set((s) => {
+          const remoteProgram = (file as BackupFile & { program?: RemoteProgramPayload }).program;
           // Guard: refuse to import if all data arrays are empty (non-remote source).
           // Prevents importing a blank/empty backup file from wiping existing data.
           if (options?.source !== "remote") {
@@ -1069,6 +1143,12 @@ export const useStore = create<AppState>()(
           );
           const serviceTypeMap = new Map(serviceTypes.map((serviceType) => [serviceType.id, serviceType]));
 
+          const nextProgramConfig = remoteProgram?.config
+            ? migratePresidingConfig(remoteProgram.config)
+            : s.presidingConfig;
+          const nextSessions = remoteProgram?.sessions
+            ? migratePresidingSessions(remoteProgram.sessions, null)
+            : s.presidingSessions;
           return {
             settings,
             profile: mergeImportedProfile(s.profile, file.profile),
@@ -1077,6 +1157,12 @@ export const useStore = create<AppState>()(
             goals: normalizeGoals(file.goals, serviceTypeMap),
             interestedPeople: file.interested_people ?? [],
             interestedStatuses: file.interested_statuses?.length ? file.interested_statuses : get().interestedStatuses,
+            presidingConfig: remoteProgram?.config ? preserveLocalAssigneeNames(s.presidingConfig, nextProgramConfig) : nextProgramConfig,
+            presidingPrefs: remoteProgram?.prefs && typeof remoteProgram.prefs === "object"
+              ? { ...s.presidingPrefs, ...(remoteProgram.prefs as Partial<PresidingPrefs>) }
+              : s.presidingPrefs,
+            presidingSession: nextSessions[nextSessions.length - 1] ?? null,
+            presidingSessions: nextSessions,
             syncMetadata:
               options?.source === "remote"
                 ? INITIAL_SYNC_METADATA
@@ -1094,35 +1180,81 @@ export const useStore = create<AppState>()(
         })),
 
       // ── Presiding ────────────────────────────────────────────────────────
-      setPresidingConfig: (cfg) => set({ presidingConfig: cfg }),
+      setPresidingConfig: (cfg) => set(() => {
+        const normalized = migratePresidingConfig(cfg, false);
+        const requestedWeekId = cfg.activeWeekId;
+        return withPendingSync({
+          presidingConfig: requestedWeekId && normalized.weeks.some((week) => week.weekId === requestedWeekId)
+            ? { ...normalized, activeWeekId: requestedWeekId }
+            : normalized,
+        });
+      }),
       setPresidingPrefs: (patch) =>
-        set((s) => ({ presidingPrefs: { ...s.presidingPrefs, ...patch } })),
+        set((s) => withPendingSync({ presidingPrefs: { ...s.presidingPrefs, ...patch } })),
+      ensureActiveProgramWeek: (date = new Date()) =>
+        set((s) => {
+          const weekId = getProgramWeekId(date);
+          const existing = s.presidingConfig.weeks.find((week) => week.weekId === weekId);
+          if (s.presidingConfig.activeWeekId === weekId && existing) return {};
+          const catalog = getJwWolWeekCatalogEntry(weekId);
+          const template = getDefaultPresidingConfig().weeks[0];
+          const weeks = existing
+            ? s.presidingConfig.weeks
+            : [...s.presidingConfig.weeks, { ...template, ...(catalog ?? {}), weekId }];
+          return withPendingSync({ presidingConfig: { weeks, activeWeekId: weekId } });
+        }),
       startPresidingSession: () =>
-        set({
-          presidingSession: {
+        set((s) => {
+          const session: MeetingSession = {
+            id: uuid(),
+            weekId: s.presidingConfig.activeWeekId ?? getProgramWeekId(),
             date: new Date().toISOString().slice(0, 10),
             startedAt: new Date().toISOString(),
             log: [],
-          },
+          };
+          return withPendingSync({ presidingSession: session, presidingSessions: [...s.presidingSessions, session] });
         }),
       addPresidingLogEntry: (entry) =>
-        set((s) => ({
-          presidingSession: s.presidingSession
-            ? {
-              ...s.presidingSession,
-              log: [...s.presidingSession.log, {
-                ...entry,
-                actualDurationSec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60),
-              }],
-            }
-            : null,
-        })),
+        set((s) => {
+          const current = s.presidingSession ?? {
+            id: uuid(),
+            weekId: s.presidingConfig.activeWeekId ?? getProgramWeekId(),
+            date: new Date().toISOString().slice(0, 10),
+            startedAt: new Date().toISOString(),
+            log: [],
+          };
+          const nextSession = {
+            ...current,
+            log: [...current.log, {
+              ...entry,
+              id: entry.id ?? uuid(),
+              actualDurationSec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60),
+            }],
+          };
+          const sessions = s.presidingSessions.some((session) => session.id === nextSession.id)
+            ? s.presidingSessions.map((session) => session.id === nextSession.id ? nextSession : session)
+            : [...s.presidingSessions, nextSession];
+          return withPendingSync({ presidingSession: nextSession, presidingSessions: sessions });
+        }),
+      deletePresidingLogEntry: (logId) =>
+        set((s) => {
+          const removeFromLog = (log: TimerLogEntry[]) => log.filter((entry) => entry.id !== logId);
+          const nextSession = s.presidingSession
+            ? { ...s.presidingSession, log: removeFromLog(s.presidingSession.log) }
+            : null;
+          const nextSessions = s.presidingSessions.map((session) => ({
+            ...session,
+            log: removeFromLog(session.log),
+          })).filter((session) => session.log.length > 0 || session.id === nextSession?.id);
+          return withPendingSync({ presidingSession: nextSession, presidingSessions: nextSessions });
+        }),
       resetPresidingConfig: () =>
-        set({
+        set(() => withPendingSync({
           presidingConfig: getDefaultPresidingConfig(),
           presidingPrefs: getDefaultPresidingPrefs(),
           presidingSession: null,
-        }),
+          presidingSessions: [],
+        })),
 
       resetData: () =>
         set(
@@ -1135,10 +1267,11 @@ export const useStore = create<AppState>()(
             interestedPeople: [],
             interestedStatuses: [...DEFAULT_INTERESTED_STATUSES],
             uiState: INITIAL_UI_STATE,
-            presidingConfig: getDefaultPresidingConfig(),
-            presidingPrefs: getDefaultPresidingPrefs(),
-            presidingSession: null,
-          })
+             presidingConfig: getDefaultPresidingConfig(),
+             presidingPrefs: getDefaultPresidingPrefs(),
+             presidingSession: null,
+             presidingSessions: [],
+           })
         ),
     }),
     {
@@ -1155,8 +1288,9 @@ export const useStore = create<AppState>()(
         interestedStatuses: state.interestedStatuses,
         syncMetadata: state.syncMetadata,
         presidingConfig: state.presidingConfig,
-        presidingPrefs: state.presidingPrefs,
-        presidingSession: state.presidingSession,
+         presidingPrefs: state.presidingPrefs,
+         presidingSession: state.presidingSession,
+         presidingSessions: state.presidingSessions,
       }) as unknown as AppState,
       // CRITICAL: Prevent stale IndexedDB data from overwriting freshly-synced
       // Supabase data. If current state has real data (sync already imported),
@@ -1198,9 +1332,10 @@ export const useStore = create<AppState>()(
             : (p.interestedStatuses?.length ? p.interestedStatuses : current.interestedStatuses),
           syncMetadata: hasCurrentData ? current.syncMetadata : (p.syncMetadata ?? current.syncMetadata),
           uiState: current.uiState,
-           presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingConfig),
-           presidingPrefs: p.presidingPrefs ?? current.presidingPrefs,
-           presidingSession: migratePresidingSession(p.presidingSession ?? current.presidingSession),
+            presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingConfig),
+            presidingPrefs: p.presidingPrefs ?? current.presidingPrefs,
+            presidingSession: migratePresidingSession(p.presidingSession ?? current.presidingSession),
+            presidingSessions: migratePresidingSessions(p.presidingSessions, migratePresidingSession(p.presidingSession ?? current.presidingSession)),
         };
       },
     }
