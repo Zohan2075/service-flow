@@ -245,6 +245,6 @@ export const SECTION_COLORS: Record<string, string> = {
 
 export const SECTION_ICONS: Record<string, string> = {
   treasures: "diamond",
-  fieldMinistry: "person",
-  living: "home",
+  fieldMinistry: "agriculture",
+  living: "pets",
 };
