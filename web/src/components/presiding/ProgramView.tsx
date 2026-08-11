@@ -71,7 +71,7 @@ function SectionIcon({ icon, className }: { icon: string | null; className?: str
   if (icon === "sheep") {
     return (
       <svg viewBox="0 0 1280 1278" className={className} fill="currentColor">
-        <g transform="rotate(180 640 639)">
+        <g transform="translate(0 1278) scale(.1 -.1)">
         <path d="M10960 12738 l-64 -41 -153 27 -153 28 -92 -27 c-51 -15 -98 -30
 -104 -34 -6 -3 -45 -45 -88 -93 l-77 -88 -173 0 c-122 0 -177 -4 -188 -12 -9
 -7 -69 -71 -132 -142 -102 -115 -126 -135 -213 -187 -91 -53 -102 -63 -153
@@ -941,10 +941,10 @@ function InterventionRow({
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1.5 flex-wrap">
               <span className="font-bold text-sm truncate" style={{ color }}>{title}</span>
-               <span className="text-[10px] text-slate-400 font-mono shrink-0 whitespace-nowrap">{startTime} → {endTime}</span>
+                <span className="text-xs text-slate-400 font-mono font-semibold shrink-0 whitespace-nowrap">{startTime} → {endTime}</span>
             </div>
             <div className="mt-0.5 flex items-center gap-2">
-              <span className="text-[10px] text-slate-400">{section.duration} {lbl.min}</span>
+              <span className="text-xs text-slate-400">{section.duration} {lbl.min}</span>
               {section.assigneeName && (
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full text-slate-500 dark:text-slate-400"
                   style={{ backgroundColor: color + "15" }}>
