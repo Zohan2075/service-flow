@@ -1,7 +1,7 @@
-// ServiceFlow Service Worker — offline-first caching for static export
+// ServiceFlow Service Worker — offline-first caching + push-ready
 // Bump CACHE version to force update after deploy.
 
-const CACHE = "serviceflow-v10";
+const CACHE = "serviceflow-v11";
 const IS_LOCALHOST =
   self.location.hostname === "localhost" ||
   self.location.hostname === "127.0.0.1";
@@ -98,3 +98,49 @@ async function networkFirst(request) {
     });
   }
 }
+
+// ─── Push Notifications (ready for Phase 2) ────────────────────────────────
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  try {
+      const payload = event.data.json();
+      const data = payload.data || {};
+      event.waitUntil(
+        self.registration.showNotification(payload.title || "ServiceFlow", {
+          body: payload.body || "",
+        icon: "/android-chrome-192x192.png",
+        badge: "/android-chrome-192x192.png",
+        tag: payload.tag || "serviceflow",
+          data: { ...data, url: data.url || payload.url || "/interested" },
+        requireInteraction: payload.requireInteraction ?? false,
+        vibrate: [200, 100, 200],
+      })
+    );
+  } catch {
+    // Fallback: plain text notification
+    event.waitUntil(
+      self.registration.showNotification("ServiceFlow", {
+        body: event.data.text(),
+        icon: "/android-chrome-192x192.png",
+        badge: "/android-chrome-192x192.png",
+      })
+    );
+  }
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/interested";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          if ("navigate" in client) return client.navigate(url).then(() => client.focus());
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});

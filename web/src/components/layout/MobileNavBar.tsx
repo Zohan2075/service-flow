@@ -1,18 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useStore } from "@/lib/store";
-
-const navItems = [
-  { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
-  { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
-  { href: "/interested", icon: "people", labelKey: "nav.interested" as const },
-  { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
-];
 
 export default function MobileNavBar() {
   const pathname = usePathname();
@@ -20,6 +14,7 @@ export default function MobileNavBar() {
   const { t } = useT();
   const { user, isLoading, signOut } = useSupabaseAuth();
   const interestedNavLabel = useStore((s) => s.settings.interestedNavLabel);
+  const programEnabled = useStore((s) => s.settings.programEnabled);
   const hasLocalData = useStore(
     (s) =>
       s.timeEntries.length > 0 ||
@@ -35,6 +30,17 @@ export default function MobileNavBar() {
 
   // Show nav items if: logged in, OR auth still loading (offline), OR has local data
   const showNav = !!user || isLoading || hasLocalData;
+
+  const navItems = useMemo(() => {
+    const all = [
+      { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
+      ...(programEnabled ? [{ href: "/presiding", icon: "menu_book", labelKey: "nav.program" as const }] : []),
+      { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
+      { href: "/interested", icon: "people", labelKey: "nav.interested" as const },
+      { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
+    ];
+    return all;
+  }, [programEnabled]);
 
   if (!showNav) {
     return (

@@ -1,12 +1,17 @@
 {
   "name": "ServiceFlow",
   "short_name": "ServiceFlow",
-  "description": "Service time tracking dashboard",
+  "description": "Service time tracking & program dashboard",
   "start_url": "/calendar",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "background_color": "#f5f7f8",
   "theme_color": "#6366f1",
+  "categories": ["productivity", "utilities"],
+  "lang": "en",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

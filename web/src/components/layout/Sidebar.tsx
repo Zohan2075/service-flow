@@ -1,19 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import { useT } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
-  { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
-  { href: "/interested", icon: "people", labelKey: "nav.interested" as const },
-  { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
-];
 
 export default function Sidebar() {
   const pathname = usePathname() ?? "";
@@ -30,6 +24,18 @@ export default function Sidebar() {
     .toUpperCase() ?? "SF";
 
   const interestedNavLabel = useStore((s) => s.settings.interestedNavLabel);
+  const programEnabled = useStore((s) => s.settings.programEnabled);
+
+  const navItems = useMemo(() => {
+    const all = [
+      { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
+      ...(programEnabled ? [{ href: "/presiding", icon: "menu_book", labelKey: "nav.program" as const }] : []),
+      { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
+      { href: "/interested", icon: "people", labelKey: "nav.interested" as const },
+      { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
+    ];
+    return all;
+  }, [programEnabled]);
 
   const handleSignOut = () => {
     signOut();

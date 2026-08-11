@@ -24,8 +24,9 @@ import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
+import { useInterestedNotifications } from "@/components/InterestedNotificationsProvider";
 import { dateTimeString, monthShortYear, useT } from "@/lib/i18n";
-import type { GoalDefinition, ServiceType, InterestedStatusConfig } from "@/types/data";
+import type { GoalDefinition, ServiceType, InterestedStatusConfig, NotificationSound } from "@/types/data";
 import toast from "react-hot-toast";
 
 const COLORS = [
@@ -66,7 +67,7 @@ type CombinedGoalDraft = CombinedGoalPayload & {
   id: string;
 };
 
-type SettingsCategory = "account" | "appearance" | "language" | "entries" | "reports" | "interested" | "data" | "danger";
+type SettingsCategory = "account" | "appearance" | "language" | "entries" | "reports" | "interested" | "notifications" | "program" | "data" | "danger";
 
 const PROFILE_IMAGE_MAX_SIZE = 320;
 const PROFILE_IMAGE_OUTPUT_QUALITY = 0.84;
@@ -129,6 +130,7 @@ export default function SettingsPage() {
   const { t, language, setLanguage } = useT();
   const { user, isLoading: authLoading, isConfigured, error: authError, signIn } = useSupabaseAuth();
   const sync = useSync();
+  const notificationApi = useInterestedNotifications();
 
   const serviceTypes = useStore((s) => s.serviceTypes);
   const profile = useStore((s) => s.profile);
@@ -154,6 +156,9 @@ export default function SettingsPage() {
   const resetData = useStore((s) => s.resetData);
   const updateSettings = useStore((s) => s.updateSettings);
   const updateProfile = useStore((s) => s.updateProfile);
+  const programPrefs = useStore((s) => s.presidingPrefs);
+  const setPresidingPrefs = useStore((s) => s.setPresidingPrefs);
+  const resetPresidingConfig = useStore((s) => s.resetPresidingConfig);
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -454,6 +459,8 @@ export default function SettingsPage() {
     { id: "entries", label: t("settings.entriesServices"), icon: "construction" },
     { id: "reports", label: t("settings.reportsGoals"), icon: "flag" },
     { id: "interested", label: settings.interestedSettingsLabel || t("settings.interestedPeople"), icon: "people" },
+    { id: "notifications", label: t("settings.notifications"), icon: "notifications" },
+    { id: "program", label: t("settings.program"), icon: "menu_book" },
     { id: "data", label: t("settings.dataBackup"), icon: "cloud_upload" },
     { id: "danger", label: t("settings.dangerZone"), icon: "warning" },
   ];
@@ -781,6 +788,86 @@ export default function SettingsPage() {
                   className="sr-only"
                 />
               </label>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Notifications ─────────────────────────────────────────────────── */}
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "notifications" && "hidden")}>
+          <div className="mb-5 space-y-1">
+            <h3 className="font-bold text-lg">{t("settings.notifications")}</h3>
+            <p className="text-sm text-slate-500">{t("settings.notificationsDesc")}</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">{t("settings.notificationsEnabled")}</p>
+                <p className="text-xs text-slate-400">{t("settings.notificationsEnabledDesc")}</p>
+              </div>
+              <button type="button" onClick={() => settings.notifications.enabled ? void notificationApi.disableNotifications() : void notificationApi.enableNotifications()} disabled={notificationApi.busy} aria-pressed={settings.notifications.enabled} className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50", settings.notifications.enabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700")}>
+                <div className={cn("absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform", settings.notifications.enabled ? "translate-x-[1.375rem]" : "translate-x-0.5")} />
+              </button>
+            </div>
+
+            <div className={cn("rounded-2xl border px-4 py-4", notificationApi.supported ? "border-slate-100 dark:border-slate-800" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20")}>
+              <div className="flex items-start gap-3">
+                <span className={cn("material-symbols-outlined", notificationApi.supported && notificationApi.permission === "granted" ? "text-green-500" : "text-amber-500")}>notifications_active</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{notificationApi.supported ? t("settings.notificationStatus") : t("settings.notificationsUnsupported")}</p>
+                  <p className="text-xs text-slate-400">
+                    {notificationApi.permission === "granted"
+                      ? notificationApi.subscribed ? t("settings.notificationsSubscribed") : t("settings.notificationsPermissionOnly")
+                      : notificationApi.permission === "denied" ? t("settings.notificationsBlocked") : t("settings.notificationsNotEnabled")}
+                  </p>
+                  {notificationApi.error && <p className="mt-1 text-xs text-red-500">{notificationApi.error}</p>}
+                </div>
+                {notificationApi.permission !== "granted" && notificationApi.supported && (
+                  <button type="button" onClick={() => void notificationApi.enableNotifications()} disabled={notificationApi.busy} className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{t("settings.enableNotifications")}</button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.notificationAdvance")}</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" min={0} max={30} value={settings.notifications.advanceDays} onChange={(event) => updateSettings({ notifications: { ...settings.notifications, advanceDays: Math.min(30, Math.max(0, Number(event.target.value) || 0)) } })} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800" />
+                  <span className="shrink-0 text-xs text-slate-400">{t("settings.days")}</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.notificationFrequency")}</label>
+                <select value={settings.notifications.frequencyMinutes} onChange={(event) => updateSettings({ notifications: { ...settings.notifications, frequencyMinutes: Number(event.target.value) } })} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
+                  {[5, 15, 30, 60, 120, 360, 720, 1440].map((minutes) => <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} min` : `${minutes / 60} h`}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.notificationSound")}</label>
+                <select value={settings.notifications.sound} onChange={(event) => updateSettings({ notifications: { ...settings.notifications, sound: event.target.value as NotificationSound } })} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
+                  <option value="off">{t("settings.soundOff")}</option>
+                  <option value="soft">{t("settings.soundSoft")}</option>
+                  <option value="chime">{t("settings.soundChime")}</option>
+                  <option value="alert">{t("settings.soundAlert")}</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2 dark:border-slate-800">
+                <div>
+                  <p className="text-sm font-semibold">{t("settings.notificationPreview")}</p>
+                  <p className="text-xs text-slate-400">{t("settings.notificationPreviewDesc")}</p>
+                </div>
+                <button type="button" onClick={() => updateSettings({ notifications: { ...settings.notifications, showPreview: !settings.notifications.showPreview } })} aria-pressed={settings.notifications.showPreview} className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors", settings.notifications.showPreview ? "bg-primary" : "bg-slate-300 dark:bg-slate-700")}>
+                  <div className={cn("absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform", settings.notifications.showPreview ? "translate-x-[1.375rem]" : "translate-x-0.5")} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row">
+              <button type="button" onClick={() => void notificationApi.testNotification()} disabled={notificationApi.busy || !notificationApi.supported} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><span className="material-symbols-outlined text-lg">notifications</span>{t("settings.testNotification")}</button>
+              <button type="button" onClick={() => void notificationApi.testSound()} disabled={notificationApi.busy} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold dark:border-slate-700"><span className="material-symbols-outlined text-lg">volume_up</span>{t("settings.testSound")}</button>
             </div>
           </div>
         </div>
@@ -1264,6 +1351,117 @@ export default function SettingsPage() {
 
           {/* Add Status button */}
           <AddStatusButton onAdd={addInterestedStatus} />
+        </div>
+
+        {/* ── Program / Presiding ───────────────────────────────────────────── */}
+        <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "program" && "hidden")}>
+          <h3 className="font-bold text-lg mb-1">{t("settings.program")}</h3>
+          <p className="text-sm text-slate-400 mb-4">{t("settings.programDesc")}</p>
+
+          <div className="space-y-3">
+            {/* Enable/Disable toggle */}
+            <button
+              onClick={() => updateSettings({ programEnabled: !settings.programEnabled })}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold">{t("settings.enableProgram")}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{t("settings.enableProgramDesc")}</p>
+              </div>
+              <div className={cn(
+                "relative h-6 w-11 rounded-full transition-colors",
+                settings.programEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"
+              )}>
+                <div className={cn(
+                  "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
+                  settings.programEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
+                )} />
+              </div>
+            </button>
+
+            {/* Meeting start time */}
+            <div className="pt-2">
+              <p className="text-sm font-semibold">Meeting Start Time</p>
+              <div className="flex items-center gap-2 mt-2">
+                <select
+                  value={programPrefs.meetingStartHour}
+                  onChange={(e) => setPresidingPrefs({ meetingStartHour: parseInt(e.target.value) })}
+                  className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>{h.toString().padStart(2, "0")}</option>
+                  ))}
+                </select>
+                <span className="text-lg font-bold">:</span>
+                <select
+                  value={programPrefs.meetingStartMinute}
+                  onChange={(e) => setPresidingPrefs({ meetingStartMinute: parseInt(e.target.value) })}
+                  className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                    <option key={m} value={m}>{m.toString().padStart(2, "0")}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Time format */}
+            <div className="pt-2">
+              <p className="text-sm font-semibold">Time Format</p>
+              <p className="text-xs text-slate-400 mt-0.5 mb-2">Display scheduled and review times in 12-hour or 24-hour format</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPresidingPrefs({ timeFormat: "24h" })}
+                  className={cn(
+                    "flex-1 rounded-lg py-2 text-sm font-bold transition-colors",
+                    programPrefs.timeFormat === "24h" ? "bg-primary text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                  )}
+                >
+                  24h
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresidingPrefs({ timeFormat: "12h" })}
+                  className={cn(
+                    "flex-1 rounded-lg py-2 text-sm font-bold transition-colors",
+                    programPrefs.timeFormat === "12h" ? "bg-primary text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                  )}
+                >
+                  12h
+                </button>
+              </div>
+            </div>
+
+            {/* Auto-advance */}
+            <button
+              onClick={() => setPresidingPrefs({ autoAdvance: !programPrefs.autoAdvance })}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold">Auto-advance</p>
+                <p className="text-xs text-slate-400 mt-0.5">Automatically move to next part when time ends</p>
+              </div>
+              <span className={`text-sm font-bold ${programPrefs.autoAdvance ? "text-primary" : "text-slate-400"}`}>
+                {programPrefs.autoAdvance ? "ON" : "OFF"}
+              </span>
+            </button>
+
+            {/* Reset */}
+            <button
+              onClick={() => {
+                if (window.confirm("Reset all program sections to S-38 defaults?")) {
+                  resetPresidingConfig();
+                }
+              }}
+              className="w-full flex items-center justify-between px-4 py-4 bg-surface rounded-xl border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-red-600 dark:text-red-400">Reset Program</p>
+                <p className="text-xs text-slate-400 mt-0.5">Restore default S-38 meeting structure</p>
+              </div>
+            </button>
+          </div>
         </div>
 
         {/* ── Data Management ──────────────────────────────────────────────── */}

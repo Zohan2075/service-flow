@@ -9,3 +9,12 @@ backend/.env
 backend-legacy/.env
 backend/.venv/
 **/__pycache__/
+
+# Presidents sub-app
+Presidents/.next/
+Presidents/node_modules/
+Presidents/out/
+Presidents/tsconfig.tsbuildinfo
+
+# Supabase CLI temp state
+supabase/.temp/

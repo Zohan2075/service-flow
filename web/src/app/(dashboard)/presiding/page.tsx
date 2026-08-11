@@ -27,7 +27,11 @@ export default function PresidingPage() {
   }, [session]);
 
   // Safety: if config isn't ready yet during hydration
-  if (!config?.sections?.length) {
+  const activeWeek = useMemo(() =>
+    config?.weeks?.find((w) => w.weekId === config.activeWeekId) ?? config?.weeks?.[0],
+    [config]
+  );
+  if (!activeWeek?.sections?.length) {
     return <div className="flex items-center justify-center h-full text-sm text-slate-400">Loading program...</div>;
   }
 

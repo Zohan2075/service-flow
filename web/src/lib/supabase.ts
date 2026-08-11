@@ -25,6 +25,27 @@ export function getSupabase(): SupabaseClient {
   return _client;
 }
 
+export async function upsertPushSubscription(userId: string, subscription: PushSubscriptionJSON): Promise<void> {
+  const endpoint = subscription.endpoint;
+  const keys = subscription.keys;
+  if (!endpoint || !keys?.p256dh || !keys.auth) throw new Error("Push subscription is missing encryption keys");
+  const { error } = await getSupabase().from("push_subscriptions").upsert({
+    user_id: userId,
+    endpoint,
+    p256dh: keys.p256dh,
+    auth: keys.auth,
+    expiration_time: subscription.expirationTime ?? null,
+    user_agent: typeof navigator === "undefined" ? null : navigator.userAgent,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id,endpoint" });
+  if (error) throw new Error(`push subscription: ${error.message}`);
+}
+
+export async function deletePushSubscription(userId: string): Promise<void> {
+  const { error } = await getSupabase().from("push_subscriptions").delete().eq("user_id", userId);
+  if (error) throw new Error(`push subscription removal: ${error.message}`);
+}
+
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
 export async function pushProfile(

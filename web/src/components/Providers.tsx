@@ -4,6 +4,7 @@ import { SupabaseAuthProvider } from "@/components/SupabaseAuthProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { I18nProvider } from "@/lib/i18n";
 import { SyncProvider } from "@/lib/sync";
+import { InterestedNotificationsProvider } from "@/components/InterestedNotificationsProvider";
 import { Toaster } from "react-hot-toast";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -12,13 +13,15 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <I18nProvider>
           <SyncProvider>
-            {children}
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                className: "dark:bg-slate-800 dark:text-white",
-              }}
-            />
+            <InterestedNotificationsProvider>
+              {children}
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  className: "dark:bg-slate-800 dark:text-white",
+                }}
+              />
+            </InterestedNotificationsProvider>
           </SyncProvider>
         </I18nProvider>
       </ThemeProvider>

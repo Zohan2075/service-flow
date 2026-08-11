@@ -181,13 +181,16 @@ export default function InterestedPeoplePage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {/* Completed toggle */}
-                    <button
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); updateInterestedPerson(person.id, { completed: !person.completed }); } }}
                       onClick={(e) => {
                         e.stopPropagation();
                         updateInterestedPerson(person.id, { completed: !person.completed });
                       }}
                       className={cn(
-                        "inline-flex items-center justify-center size-7 rounded-full transition-colors",
+                        "inline-flex items-center justify-center size-7 rounded-full transition-colors cursor-pointer",
                         person.completed
                           ? "bg-green-500 text-white"
                           : "text-slate-300 dark:text-slate-600 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
@@ -195,7 +198,7 @@ export default function InterestedPeoplePage() {
                       title={person.completed ? t("interested.markActive") : t("interested.markCompleted")}
                     >
                       <span className="material-symbols-outlined text-base">{person.completed ? "check_circle" : "radio_button_unchecked"}</span>
-                    </button>
+                    </span>
                     {person.latitude != null && person.longitude != null && (
                       <a
                         href={`https://www.google.com/maps?q=${person.latitude},${person.longitude}`}

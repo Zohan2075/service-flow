@@ -16,6 +16,16 @@ export type WeekStart = "sunday" | "monday";
 
 export type Language = "en" | "es";
 
+export type NotificationSound = "off" | "soft" | "chime" | "alert";
+
+export interface NotificationPreferences {
+  enabled: boolean;
+  advanceDays: number;
+  frequencyMinutes: number;
+  sound: NotificationSound;
+  showPreview: boolean;
+}
+
 export interface AppSettings {
   theme: "light" | "dark" | "system";
   language: Language;
@@ -36,11 +46,15 @@ export interface AppSettings {
   planModeEnabled: boolean;
   // Reports
   showYearTotals: boolean;
+  // Interested People notifications
+  notifications: NotificationPreferences;
   // Auto-sync to Supabase (opt-out)
   autoSync: boolean;
   // Monthly hour cap (self-imposed limit, opt-in)
   monthlyCapEnabled: boolean;
   monthlyCapHours: number;        // e.g. 55
+  // Program / Presiding
+  programEnabled: boolean;        // show Program nav + functionality
   // Navigation labels (customizable)
   interestedNavLabel?: string;    // custom label for "Interested People" nav item
   interestedSettingsLabel?: string; // custom label for "Interested People" settings section heading

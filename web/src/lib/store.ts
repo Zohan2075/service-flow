@@ -11,8 +11,23 @@ import type {
   GoalScope,
   InterestedPerson,
   InterestedStatusConfig,
+  NotificationPreferences,
 } from "@/types/data";
 import { DEFAULT_INTERESTED_STATUSES } from "@/types/data";
+import type {
+  PresidingConfig,
+  PresidingPrefs,
+  PresidingSection,
+  ProgramWeek,
+  SectionGroup,
+  MeetingSession,
+  TimerLogEntry,
+} from "@/types/presiding";
+import {
+  getDefaultPresidingConfig,
+  getDefaultPresidingPrefs,
+  getTimerRoles,
+} from "@/types/presiding";
 
 // ─── IndexedDB storage adapter for Zustand ──────────────────────────────────
 
@@ -79,6 +94,11 @@ interface AppState {
   syncMetadata: SyncMetadata;
   uiState: UiState;
 
+  // presiding
+  presidingConfig: PresidingConfig;
+  presidingPrefs: PresidingPrefs;
+  presidingSession: MeetingSession | null;
+
   // auth actions
   setProfile: (p: UserProfile | null) => void;
   signOut: () => void;
@@ -126,6 +146,13 @@ interface AppState {
   importData: (file: BackupFile, options?: ImportDataOptions) => void;
   completeSync: (syncedAt: string) => void;
   resetData: () => void;
+
+  // presiding actions
+  setPresidingConfig: (cfg: PresidingConfig) => void;
+  setPresidingPrefs: (patch: Partial<PresidingPrefs>) => void;
+  startPresidingSession: () => void;
+  addPresidingLogEntry: (entry: TimerLogEntry) => void;
+  resetPresidingConfig: () => void;
 }
 
 interface SyncMetadata {
@@ -237,9 +264,17 @@ const INITIAL_SETTINGS: AppSettings = {
   defaultDurationMinutes: 0,
   planModeEnabled: false,
   showYearTotals: true,
+  notifications: {
+    enabled: false,
+    advanceDays: 1,
+    frequencyMinutes: 30,
+    sound: "off",
+    showPreview: false,
+  },
   autoSync: true,
   monthlyCapEnabled: false,
   monthlyCapHours: 55,
+  programEnabled: false,
   lastSyncedAt: null,
 };
 
@@ -261,12 +296,102 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   delete rest.customSurface;
   delete rest.customBackground;
 
+  const rawNotifications = input.notifications as Partial<NotificationPreferences> | undefined;
+  const notificationSounds = new Set(["off", "soft", "chime", "alert"]);
+  const notifications = {
+    ...INITIAL_SETTINGS.notifications,
+    ...(rawNotifications ?? {}),
+    enabled: rawNotifications?.enabled === true,
+    advanceDays: typeof rawNotifications?.advanceDays === "number" && Number.isFinite(rawNotifications.advanceDays)
+      ? Math.min(30, Math.max(0, Math.floor(rawNotifications.advanceDays)))
+      : INITIAL_SETTINGS.notifications.advanceDays,
+    frequencyMinutes: typeof rawNotifications?.frequencyMinutes === "number" && Number.isFinite(rawNotifications.frequencyMinutes)
+      ? Math.min(1440, Math.max(5, Math.floor(rawNotifications.frequencyMinutes)))
+      : INITIAL_SETTINGS.notifications.frequencyMinutes,
+    sound: typeof rawNotifications?.sound === "string" && notificationSounds.has(rawNotifications.sound)
+      ? rawNotifications.sound as NotificationPreferences["sound"]
+      : INITIAL_SETTINGS.notifications.sound,
+    showPreview: rawNotifications?.showPreview === true,
+  } satisfies NotificationPreferences;
+
   return {
     ...rest,
+    notifications,
     customSurfaceLight: (settings?.customSurfaceLight as string | null) ?? legacySurface ?? rest.customSurfaceLight,
     customSurfaceDark: (settings?.customSurfaceDark as string | null) ?? legacySurface ?? rest.customSurfaceDark,
     customBackgroundLight: (settings?.customBackgroundLight as string | null) ?? legacyBackground ?? rest.customBackgroundLight,
     customBackgroundDark: (settings?.customBackgroundDark as string | null) ?? legacyBackground ?? rest.customBackgroundDark,
+  };
+}
+
+function migratePresidingConfig(raw: unknown): PresidingConfig {
+  const cfg = raw as Record<string, unknown> | null;
+  const normalizeSections = (sections: unknown[], inheritedGroup: SectionGroup = null): PresidingSection[] =>
+    sections.map((value) => {
+      const section = value as Partial<PresidingSection>;
+      const group = section.group ?? inheritedGroup;
+      const normalized = {
+        ...section,
+        group: section.group ?? null,
+        timerRoles: getTimerRoles({
+          id: section.id ?? "",
+          titleEn: section.titleEn ?? "",
+          titleEs: section.titleEs ?? "",
+          group,
+          timerRoles: section.timerRoles,
+        }, inheritedGroup),
+        subsections: Array.isArray(section.subsections)
+          ? normalizeSections(section.subsections, group)
+          : [],
+      };
+      return normalized as PresidingSection;
+    });
+
+  // Migrate old format: { sections, weekRangeEn, ... } → { weeks: [{ ... }], activeWeekId }
+  if (cfg && Array.isArray(cfg.sections) && !Array.isArray(cfg.weeks)) {
+    const defaultConfig = getDefaultPresidingConfig();
+    return {
+      weeks: [{
+        weekId: "default",
+        weekRangeEn: (cfg.weekRangeEn as string) ?? defaultConfig.weeks[0].weekRangeEn,
+        weekRangeEs: (cfg.weekRangeEs as string) ?? defaultConfig.weeks[0].weekRangeEs,
+        bibleReading: (cfg.bibleReading as string) ?? defaultConfig.weeks[0].bibleReading,
+        sections: normalizeSections(cfg.sections),
+      }],
+      activeWeekId: "default",
+    };
+  }
+
+  if (!cfg || !Array.isArray(cfg.weeks)) return getDefaultPresidingConfig();
+  return {
+    ...cfg,
+    weeks: (cfg.weeks as unknown[]).map((value) => {
+      const week = value as Partial<ProgramWeek>;
+      return {
+        ...week,
+        sections: Array.isArray(week.sections) ? normalizeSections(week.sections) : [],
+      };
+    }),
+  } as PresidingConfig;
+}
+
+function migratePresidingSession(raw: unknown): MeetingSession | null {
+  if (!raw || typeof raw !== "object") return null;
+  const session = raw as Partial<MeetingSession>;
+  if (!Array.isArray(session.log)) return null;
+
+  return {
+    date: session.date ?? new Date().toISOString().slice(0, 10),
+    startedAt: session.startedAt ?? new Date().toISOString(),
+    log: session.log.map((entry) => {
+      const log = entry as TimerLogEntry;
+      return {
+        ...log,
+        actualDurationSec: typeof log.actualDurationSec === "number"
+          ? log.actualDurationSec
+          : Math.max(0, (log.actualDurationMin ?? 0) * 60),
+      };
+    }),
   };
 }
 
@@ -482,6 +607,9 @@ export const useStore = create<AppState>()(
       interestedStatuses: [...DEFAULT_INTERESTED_STATUSES],
       syncMetadata: INITIAL_SYNC_METADATA,
       uiState: INITIAL_UI_STATE,
+      presidingConfig: getDefaultPresidingConfig(),
+      presidingPrefs: getDefaultPresidingPrefs(),
+      presidingSession: null,
 
       // ── Auth ────────────────────────────────────────────────────────────
       setProfile: (p) =>
@@ -505,6 +633,9 @@ export const useStore = create<AppState>()(
               interestedPeople: [],
               syncMetadata: INITIAL_SYNC_METADATA,
               uiState: INITIAL_UI_STATE,
+              presidingConfig: getDefaultPresidingConfig(),
+              presidingPrefs: getDefaultPresidingPrefs(),
+              presidingSession: null,
             };
           }
 
@@ -521,6 +652,9 @@ export const useStore = create<AppState>()(
           interestedPeople: [],
           syncMetadata: INITIAL_SYNC_METADATA,
           uiState: INITIAL_UI_STATE,
+          presidingConfig: getDefaultPresidingConfig(),
+          presidingPrefs: getDefaultPresidingPrefs(),
+          presidingSession: null,
         }),
 
       // ── Settings / Profile ──────────────────────────────────────────────
@@ -959,6 +1093,37 @@ export const useStore = create<AppState>()(
           syncMetadata: INITIAL_SYNC_METADATA,
         })),
 
+      // ── Presiding ────────────────────────────────────────────────────────
+      setPresidingConfig: (cfg) => set({ presidingConfig: cfg }),
+      setPresidingPrefs: (patch) =>
+        set((s) => ({ presidingPrefs: { ...s.presidingPrefs, ...patch } })),
+      startPresidingSession: () =>
+        set({
+          presidingSession: {
+            date: new Date().toISOString().slice(0, 10),
+            startedAt: new Date().toISOString(),
+            log: [],
+          },
+        }),
+      addPresidingLogEntry: (entry) =>
+        set((s) => ({
+          presidingSession: s.presidingSession
+            ? {
+              ...s.presidingSession,
+              log: [...s.presidingSession.log, {
+                ...entry,
+                actualDurationSec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60),
+              }],
+            }
+            : null,
+        })),
+      resetPresidingConfig: () =>
+        set({
+          presidingConfig: getDefaultPresidingConfig(),
+          presidingPrefs: getDefaultPresidingPrefs(),
+          presidingSession: null,
+        }),
+
       resetData: () =>
         set(
           withPendingSync({
@@ -970,6 +1135,9 @@ export const useStore = create<AppState>()(
             interestedPeople: [],
             interestedStatuses: [...DEFAULT_INTERESTED_STATUSES],
             uiState: INITIAL_UI_STATE,
+            presidingConfig: getDefaultPresidingConfig(),
+            presidingPrefs: getDefaultPresidingPrefs(),
+            presidingSession: null,
           })
         ),
     }),
@@ -986,6 +1154,9 @@ export const useStore = create<AppState>()(
         interestedPeople: state.interestedPeople,
         interestedStatuses: state.interestedStatuses,
         syncMetadata: state.syncMetadata,
+        presidingConfig: state.presidingConfig,
+        presidingPrefs: state.presidingPrefs,
+        presidingSession: state.presidingSession,
       }) as unknown as AppState,
       // CRITICAL: Prevent stale IndexedDB data from overwriting freshly-synced
       // Supabase data. If current state has real data (sync already imported),
@@ -1027,6 +1198,9 @@ export const useStore = create<AppState>()(
             : (p.interestedStatuses?.length ? p.interestedStatuses : current.interestedStatuses),
           syncMetadata: hasCurrentData ? current.syncMetadata : (p.syncMetadata ?? current.syncMetadata),
           uiState: current.uiState,
+           presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingConfig),
+           presidingPrefs: p.presidingPrefs ?? current.presidingPrefs,
+           presidingSession: migratePresidingSession(p.presidingSession ?? current.presidingSession),
         };
       },
     }

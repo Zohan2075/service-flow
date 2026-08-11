@@ -1,0 +1,2 @@
+[functions.send-interested-notifications]
+verify_jwt = false
