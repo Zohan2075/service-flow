@@ -65,6 +65,31 @@ function cn(...classes: (string | false | undefined | null)[]): string {
 
 /* ---------- labels ---------- */
 
+function SectionIcon({ icon, className }: { icon: string | null; className?: string }) {
+  if (!icon) return null;
+  if (icon === "sheep") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+        <ellipse cx="12" cy="10" rx="6" ry="7" />
+        <circle cx="7" cy="5" r="1.2" />
+        <circle cx="17" cy="5" r="1.2" />
+        <ellipse cx="12" cy="17" rx="1.5" ry="2.5" />
+        <line x1="11" y1="18" x2="9" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <line x1="13" y1="18" x2="15" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <ellipse cx="12" cy="8" rx="1.5" ry="1.8" />
+      </svg>
+    );
+  }
+  if (icon === "wheat") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+        <path d="M12 2c-.4 2-.6 4-.4 6 0 .4.1.8.2 1.2l-.8.4c-.6-1.8-1-3.6-.8-5.6l-.8.2c-.2 2 .2 4 .8 6-.2-.2-.4-.4-.6-.6-.8-1.6-1-3.4-.6-5l-.8-.2c-.4 1.8-.2 3.6.6 5.2l-.8.6c.4-.8 1-1.4 1.6-1.8v5c0 .6.4 1 1 1h2c.6 0 1-.4 1-1v-5c.6.4 1.2 1 1.6 1.8l-.8-.6c.8-1.6 1-3.4.6-5.2l-.8.2c.4 1.6.2 3.4-.6 5-.2.2-.4.4-.6.6.6-2 1-4 .8-6l-.8-.2c.2 2-.2 3.8-.8 5.6l-.8-.4c.1-.4.2-.8.2-1.2.2-2 0-4-.4-6h-2z" />
+      </svg>
+    );
+  }
+  return <span className={cn("material-symbols-outlined", className)}>{icon}</span>;
+}
+
 const L = {
   en: {
     chairman: "CHAIRMAN", song: "Song & Prayer", openingCmt: "Opening Comments",
@@ -488,7 +513,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                   {/* Group header */}
                   <div className="px-4 py-3 flex items-center gap-3 border-b" style={{ borderColor: col + "40" }}>
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: col }}>
-                      <span className="material-symbols-outlined text-sm">{icon}</span>
+                      <SectionIcon icon={icon} className="text-sm" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-black uppercase tracking-wide" style={{ color: col }}>
