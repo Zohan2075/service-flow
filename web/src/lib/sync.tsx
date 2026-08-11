@@ -48,12 +48,18 @@ function isRemoteEmpty(state: {
   interestedPeople: unknown[];
   program?: { config?: { weeks?: unknown[] }; sessions?: unknown[] } | null;
 }) {
+  const hasProgramData = Boolean(
+    state.program && (
+      (state.program.config?.weeks ?? []).length > 0 ||
+      (state.program.sessions ?? []).length > 0
+    ),
+  );
   return (
     state.serviceTypes.length === 0 &&
     state.timeEntries.length === 0 &&
     state.goals.length === 0 &&
     state.interestedPeople.length === 0
-    && (!state.program || ((state.program.config?.weeks ?? []).length === 0 && (state.program.sessions ?? []).length === 0))
+    && !hasProgramData
   );
 }
 
@@ -103,7 +109,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       store.serviceTypes.length > 0 ||
       store.timeEntries.length > 0 ||
       store.goals.length > 0 ||
-      store.interestedPeople.length > 0;
+      store.interestedPeople.length > 0 ||
+      store.presidingConfig.weeks.length > 0 ||
+      store.presidingSessions.length > 0;
 
     // SAFETY: Never push empty data — always pull first to check if remote
     // has data. Last line of defense against overwriting Supabase with an
@@ -116,7 +124,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           remote.serviceTypes.length > 0 ||
           remote.timeEntries.length > 0 ||
           remote.goals.length > 0 ||
-          remote.interestedPeople.length > 0;
+          remote.interestedPeople.length > 0 ||
+          Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0));
 
         if (remoteHasData) {
           importData(
@@ -233,13 +242,16 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             store.serviceTypes.length > 0 ||
             store.timeEntries.length > 0 ||
             store.goals.length > 0 ||
-            store.interestedPeople.length > 0;
+            store.interestedPeople.length > 0 ||
+            store.presidingConfig.weeks.length > 0 ||
+            store.presidingSessions.length > 0;
 
           const remoteHasData =
             remote.serviceTypes.length > 0 ||
             remote.timeEntries.length > 0 ||
             remote.goals.length > 0 ||
-            remote.interestedPeople.length > 0;
+            remote.interestedPeople.length > 0 ||
+            Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0));
 
           if (remoteHasData) {
             // Remote has data — import it (this is the primary source of truth)
@@ -284,11 +296,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           );
 
           const store = useStore.getState();
-          const hasLocalData =
-            store.serviceTypes.length > 0 ||
-            store.timeEntries.length > 0 ||
-            store.goals.length > 0 ||
-            store.interestedPeople.length > 0;
+            const hasLocalData =
+              store.serviceTypes.length > 0 ||
+              store.timeEntries.length > 0 ||
+              store.goals.length > 0 ||
+              store.interestedPeople.length > 0 ||
+              store.presidingConfig.weeks.length > 0 ||
+              store.presidingSessions.length > 0;
 
           if (isRemoteEmpty(remote) && hasLocalData) {
             await performSync();

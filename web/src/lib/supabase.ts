@@ -544,23 +544,41 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
   }
 
   const currentInterventionKeys = new Set(interventions.map((row) => `${row.week_id}:${row.section_id}`));
-  const { data: existingInterventions } = await client.from("program_interventions").select("week_id,section_id").eq("user_id", userId);
-  await Promise.all((existingInterventions ?? [])
+  const { data: existingInterventions, error: interventionsQueryError } = await client
+    .from("program_interventions")
+    .select("week_id,section_id")
+    .eq("user_id", userId);
+  if (interventionsQueryError) throw new Error(`pushProgram interventions cleanup query: ${interventionsQueryError.message}`);
+  const interventionDeletes = await Promise.all((existingInterventions ?? [])
     .filter((row) => !currentInterventionKeys.has(`${row.week_id}:${row.section_id}`))
     .map((row) => client.from("program_interventions").delete().eq("user_id", userId).eq("week_id", row.week_id).eq("section_id", row.section_id)));
+  const interventionDeleteError = interventionDeletes.find((result) => result.error)?.error;
+  if (interventionDeleteError) throw new Error(`pushProgram interventions cleanup: ${interventionDeleteError.message}`);
   const currentSessionIds = new Set(sessions.map((row) => row.id));
   const currentLogIds = new Set(logs.map((row) => row.id));
-  const { data: existingLogs } = await client.from("program_timer_logs").select("id").eq("user_id", userId);
+  const { data: existingLogs, error: logsQueryError } = await client.from("program_timer_logs").select("id").eq("user_id", userId);
+  if (logsQueryError) throw new Error(`pushProgram logs cleanup query: ${logsQueryError.message}`);
   const staleLogs = (existingLogs ?? []).map((row) => row.id).filter((id) => !currentLogIds.has(id));
-  if (staleLogs.length > 0) await client.from("program_timer_logs").delete().eq("user_id", userId).in("id", staleLogs);
-  const { data: existingSessions } = await client.from("program_sessions").select("id").eq("user_id", userId);
+  if (staleLogs.length > 0) {
+    const { error: staleLogsError } = await client.from("program_timer_logs").delete().eq("user_id", userId).in("id", staleLogs);
+    if (staleLogsError) throw new Error(`pushProgram logs cleanup: ${staleLogsError.message}`);
+  }
+  const { data: existingSessions, error: sessionsQueryError } = await client.from("program_sessions").select("id").eq("user_id", userId);
+  if (sessionsQueryError) throw new Error(`pushProgram sessions cleanup query: ${sessionsQueryError.message}`);
   const staleSessions = (existingSessions ?? []).map((row) => row.id).filter((id) => !currentSessionIds.has(id));
-  if (staleSessions.length > 0) await client.from("program_sessions").delete().eq("user_id", userId).in("id", staleSessions);
+  if (staleSessions.length > 0) {
+    const { error: staleSessionsError } = await client.from("program_sessions").delete().eq("user_id", userId).in("id", staleSessions);
+    if (staleSessionsError) throw new Error(`pushProgram sessions cleanup: ${staleSessionsError.message}`);
+  }
 
   const currentWeekKeys = new Set(weeks.map((row) => row.week_id));
-  const { data: existingWeeks } = await client.from("program_weeks").select("week_id").eq("user_id", userId);
+  const { data: existingWeeks, error: weeksQueryError } = await client.from("program_weeks").select("week_id").eq("user_id", userId);
+  if (weeksQueryError) throw new Error(`pushProgram weeks cleanup query: ${weeksQueryError.message}`);
   const staleWeeks = (existingWeeks ?? []).map((row) => row.week_id).filter((id) => !currentWeekKeys.has(id));
-  if (staleWeeks.length > 0) await client.from("program_weeks").delete().eq("user_id", userId).in("week_id", staleWeeks);
+  if (staleWeeks.length > 0) {
+    const { error: staleWeeksError } = await client.from("program_weeks").delete().eq("user_id", userId).in("week_id", staleWeeks);
+    if (staleWeeksError) throw new Error(`pushProgram weeks cleanup: ${staleWeeksError.message}`);
+  }
 }
 
 export async function pullProgram(userId: string): Promise<ProgramSyncState | null> {
