@@ -75,7 +75,7 @@ const L = {
     assignee: "Assignee", presiding: "Presiding", reader: "Reader", conductor: "Conductor",
     stop: "Stop",
     overtime: "Overtime", complete: "Complete", restart: "Restart",
-    totalTime: "Total", sessionLog: "Session Log", logEmpty: "No parts timed yet.",
+     totalTime: "Total", sessionLog: "Session Log", logEmpty: "No parts timed yet.", end: "End", editLog: "Edit log", deleteLog: "Delete log", save: "Save", cancel: "Cancel",
     noSections: "No parts. Reset in Settings.", 
     weekLabel: "Week", newWeek: "New Week", deleteWeek: "Delete Week",
     deleteWeekConfirm: "Delete this week's program?",
@@ -91,7 +91,7 @@ const L = {
     assignee: "Asignado", presiding: "Presidente", reader: "Lector", conductor: "Conductor",
     stop: "Detener",
     overtime: "Excedido", complete: "Completa", restart: "Reiniciar",
-    totalTime: "Total", sessionLog: "Registro", logEmpty: "Aún no se ha medido ninguna parte.",
+     totalTime: "Total", sessionLog: "Registro", logEmpty: "Aún no se ha medido ninguna parte.", end: "Fin", editLog: "Editar registro", deleteLog: "Eliminar registro", save: "Guardar", cancel: "Cancelar",
     noSections: "No hay partes. Restablecer en Configuración.",
     weekLabel: "Semana", newWeek: "Nueva Semana", deleteWeek: "Eliminar Semana",
     deleteWeekConfirm: "¿Eliminar el programa de esta semana?",
@@ -232,10 +232,11 @@ function useProgramTimers(sections: PresidingSection[], onLog: (entry: TimerLogE
 interface Props {
   lang: "en" | "es"; config: PresidingConfig; prefs: PresidingPrefs;
   sessionLog: TimerLogEntry[]; sessionHistory?: MeetingSession[]; onConfigChange: (cfg: PresidingConfig) => void; onLogEntry: (entry: TimerLogEntry) => void;
-  onDeleteLog?: (logId: string) => void;
+   onDeleteLog?: (logId: string) => void;
+  onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void;
 }
 
-export default function ProgramView({ lang, config, prefs, sessionLog, sessionHistory = [], onConfigChange, onLogEntry, onDeleteLog }: Props) {
+export default function ProgramView({ lang, config, prefs, sessionLog, sessionHistory = [], onConfigChange, onLogEntry, onDeleteLog, onUpdateLog }: Props) {
   const isEs = lang === "es"; const lbl = L[lang];
 
   const activeWeek = useMemo(() =>
@@ -275,7 +276,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
   // Inline editing state
   const [inlineId, setInlineId] = useState<string | null>(null);
-  const [inlineField, setInlineField] = useState<"title" | "assignee" | "duration" | "start" | null>(null);
+  const [inlineField, setInlineField] = useState<"title" | "assignee" | "duration" | "start" | "end" | null>(null);
 
   const updateSection = (id: string, fn: (s: PresidingSection) => PresidingSection) => {
     const walk = (list: PresidingSection[]): PresidingSection[] => list.map(s => {
@@ -320,19 +321,23 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   const clock = (m: number) => fmtClock(m, prefs.timeFormat === "24h");
   const startMinTotal = prefs.meetingStartHour * 60 + prefs.meetingStartMinute;
 
-  let legacyOffset = 0; const startTimes: number[] = [];
+  let legacyOffset = 0; const startTimes: number[] = []; const endTimes: number[] = [];
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
     if (s.subsections.length > 0) {
-      for (const sub of s.subsections) {
-        const offset = sub.scheduledStartMinute ?? legacyOffset;
-        startTimes.push(startMinTotal + offset);
-        legacyOffset = Math.max(legacyOffset, offset + sub.duration);
+        for (const sub of s.subsections) {
+          const offset = sub.scheduledStartMinute ?? legacyOffset;
+          const endOffset = sub.scheduledEndMinute ?? (offset + sub.duration);
+          startTimes.push(startMinTotal + offset);
+          endTimes.push(startMinTotal + endOffset);
+          legacyOffset = Math.max(legacyOffset, endOffset);
       }
     } else {
       const offset = s.scheduledStartMinute ?? legacyOffset;
+      const endOffset = s.scheduledEndMinute ?? (offset + s.duration);
       startTimes.push(startMinTotal + offset);
-      legacyOffset = Math.max(legacyOffset, offset + s.duration);
+      endTimes.push(startMinTotal + endOffset);
+      legacyOffset = Math.max(legacyOffset, endOffset);
     }
     // Song & Prayer offset: first timed part after opening starts 5 min later
     if (i === 0) legacyOffset += 5;
@@ -501,7 +506,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                       const flatIdx = intIdx++; const num = partNum++;
                       const timerRoles = getTimerRoles(sub, grp);
                       return <InterventionRow key={sub.id} num={num} section={sub} color={col}
-                         startTime={clock(startTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
+                         startTime={clock(startTimes[flatIdx] ?? 0)} endTime={clock(endTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
                         getTimerState={getTimerState} isEs={isEs} lbl={lbl}
                         inlineId={inlineId} inlineField={inlineField}
                         onTap={() => { setInlineId(sub.id); setInlineField("title"); }}
@@ -525,7 +530,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
               const timerRoles = getTimerRoles(sec);
               cards.push(
                 <InterventionRow key={sec.id} num={num} section={sec} color={col}
-                  startTime={clock(startTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
+                   startTime={clock(startTimes[flatIdx] ?? 0)} endTime={clock(endTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
                   getTimerState={getTimerState} isEs={isEs} lbl={lbl}
                   inlineId={inlineId} inlineField={inlineField}
                   onTap={() => { setInlineId(sec.id); setInlineField("title"); }}
@@ -555,7 +560,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
       {/* ===== SESSION REVIEW ===== */}
       <SessionReview sessionLog={sessionLog} sessionHistory={sessionHistory} prefs={prefs} isEs={isEs} lbl={lbl}
-        onDeleteLog={onDeleteLog} />
+        onDeleteLog={onDeleteLog} onUpdateLog={onUpdateLog} />
     </div>
   );
 }
@@ -603,16 +608,16 @@ function TimerLegend({ isEs, lbl }: { isEs: boolean; lbl: typeof L.en }) {
 /* ---------- InterventionRow (card-based) ---------- */
 
 function InterventionRow({
-  num, section, color, startTime, meetingStartMinute, timerRoles, getTimerState, isEs, lbl,
+  num, section, color, startTime, endTime, meetingStartMinute, timerRoles, getTimerState, isEs, lbl,
   inlineId, inlineField, onTap, onEditField, onClose, onUpdate, onRemove, onToggleTimer,
   standalone = false,
 }: {
-  num: number; section: PresidingSection; color: string; startTime: string; meetingStartMinute: number;
+  num: number; section: PresidingSection; color: string; startTime: string; endTime: string; meetingStartMinute: number;
   timerRoles: TimerRole[];
   getTimerState: (sectionId: string, role: TimerRole | null) => { elapsedSec: number; running: boolean };
   isEs: boolean; lbl: typeof L.en;
-  inlineId: string | null; inlineField: "title" | "assignee" | "duration" | "start" | null;
-  onTap: () => void; onEditField: (f: "title" | "assignee" | "duration" | "start") => void;
+  inlineId: string | null; inlineField: "title" | "assignee" | "duration" | "start" | "end" | null;
+  onTap: () => void; onEditField: (f: "title" | "assignee" | "duration" | "start" | "end") => void;
   onClose: () => void; onUpdate: (fn: (s: PresidingSection) => PresidingSection) => void;
   onRemove: () => void; onToggleTimer: (role: TimerRole | null) => void;
   standalone?: boolean;
@@ -620,8 +625,13 @@ function InterventionRow({
   const isThisInline = inlineId === section.id;
   const title = isEs ? (section.titleEs || section.titleEn || "") : (section.titleEn || section.titleEs || "");
   const startOffset = section.scheduledStartMinute ?? 0;
+  const endOffset = section.scheduledEndMinute ?? (startOffset + section.duration);
   const startInput = (() => {
     const minute = (meetingStartMinute + startOffset) % (24 * 60);
+    return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+  })();
+  const endInput = (() => {
+    const minute = (meetingStartMinute + endOffset) % (24 * 60);
     return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
   })();
 
@@ -642,11 +652,11 @@ function InterventionRow({
           </div>
           {/* Field tabs */}
           <div className="flex gap-1 flex-wrap">
-            {(["title", "assignee", "duration", "start"] as const).map(f => (
+            {(["title", "assignee", "duration", "start", "end"] as const).map(f => (
               <button key={f} onClick={() => onEditField(f)}
                 className={cn("rounded-lg px-3 py-1 text-xs font-medium transition-colors",
                   inlineField === f ? "bg-primary text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500")}>
-                  {f === "title" ? (isEs ? "ES/EN" : "EN/ES") : f === "assignee" ? (isEs ? "Nombre" : "Name") : f === "start" ? (isEs ? "Inicio" : "Start") : lbl.min}
+                   {f === "title" ? (isEs ? "ES/EN" : "EN/ES") : f === "assignee" ? (isEs ? "Nombre" : "Name") : f === "start" ? (isEs ? "Inicio" : "Start") : f === "end" ? lbl.end : lbl.min}
               </button>
             ))}
           </div>
@@ -663,6 +673,16 @@ function InterventionRow({
                 const target = hours * 60 + minutes;
                 const offset = (target - meetingStartMinute + 24 * 60) % (24 * 60);
                 onUpdate(s => ({ ...s, scheduledStartMinute: offset }));
+              }}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary" autoFocus />
+          ) : inlineField === "end" ? (
+            <input type="time" value={endInput}
+              onChange={e => {
+                const [hours, minutes] = e.target.value.split(":").map(Number);
+                if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
+                const target = hours * 60 + minutes;
+                const offset = (target - meetingStartMinute + 24 * 60) % (24 * 60);
+                onUpdate(s => ({ ...s, scheduledEndMinute: Math.max(s.scheduledStartMinute ?? 0, offset) }));
               }}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary" autoFocus />
           ) : inlineField === "assignee" ? (
@@ -695,7 +715,7 @@ function InterventionRow({
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1.5 flex-wrap">
               <span className="font-bold text-sm truncate" style={{ color }}>{title}</span>
-              <span className="text-[10px] text-slate-400 font-mono shrink-0">{startTime}</span>
+               <span className="text-[10px] text-slate-400 font-mono shrink-0 whitespace-nowrap">{startTime} → {endTime}</span>
             </div>
             <div className="mt-0.5 flex items-center gap-2">
               <span className="text-[10px] text-slate-400">{section.duration} {lbl.min}</span>
@@ -728,11 +748,57 @@ function InterventionRow({
 
 /* ---------- Session Review ---------- */
 
-function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteLog }: {
+function toLocalDateTimeInput(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromLocalDateTimeInput(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function LogEditor({ entry, lbl, onCancel, onSave }: {
+  entry: TimerLogEntry; lbl: typeof L.en;
+  onCancel: () => void; onSave: (patch: Partial<TimerLogEntry>) => void;
+}) {
+  const [role, setRole] = useState<TimerRole | "none">(entry.role ?? "none");
+  const [start, setStart] = useState(toLocalDateTimeInput(entry.actualStartISO));
+  const [end, setEnd] = useState(toLocalDateTimeInput(entry.actualEndISO));
+  const [scheduledDurationMin, setScheduledDurationMin] = useState(entry.scheduledDurationMin);
+  return (
+    <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+      <label className="min-w-0 text-[11px] font-semibold">Role
+        <select value={role} onChange={(event) => setRole(event.target.value as TimerRole | "none")} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700">
+          <option value="none">{lbl.timer}</option><option value="assignee">{lbl.assignee}</option><option value="presiding">{lbl.presiding}</option>
+        </select>
+      </label>
+      <label className="min-w-0 text-[11px] font-semibold">{lbl.min}
+        <input type="number" min={0} max={240} value={scheduledDurationMin} onChange={(event) => setScheduledDurationMin(Math.max(0, Number(event.target.value) || 0))} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
+      </label>
+      <label className="min-w-0 text-[11px] font-semibold">Start
+        <input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
+      </label>
+      <label className="min-w-0 text-[11px] font-semibold">{lbl.end}
+        <input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
+      </label>
+      <div className="flex gap-2 sm:col-span-2">
+        <button type="button" onClick={() => onSave({ role: role === "none" ? undefined : role, actualStartISO: fromLocalDateTimeInput(start), actualEndISO: fromLocalDateTimeInput(end), scheduledDurationMin })} className="min-h-10 flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">{lbl.save}</button>
+        <button type="button" onClick={onCancel} className="min-h-10 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-slate-700">{lbl.cancel}</button>
+      </div>
+    </div>
+  );
+}
+
+function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteLog, onUpdateLog }: {
   sessionLog: TimerLogEntry[]; sessionHistory: MeetingSession[]; prefs: PresidingPrefs; isEs: boolean; lbl: typeof L.en;
   onDeleteLog?: (logId: string) => void;
+  onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void;
 }) {
   const [show, setShow] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const reviewEntries = sessionHistory.length > 0
     ? sessionHistory.flatMap((session) => session.log.map((entry) => ({ entry, date: session.date })))
     : sessionLog.map((entry) => ({ entry, date: "" }));
@@ -751,30 +817,33 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteL
         <span className="text-slate-400">{show ? "▲" : "▼"}</span>
       </button>
       {show && (
-        <div id="session-review-log" className="min-h-0 max-h-[min(20rem,50vh)] overflow-y-auto overscroll-contain px-5 pb-5 space-y-2">
+         <div id="session-review-log" className="min-h-0 max-h-[min(28rem,55vh)] overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 pb-5 space-y-2">
           {reviewEntries.length === 0 ? (
             <p className="text-xs text-slate-400 py-2">{lbl.logEmpty}</p>
           ) : (
-            reviewEntries.map(({ entry, date }, i) => {
-              const cf = (iso: string) => { const d = new Date(iso); return fmtClock(d.getHours() * 60 + d.getMinutes(), prefs.timeFormat === "24h"); };
-              return (
-                <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-canvas px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
-                   <span className="w-5 text-slate-400 text-[10px]">{i + 1}.</span>
-                   {date && <span className="text-[10px] text-slate-400">{date}</span>}
-                   <span className="min-w-0 flex-1 basis-[10rem] truncate">{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span>
-                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-500">{roleName(entry)}</span>
-                  <span className="font-mono text-slate-400">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
-                   <span className={cn("font-mono font-semibold", entry.wasOvertime ? "text-red-500" : "text-emerald-600")}>
-                     {fmtTime(entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60))}{entry.wasOvertime ? ` (+${Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60) > 0 ? fmtTime(Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60)) : "0:00"})` : ""}
-                   </span>
-                   {onDeleteLog && entry.id && (
-                     <button onClick={(e) => { e.stopPropagation(); onDeleteLog(entry.id!); }}
-                       className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                       title="Delete log">
-                       <span className="material-symbols-outlined text-[14px]">close</span>
-                     </button>
+             reviewEntries.map(({ entry, date }, i) => {
+               const cf = (iso: string) => { const d = new Date(iso); return fmtClock(d.getHours() * 60 + d.getMinutes(), prefs.timeFormat === "24h"); };
+               const editing = editingId === entry.id;
+               return (
+                 <div key={entry.id ?? `${date}-${entry.sectionId}-${i}`} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-canvas px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                   {editing && entry.id && onUpdateLog ? (
+                     <LogEditor entry={entry} lbl={lbl} onCancel={() => setEditingId(null)} onSave={(patch) => { onUpdateLog(entry.id!, patch); setEditingId(null); }} />
+                   ) : (
+                     <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
+                       <span className="text-slate-400 text-[10px]">{i + 1}.</span>
+                       <div className="min-w-0 break-words">{date && <span className="mr-2 text-[10px] text-slate-400">{date}</span>}<span>{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span></div>
+                       <div className="flex flex-wrap justify-end gap-1">
+                         <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-500">{roleName(entry)}</span>
+                         {entry.id && onUpdateLog && <button type="button" onClick={() => setEditingId(entry.id!)} aria-label={`${lbl.editLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-primary/10 hover:text-primary"><span className="material-symbols-outlined text-base">edit</span></button>}
+                         {onDeleteLog && entry.id && <button type="button" onClick={() => onDeleteLog(entry.id!)} aria-label={`${lbl.deleteLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"><span className="material-symbols-outlined text-base">delete</span></button>}
+                       </div>
+                       <span className="col-span-2 font-mono text-[11px] text-slate-400">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
+                       <span className={cn("justify-self-end font-mono font-semibold", entry.wasOvertime ? "text-red-500" : "text-emerald-600")}>
+                      {fmtTime(entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60))}{entry.wasOvertime ? ` (+${Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60) > 0 ? fmtTime(Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60)) : "0:00"})` : ""}
+                       </span>
+                     </div>
                    )}
-                </div>
+                 </div>
               );
             })
           )}

@@ -46,12 +46,13 @@ function isRemoteEmpty(state: {
   timeEntries: unknown[];
   goals: unknown[];
   interestedPeople: unknown[];
-  program?: { config?: { weeks?: unknown[] }; sessions?: unknown[] } | null;
+  program?: { config?: { weeks?: unknown[] }; sessions?: unknown[]; tombstones?: unknown[] } | null;
 }) {
   const hasProgramData = Boolean(
     state.program && (
       (state.program.config?.weeks ?? []).length > 0 ||
-      (state.program.sessions ?? []).length > 0
+      (state.program.sessions ?? []).length > 0 ||
+      (state.program.tombstones ?? []).length > 0
     ),
   );
   return (
@@ -125,7 +126,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           remote.timeEntries.length > 0 ||
           remote.goals.length > 0 ||
           remote.interestedPeople.length > 0 ||
-          Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0));
+           Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0));
 
         if (remoteHasData) {
           importData(
@@ -165,7 +166,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         goals: store.goals,
         interestedPeople: store.interestedPeople,
         interestedStatuses: store.interestedStatuses,
-        program: { config: store.presidingConfig, prefs: store.presidingPrefs, sessions: store.presidingSessions },
+       program: { config: store.presidingConfig, prefs: store.presidingPrefs, sessions: store.presidingSessions, tombstones: store.presidingTombstones },
       },
       userId,
     );
@@ -251,7 +252,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             remote.timeEntries.length > 0 ||
             remote.goals.length > 0 ||
             remote.interestedPeople.length > 0 ||
-            Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0));
+             Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0));
 
           if (remoteHasData) {
             // Remote has data — import it (this is the primary source of truth)

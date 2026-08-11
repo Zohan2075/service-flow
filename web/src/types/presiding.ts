@@ -15,6 +15,10 @@ export interface PresidingSection {
   timerRoles?: TimerRole[];
   /** Minutes after the meeting start. */
   scheduledStartMinute?: number;
+  /** Minutes after the meeting start. */
+  scheduledEndMinute?: number;
+  /** Client/server conflict timestamp. */
+  updatedAt?: string;
 }
 
 export interface ProgramWeek {
@@ -23,6 +27,7 @@ export interface ProgramWeek {
   weekRangeEs: string;      // "3-9 DE AGOSTO"
   bibleReading: string;
   sections: PresidingSection[];
+  updatedAt?: string;
 }
 
 export interface ProgramWeekCatalogEntry {
@@ -78,6 +83,7 @@ export interface PresidingPrefs {
   meetingStartHour: number;   // 0-23
   meetingStartMinute: number; // 0-59
   timeFormat: "24h" | "12h";
+  updatedAt?: string;
 }
 
 export interface TimerLogEntry {
@@ -94,6 +100,8 @@ export interface TimerLogEntry {
   role?: TimerRole;
   /** Second precision for ascending timers; legacy entries use actualDurationMin. */
   actualDurationSec?: number;
+  /** Client/server conflict timestamp. */
+  updatedAt?: string;
 }
 
 export interface MeetingSession {
@@ -102,6 +110,16 @@ export interface MeetingSession {
   date: string;               // "yyyy-MM-dd"
   startedAt: string;          // ISO datetime
   log: TimerLogEntry[];
+  updatedAt?: string;
+}
+
+export type ProgramTombstoneType = "week" | "intervention" | "session" | "log";
+
+export interface ProgramTombstone {
+  entityType: ProgramTombstoneType;
+  entityKey: string;
+  deletedAt: string;
+  updatedAt: string;
 }
 
 function isBibleReadingTitle(title: string): boolean {

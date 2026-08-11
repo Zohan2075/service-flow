@@ -13,6 +13,7 @@ export default function PresidingPage() {
   const sessionLog = useMemo(() => session?.log ?? [], [session]);
   const setConfig = useStore((s) => s.setPresidingConfig);
   const addLogEntry = useStore((s) => s.addPresidingLogEntry);
+  const updateLogEntry = useStore((s) => s.updatePresidingLogEntry);
   const deleteLogEntry = useStore((s) => s.deletePresidingLogEntry);
   const startSession = useStore((s) => s.startPresidingSession);
   const ensureActiveProgramWeek = useStore((s) => s.ensureActiveProgramWeek);
@@ -54,6 +55,7 @@ export default function PresidingPage() {
         sessionHistory={sessions}
         onConfigChange={setConfig}
         onLogEntry={handleLogEntry}
+        onUpdateLog={updateLogEntry}
         onDeleteLog={deleteLogEntry}
       />
     </div>

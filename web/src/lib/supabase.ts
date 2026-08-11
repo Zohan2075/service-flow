@@ -17,6 +17,8 @@ import type {
   PresidingSection,
   ProgramWeek,
   TimerLogEntry,
+  ProgramTombstone,
+  ProgramTombstoneType,
 } from "@/types/presiding";
 import { getDefaultPresidingConfig, getDefaultPresidingPrefs, getTimerRoles } from "@/types/presiding";
 
@@ -442,6 +444,7 @@ export interface ProgramSyncState {
   config: PresidingConfig;
   prefs: PresidingPrefs;
   sessions: MeetingSession[];
+  tombstones: ProgramTombstone[];
 }
 
 function flattenProgramSections(sections: PresidingSection[], userId: string, weekId: string, parentId: string | null = null) {
@@ -450,7 +453,9 @@ function flattenProgramSections(sections: PresidingSection[], userId: string, we
     rows.push({
       user_id: userId, week_id: weekId, section_id: section.id, parent_section_id: parentId, sort_order: index,
       title_en: section.titleEn, title_es: section.titleEs, duration_min: section.duration, group_name: section.group,
-      scheduled_start_minute: section.scheduledStartMinute ?? 0, timer_roles: getTimerRoles(section),
+       scheduled_start_minute: section.scheduledStartMinute ?? 0,
+       scheduled_end_minute: section.scheduledEndMinute ?? ((section.scheduledStartMinute ?? 0) + section.duration),
+       timer_roles: getTimerRoles(section), updated_at: section.updatedAt ?? new Date(0).toISOString(),
     });
     rows.push(...flattenProgramSections(section.subsections, userId, weekId, section.id));
   });
@@ -459,7 +464,7 @@ function flattenProgramSections(sections: PresidingSection[], userId: string, we
 
 function sanitizeProgramSections(sections: PresidingSection[]): unknown[] {
   return sections.map(({ assigneeName: _assigneeName, subsections, ...section }) => ({
-    ...section,
+      ...section,
     subsections: sanitizeProgramSections(subsections),
   }));
 }
@@ -476,9 +481,11 @@ function sectionsFromRows(rows: Record<string, unknown>[]): PresidingSection[] {
     .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
     .map((row) => ({
       id: String(row.section_id), titleEn: String(row.title_en ?? ""), titleEs: String(row.title_es ?? ""),
-      duration: Number(row.duration_min ?? 0), assigneeName: "",
-      group: (row.group_name as PresidingSection["group"]) ?? null,
-      scheduledStartMinute: Number(row.scheduled_start_minute ?? 0),
+       duration: Number(row.duration_min ?? 0), assigneeName: "",
+       group: (row.group_name as PresidingSection["group"]) ?? null,
+       scheduledStartMinute: Number(row.scheduled_start_minute ?? 0),
+       scheduledEndMinute: Number(row.scheduled_end_minute ?? (Number(row.scheduled_start_minute ?? 0) + Number(row.duration_min ?? 0))),
+       updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
       timerRoles: Array.isArray(row.timer_roles) ? row.timer_roles as PresidingSection["timerRoles"] : undefined,
       subsections: build(String(row.section_id)),
     }));
@@ -492,7 +499,9 @@ function sectionsFromLegacyJson(value: unknown): PresidingSection[] {
     return {
       id: String(item.id ?? crypto.randomUUID()), titleEn: String(item.titleEn ?? item.title_en ?? ""), titleEs: String(item.titleEs ?? item.title_es ?? ""),
       duration: Number(item.duration ?? item.duration_min ?? 0), assigneeName: "",
-      group: (item.group as PresidingSection["group"]) ?? null, scheduledStartMinute: Number(item.scheduledStartMinute ?? item.scheduled_start_minute ?? 0),
+       group: (item.group as PresidingSection["group"]) ?? null, scheduledStartMinute: Number(item.scheduledStartMinute ?? item.scheduled_start_minute ?? 0),
+       scheduledEndMinute: Number(item.scheduledEndMinute ?? item.scheduled_end_minute ?? (Number(item.scheduledStartMinute ?? item.scheduled_start_minute ?? 0) + Number(item.duration ?? item.duration_min ?? 0))),
+       updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : undefined,
       timerRoles: Array.isArray(item.timerRoles) ? item.timerRoles as PresidingSection["timerRoles"] : undefined,
       subsections: sectionsFromLegacyJson(item.subsections),
     };
@@ -501,22 +510,51 @@ function sectionsFromLegacyJson(value: unknown): PresidingSection[] {
 
 export async function pushProgram(program: ProgramSyncState, userId: string): Promise<void> {
   const client = getSupabase();
-  const { error: prefsError } = await client.from("program_preferences").upsert({
-    user_id: userId, active_week_id: program.config.activeWeekId, auto_advance: program.prefs.autoAdvance,
-    meeting_start_hour: program.prefs.meetingStartHour, meeting_start_minute: program.prefs.meetingStartMinute,
-    time_format: program.prefs.timeFormat, updated_at: new Date().toISOString(),
-  }, { onConflict: "user_id" });
-  if (prefsError) throw new Error(`pushProgram preferences: ${prefsError.message}`);
+  const remote = await pullProgram(userId);
+  const remoteSections = remote?.config.weeks.flatMap((week) => flattenProgramSections(week.sections, userId, week.weekId)) ?? [];
+  const remoteUpdates = new Map<string, string>();
+  remote?.config.weeks.forEach((week) => remoteUpdates.set(`week:${week.weekId}`, week.updatedAt ?? "1970-01-01T00:00:00.000Z"));
+  remoteSections.forEach((row) => remoteUpdates.set(`intervention:${row.week_id}:${row.section_id}`, String(row.updated_at ?? "1970-01-01T00:00:00.000Z")));
+  remote?.sessions.forEach((session) => {
+    if (session.id) remoteUpdates.set(`session:${session.id}`, session.updatedAt ?? "1970-01-01T00:00:00.000Z");
+    session.log.forEach((entry) => { if (entry.id) remoteUpdates.set(`log:${entry.id}`, entry.updatedAt ?? "1970-01-01T00:00:00.000Z"); });
+  });
+  const tombstoneMap = new Map<string, ProgramTombstone>();
+  [...(remote?.tombstones ?? []), ...program.tombstones].forEach((item) => {
+    const key = `${item.entityType}:${item.entityKey}`;
+    const existing = tombstoneMap.get(key);
+    if (!existing || new Date(item.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) tombstoneMap.set(key, item);
+  });
+  const isRemoteNewer = (type: ProgramTombstoneType, key: string, updatedAt?: string) => {
+    const remoteUpdated = remoteUpdates.get(`${type}:${key}`);
+    return Boolean(remoteUpdated && new Date(remoteUpdated).getTime() > new Date(updatedAt ?? "1970-01-01T00:00:00.000Z").getTime());
+  };
+  const tombstoneByKey = tombstoneMap;
+  const isCurrent = (type: ProgramTombstoneType, key: string, updatedAt?: string) => {
+    const tombstone = tombstoneByKey.get(`${type}:${key}`);
+    return !isRemoteNewer(type, key, updatedAt) && (!tombstone || (updatedAt ? new Date(updatedAt).getTime() > new Date(tombstone.deletedAt).getTime() : false));
+  };
+  const localPrefsUpdated = program.prefs.updatedAt ?? new Date(0).toISOString();
+  if (!remote?.prefs.updatedAt || new Date(localPrefsUpdated).getTime() >= new Date(remote.prefs.updatedAt).getTime()) {
+    const { error: prefsError } = await client.from("program_preferences").upsert({
+      user_id: userId, active_week_id: program.config.activeWeekId, auto_advance: program.prefs.autoAdvance,
+      meeting_start_hour: program.prefs.meetingStartHour, meeting_start_minute: program.prefs.meetingStartMinute,
+      time_format: program.prefs.timeFormat, updated_at: localPrefsUpdated,
+    }, { onConflict: "user_id" });
+    if (prefsError) throw new Error(`pushProgram preferences: ${prefsError.message}`);
+  }
 
   const weeks = program.config.weeks.map((week) => ({
     user_id: userId, week_id: week.weekId, week_range_en: week.weekRangeEn, week_range_es: week.weekRangeEs,
-    bible_reading: week.bibleReading, sections_json: sanitizeProgramSections(week.sections), updated_at: new Date().toISOString(),
-  }));
+    bible_reading: week.bibleReading, sections_json: sanitizeProgramSections(week.sections), updated_at: week.updatedAt ?? new Date(0).toISOString(),
+  })).filter((week) => isCurrent("week", week.week_id, week.updated_at));
   if (weeks.length > 0) {
     const { error } = await client.from("program_weeks").upsert(weeks, { onConflict: "user_id,week_id" });
     if (error) throw new Error(`pushProgram weeks: ${error.message}`);
   }
-  const interventions = program.config.weeks.flatMap((week) => flattenProgramSections(week.sections, userId, week.weekId));
+  const interventions = program.config.weeks
+    .flatMap((week) => flattenProgramSections(week.sections, userId, week.weekId))
+    .filter((row) => isCurrent("intervention", `${row.week_id}:${row.section_id}`, row.updated_at as string | undefined));
   if (interventions.length > 0) {
     const { error } = await client.from("program_interventions").upsert(interventions, { onConflict: "user_id,week_id,section_id" });
     if (error) throw new Error(`pushProgram interventions: ${error.message}`);
@@ -525,102 +563,101 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
   const sessions = program.sessions.map((session) => ({
     id: session.id ?? crypto.randomUUID(), user_id: userId, week_id: session.weekId ?? program.config.activeWeekId ?? "default",
     session_date: session.date, started_at: session.startedAt, log_json: session.log,
-  }));
+    updated_at: session.updatedAt ?? new Date(0).toISOString(),
+  })).filter((session) => isCurrent("session", session.id, session.updated_at));
   if (sessions.length > 0) {
     const { error } = await client.from("program_sessions").upsert(sessions, { onConflict: "id" });
     if (error) throw new Error(`pushProgram sessions: ${error.message}`);
   }
-  const sessionIds = new Map(program.sessions.map((session, index) => [session, sessions[index].id]));
-  const logs = program.sessions.flatMap((session, index) => session.log.map((entry, logIndex) => ({
-    id: entry.id ?? `${sessions[index].id}-${logIndex}`, user_id: userId,
-    week_id: session.weekId ?? program.config.activeWeekId ?? "default", session_id: sessionIds.get(session),
+  const sessionIds = new Map(sessions.map((session) => [session.session_date + session.week_id, session.id]));
+  const logs = program.sessions.flatMap((session) => session.log.map((entry, logIndex) => {
+    const weekId = session.weekId ?? program.config.activeWeekId ?? "default";
+    const sessionId = sessionIds.get(session.date + weekId);
+    return {
+    id: entry.id ?? `${sessionId ?? session.date}-${logIndex}`, user_id: userId,
+    week_id: weekId, session_id: sessionId,
     section_id: entry.sectionId, title_en: entry.titleEn, title_es: entry.titleEs, role: entry.role ?? null,
     scheduled_duration_min: entry.scheduledDurationMin, actual_start: entry.actualStartISO, actual_end: entry.actualEndISO,
     actual_duration_sec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60), was_overtime: entry.wasOvertime,
-  })));
+    updated_at: entry.updatedAt ?? new Date(0).toISOString(),
+  }; })).filter((entry) => Boolean(entry.session_id) && isCurrent("log", entry.id, entry.updated_at));
   if (logs.length > 0) {
     const { error } = await client.from("program_timer_logs").upsert(logs, { onConflict: "id" });
     if (error) throw new Error(`pushProgram logs: ${error.message}`);
   }
 
-  const currentInterventionKeys = new Set(interventions.map((row) => `${row.week_id}:${row.section_id}`));
-  const { data: existingInterventions, error: interventionsQueryError } = await client
-    .from("program_interventions")
-    .select("week_id,section_id")
-    .eq("user_id", userId);
-  if (interventionsQueryError) throw new Error(`pushProgram interventions cleanup query: ${interventionsQueryError.message}`);
-  const interventionDeletes = await Promise.all((existingInterventions ?? [])
-    .filter((row) => !currentInterventionKeys.has(`${row.week_id}:${row.section_id}`))
-    .map((row) => client.from("program_interventions").delete().eq("user_id", userId).eq("week_id", row.week_id).eq("section_id", row.section_id)));
-  const interventionDeleteError = interventionDeletes.find((result) => result.error)?.error;
-  if (interventionDeleteError) throw new Error(`pushProgram interventions cleanup: ${interventionDeleteError.message}`);
-  const currentSessionIds = new Set(sessions.map((row) => row.id));
-  const currentLogIds = new Set(logs.map((row) => row.id));
-  const { data: existingLogs, error: logsQueryError } = await client.from("program_timer_logs").select("id").eq("user_id", userId);
-  if (logsQueryError) throw new Error(`pushProgram logs cleanup query: ${logsQueryError.message}`);
-  const staleLogs = (existingLogs ?? []).map((row) => row.id).filter((id) => !currentLogIds.has(id));
-  if (staleLogs.length > 0) {
-    const { error: staleLogsError } = await client.from("program_timer_logs").delete().eq("user_id", userId).in("id", staleLogs);
-    if (staleLogsError) throw new Error(`pushProgram logs cleanup: ${staleLogsError.message}`);
-  }
-  const { data: existingSessions, error: sessionsQueryError } = await client.from("program_sessions").select("id").eq("user_id", userId);
-  if (sessionsQueryError) throw new Error(`pushProgram sessions cleanup query: ${sessionsQueryError.message}`);
-  const staleSessions = (existingSessions ?? []).map((row) => row.id).filter((id) => !currentSessionIds.has(id));
-  if (staleSessions.length > 0) {
-    const { error: staleSessionsError } = await client.from("program_sessions").delete().eq("user_id", userId).in("id", staleSessions);
-    if (staleSessionsError) throw new Error(`pushProgram sessions cleanup: ${staleSessionsError.message}`);
-  }
-
-  const currentWeekKeys = new Set(weeks.map((row) => row.week_id));
-  const { data: existingWeeks, error: weeksQueryError } = await client.from("program_weeks").select("week_id").eq("user_id", userId);
-  if (weeksQueryError) throw new Error(`pushProgram weeks cleanup query: ${weeksQueryError.message}`);
-  const staleWeeks = (existingWeeks ?? []).map((row) => row.week_id).filter((id) => !currentWeekKeys.has(id));
-  if (staleWeeks.length > 0) {
-    const { error: staleWeeksError } = await client.from("program_weeks").delete().eq("user_id", userId).in("week_id", staleWeeks);
-    if (staleWeeksError) throw new Error(`pushProgram weeks cleanup: ${staleWeeksError.message}`);
+  if (tombstoneMap.size > 0) {
+    const { error } = await client.from("program_sync_tombstones").upsert([...tombstoneMap.values()].map((item) => ({
+      user_id: userId, entity_type: item.entityType, entity_key: item.entityKey,
+      deleted_at: item.deletedAt, updated_at: item.updatedAt,
+    })), { onConflict: "user_id,entity_type,entity_key" });
+    if (error) throw new Error(`pushProgram tombstones: ${error.message}`);
   }
 }
 
 export async function pullProgram(userId: string): Promise<ProgramSyncState | null> {
   const client = getSupabase();
-  const [prefsResult, weeksResult, interventionsResult, sessionsResult, logsResult] = await Promise.all([
+  const [prefsResult, weeksResult, interventionsResult, sessionsResult, logsResult, tombstonesResult] = await Promise.all([
     client.from("program_preferences").select("*").eq("user_id", userId).maybeSingle(),
     client.from("program_weeks").select("*").eq("user_id", userId).order("week_id"),
     client.from("program_interventions").select("*").eq("user_id", userId).order("sort_order"),
     client.from("program_sessions").select("*").eq("user_id", userId).order("session_date", { ascending: false }),
     client.from("program_timer_logs").select("*").eq("user_id", userId).order("actual_start"),
+    client.from("program_sync_tombstones").select("*").eq("user_id", userId).order("updated_at"),
   ]);
-  const error = [prefsResult, weeksResult, interventionsResult, sessionsResult, logsResult].find((result) => result.error)?.error;
+  const error = [prefsResult, weeksResult, interventionsResult, sessionsResult, logsResult, tombstonesResult].find((result) => result.error)?.error;
   if (error) throw new Error(`pullProgram: ${error.message}`);
-  if (!prefsResult.data && (weeksResult.data ?? []).length === 0) return null;
-
-  const weekRows = (weeksResult.data ?? []) as Record<string, unknown>[];
-  const interventionRows = (interventionsResult.data ?? []) as Record<string, unknown>[];
-  const weeks: ProgramWeek[] = weekRows.map((row) => ({
-    weekId: String(row.week_id), weekRangeEn: String(row.week_range_en ?? ""), weekRangeEs: String(row.week_range_es ?? ""),
-    bibleReading: String(row.bible_reading ?? ""), sections: interventionRows.some((item) => item.week_id === row.week_id)
-      ? sectionsFromRows(interventionRows.filter((item) => item.week_id === row.week_id))
-      : sectionsFromLegacyJson(row.sections_json),
+  const tombstones: ProgramTombstone[] = (tombstonesResult.data ?? []).map((row) => ({
+    entityType: row.entity_type as ProgramTombstoneType,
+    entityKey: String(row.entity_key),
+    deletedAt: String(row.deleted_at),
+    updatedAt: String(row.updated_at ?? row.deleted_at),
   }));
+  if (!prefsResult.data && (weeksResult.data ?? []).length === 0 && tombstones.length === 0) return null;
+
+  const tombstoneMap = new Map(tombstones.map((item) => [`${item.entityType}:${item.entityKey}`, item]));
+  const isVisible = (type: ProgramTombstoneType, key: string, updatedAt: unknown) => {
+    const tombstone = tombstoneMap.get(`${type}:${key}`);
+    return !tombstone || new Date(String(updatedAt ?? 0)).getTime() > new Date(tombstone.deletedAt).getTime();
+  };
+
+  const weekRows = ((weeksResult.data ?? []) as Record<string, unknown>[])
+    .filter((row) => isVisible("week", String(row.week_id), row.updated_at));
+  const interventionRows = (interventionsResult.data ?? []) as Record<string, unknown>[];
+  const weeks: ProgramWeek[] = weekRows.map((row) => {
+    const visibleInterventions = interventionRows.filter((item) => item.week_id === row.week_id && isVisible("intervention", `${item.week_id}:${item.section_id}`, item.updated_at));
+    return {
+    weekId: String(row.week_id), weekRangeEn: String(row.week_range_en ?? ""), weekRangeEs: String(row.week_range_es ?? ""),
+    bibleReading: String(row.bible_reading ?? ""), sections: visibleInterventions.length > 0 || interventionRows.some((item) => item.week_id === row.week_id)
+      ? sectionsFromRows(visibleInterventions)
+      : sectionsFromLegacyJson(row.sections_json),
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
+  };
+  });
   const prefs = prefsResult.data ? {
     autoAdvance: Boolean(prefsResult.data.auto_advance), meetingStartHour: Number(prefsResult.data.meeting_start_hour ?? 19),
     meetingStartMinute: Number(prefsResult.data.meeting_start_minute ?? 30), timeFormat: prefsResult.data.time_format === "12h" ? "12h" : "24h",
+    updatedAt: typeof prefsResult.data.updated_at === "string" ? prefsResult.data.updated_at : undefined,
   } satisfies PresidingPrefs : getDefaultPresidingPrefs();
   const logsBySession = new Map<string, TimerLogEntry[]>();
-  (logsResult.data ?? []).forEach((row) => {
+  (logsResult.data ?? []).filter((row) => isVisible("log", String(row.id), row.updated_at)).forEach((row) => {
     const key = String(row.session_id); const list = logsBySession.get(key) ?? [];
     list.push({ id: String(row.id), sectionId: String(row.section_id), titleEn: String(row.title_en ?? ""), titleEs: String(row.title_es ?? ""),
       role: row.role === "assignee" || row.role === "presiding" ? row.role : undefined, scheduledDurationMin: Number(row.scheduled_duration_min ?? 0),
       actualStartISO: String(row.actual_start), actualEndISO: String(row.actual_end), actualDurationMin: Math.round(Number(row.actual_duration_sec ?? 0) / 60),
-      actualDurationSec: Number(row.actual_duration_sec ?? 0), wasOvertime: Boolean(row.was_overtime) });
+       actualDurationSec: Number(row.actual_duration_sec ?? 0), wasOvertime: Boolean(row.was_overtime),
+       updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined });
     logsBySession.set(key, list);
   });
-  const sessions: MeetingSession[] = ((sessionsResult.data ?? []) as Record<string, unknown>[]).map((row) => ({
+  const sessions: MeetingSession[] = ((sessionsResult.data ?? []) as Record<string, unknown>[])
+    .filter((row) => isVisible("session", String(row.id), row.updated_at))
+    .map((row) => ({
     id: String(row.id), weekId: String(row.week_id), date: String(row.session_date), startedAt: String(row.started_at),
     log: logsBySession.get(String(row.id)) ?? (Array.isArray(row.log_json) ? row.log_json as TimerLogEntry[] : []),
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
   }));
   const config = weeks.length > 0 ? { weeks, activeWeekId: prefsResult.data?.active_week_id ?? weeks[0].weekId } : getDefaultPresidingConfig();
-  return { config, prefs, sessions };
+  return { config, prefs, sessions, tombstones };
 }
 
 // ─── Bulk Push (full sync upload) ────────────────────────────────────────────

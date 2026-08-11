@@ -22,6 +22,7 @@ import type {
   SectionGroup,
   MeetingSession,
   TimerLogEntry,
+  ProgramTombstone,
 } from "@/types/presiding";
 import {
   getDefaultPresidingConfig,
@@ -101,6 +102,7 @@ interface AppState {
   presidingPrefs: PresidingPrefs;
   presidingSession: MeetingSession | null;
   presidingSessions: MeetingSession[];
+  presidingTombstones: ProgramTombstone[];
 
   // auth actions
   setProfile: (p: UserProfile | null) => void;
@@ -155,6 +157,7 @@ interface AppState {
   setPresidingPrefs: (patch: Partial<PresidingPrefs>) => void;
   startPresidingSession: () => void;
   addPresidingLogEntry: (entry: TimerLogEntry) => void;
+  updatePresidingLogEntry: (logId: string, patch: Partial<TimerLogEntry>) => void;
   deletePresidingLogEntry: (logId: string) => void;
   resetPresidingConfig: () => void;
   ensureActiveProgramWeek: (date?: Date) => void;
@@ -176,6 +179,25 @@ interface RemoteProgramPayload {
   config?: unknown;
   prefs?: Partial<PresidingPrefs>;
   sessions?: unknown[];
+  tombstones?: unknown[];
+}
+
+function migrateProgramTombstones(raw: unknown): ProgramTombstone[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((value) => {
+    const item = value as Partial<ProgramTombstone>;
+    if (
+      (item.entityType !== "week" && item.entityType !== "intervention" && item.entityType !== "session" && item.entityType !== "log") ||
+      typeof item.entityKey !== "string" ||
+      typeof item.deletedAt !== "string"
+    ) return [];
+    return [{
+      entityType: item.entityType,
+      entityKey: item.entityKey,
+      deletedAt: item.deletedAt,
+      updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : item.deletedAt,
+    } satisfies ProgramTombstone];
+  });
 }
 
 function uuid(): string {
@@ -345,6 +367,9 @@ function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): Presidi
       const explicitOffset = typeof section.scheduledStartMinute === "number"
         ? Math.max(0, Math.floor(section.scheduledStartMinute))
         : cursor;
+      const scheduledEndMinute = typeof section.scheduledEndMinute === "number"
+        ? Math.max(explicitOffset, Math.floor(section.scheduledEndMinute))
+        : explicitOffset + Math.max(0, section.duration ?? 0);
       const subsections = Array.isArray(section.subsections)
         ? normalizeSections(section.subsections, group, explicitOffset)
         : [];
@@ -352,6 +377,8 @@ function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): Presidi
         ...section,
         group: section.group ?? null,
         scheduledStartMinute: explicitOffset,
+        scheduledEndMinute,
+        updatedAt: typeof section.updatedAt === "string" ? section.updatedAt : "1970-01-01T00:00:00.000Z",
         timerRoles: getTimerRoles({
           id: section.id ?? "",
           titleEn: section.titleEn ?? "",
@@ -377,6 +404,7 @@ function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): Presidi
       weekRangeEn: week.weekRangeEn ?? "",
       weekRangeEs: week.weekRangeEs ?? "",
       bibleReading: week.bibleReading ?? "",
+      updatedAt: typeof week.updatedAt === "string" ? week.updatedAt : "1970-01-01T00:00:00.000Z",
       sections: Array.isArray(week.sections) ? normalizeSections(week.sections) : [],
     } as ProgramWeek;
   };
@@ -426,6 +454,7 @@ function migratePresidingSession(raw: unknown): MeetingSession | null {
     weekId: session.weekId ?? getProgramWeekId(),
     date: session.date ?? new Date().toISOString().slice(0, 10),
     startedAt: session.startedAt ?? new Date().toISOString(),
+    updatedAt: typeof session.updatedAt === "string" ? session.updatedAt : (session.startedAt ?? "1970-01-01T00:00:00.000Z"),
     log: session.log.map((entry) => {
       const log = entry as TimerLogEntry;
       return {
@@ -434,6 +463,7 @@ function migratePresidingSession(raw: unknown): MeetingSession | null {
         actualDurationSec: typeof log.actualDurationSec === "number"
           ? log.actualDurationSec
           : Math.max(0, (log.actualDurationMin ?? 0) * 60),
+        updatedAt: typeof log.updatedAt === "string" ? log.updatedAt : (log.actualEndISO ?? "1970-01-01T00:00:00.000Z"),
       };
     }),
   };
@@ -463,6 +493,40 @@ function preserveLocalAssigneeNames(local: PresidingConfig, remote: PresidingCon
     subsections: copy(weekId, section.subsections),
   }));
   return { ...remote, weeks: remote.weeks.map((week) => ({ ...week, sections: copy(week.weekId, week.sections) })) };
+}
+
+function tombstoneKey(type: ProgramTombstone["entityType"], key: string): string {
+  return `${type}:${key}`;
+}
+
+function addProgramTombstone(
+  tombstones: ProgramTombstone[],
+  entityType: ProgramTombstone["entityType"],
+  entityKey: string,
+  timestamp = now(),
+): ProgramTombstone[] {
+  const next = tombstones.filter((item) => tombstoneKey(item.entityType, item.entityKey) !== tombstoneKey(entityType, entityKey));
+  return [...next, { entityType, entityKey, deletedAt: timestamp, updatedAt: timestamp }];
+}
+
+function collectProgramTombstones(state: Pick<AppState, "presidingConfig" | "presidingSessions" | "presidingTombstones">): ProgramTombstone[] {
+  const timestamp = now();
+  let result = [...state.presidingTombstones];
+  state.presidingConfig.weeks.forEach((week) => {
+    result = addProgramTombstone(result, "week", week.weekId, timestamp);
+    const collect = (sections: PresidingSection[]) => sections.forEach((section) => {
+      result = addProgramTombstone(result, "intervention", `${week.weekId}:${section.id}`, timestamp);
+      collect(section.subsections);
+    });
+    collect(week.sections);
+  });
+  state.presidingSessions.forEach((session) => {
+    if (session.id) result = addProgramTombstone(result, "session", session.id, timestamp);
+    session.log.forEach((entry) => {
+      if (entry.id) result = addProgramTombstone(result, "log", entry.id, timestamp);
+    });
+  });
+  return result;
 }
 
 function normalizeTimeEntry(entry: TimeEntry): TimeEntry {
@@ -681,6 +745,7 @@ export const useStore = create<AppState>()(
       presidingPrefs: getDefaultPresidingPrefs(),
       presidingSession: null,
       presidingSessions: [],
+      presidingTombstones: [],
 
       // ── Auth ────────────────────────────────────────────────────────────
       setProfile: (p) =>
@@ -706,8 +771,9 @@ export const useStore = create<AppState>()(
               uiState: INITIAL_UI_STATE,
               presidingConfig: getDefaultPresidingConfig(),
                presidingPrefs: getDefaultPresidingPrefs(),
-               presidingSession: null,
-               presidingSessions: [],
+                presidingSession: null,
+                presidingSessions: [],
+                presidingTombstones: [],
             };
           }
 
@@ -726,8 +792,9 @@ export const useStore = create<AppState>()(
           uiState: INITIAL_UI_STATE,
           presidingConfig: getDefaultPresidingConfig(),
            presidingPrefs: getDefaultPresidingPrefs(),
-           presidingSession: null,
-           presidingSessions: [],
+            presidingSession: null,
+            presidingSessions: [],
+            presidingTombstones: [],
         }),
 
       // ── Settings / Profile ──────────────────────────────────────────────
@@ -1146,9 +1213,12 @@ export const useStore = create<AppState>()(
           const nextProgramConfig = remoteProgram?.config
             ? migratePresidingConfig(remoteProgram.config)
             : s.presidingConfig;
-          const nextSessions = remoteProgram?.sessions
-            ? migratePresidingSessions(remoteProgram.sessions, null)
-            : s.presidingSessions;
+           const nextSessions = remoteProgram?.sessions
+             ? migratePresidingSessions(remoteProgram.sessions, null)
+             : s.presidingSessions;
+           const nextTombstones = remoteProgram?.tombstones
+             ? migrateProgramTombstones(remoteProgram.tombstones)
+             : s.presidingTombstones;
           return {
             settings,
             profile: mergeImportedProfile(s.profile, file.profile),
@@ -1161,8 +1231,9 @@ export const useStore = create<AppState>()(
             presidingPrefs: remoteProgram?.prefs && typeof remoteProgram.prefs === "object"
               ? { ...s.presidingPrefs, ...(remoteProgram.prefs as Partial<PresidingPrefs>) }
               : s.presidingPrefs,
-            presidingSession: nextSessions[nextSessions.length - 1] ?? null,
-            presidingSessions: nextSessions,
+             presidingSession: nextSessions[nextSessions.length - 1] ?? null,
+             presidingSessions: nextSessions,
+             presidingTombstones: nextTombstones,
             syncMetadata:
               options?.source === "remote"
                 ? INITIAL_SYNC_METADATA
@@ -1180,17 +1251,43 @@ export const useStore = create<AppState>()(
         })),
 
       // ── Presiding ────────────────────────────────────────────────────────
-      setPresidingConfig: (cfg) => set(() => {
+      setPresidingConfig: (cfg) => set((s) => {
         const normalized = migratePresidingConfig(cfg, false);
         const requestedWeekId = cfg.activeWeekId;
+        const timestamp = now();
+        const stampSections = (sections: PresidingSection[]): PresidingSection[] => sections.map((section) => ({
+          ...section,
+          updatedAt: timestamp,
+          subsections: stampSections(section.subsections),
+        }));
+        const weeks = normalized.weeks.map((week) => ({
+          ...week,
+          updatedAt: timestamp,
+          sections: stampSections(week.sections),
+        }));
+        const nextWeekIds = new Set(weeks.map((week) => week.weekId));
+        let tombstones = [...s.presidingTombstones];
+        s.presidingConfig.weeks.forEach((oldWeek) => {
+          if (!nextWeekIds.has(oldWeek.weekId)) tombstones = addProgramTombstone(tombstones, "week", oldWeek.weekId, timestamp);
+          const nextWeek = weeks.find((week) => week.weekId === oldWeek.weekId);
+          const nextSectionIds = new Set<string>();
+          const collectNext = (sections: PresidingSection[]) => sections.forEach((section) => { nextSectionIds.add(section.id); collectNext(section.subsections); });
+          collectNext(nextWeek?.sections ?? []);
+          const collectOld = (sections: PresidingSection[]) => sections.forEach((section) => {
+            if (!nextSectionIds.has(section.id)) tombstones = addProgramTombstone(tombstones, "intervention", `${oldWeek.weekId}:${section.id}`, timestamp);
+            collectOld(section.subsections);
+          });
+          collectOld(oldWeek.sections);
+        });
         return withPendingSync({
-          presidingConfig: requestedWeekId && normalized.weeks.some((week) => week.weekId === requestedWeekId)
-            ? { ...normalized, activeWeekId: requestedWeekId }
-            : normalized,
+          presidingConfig: requestedWeekId && weeks.some((week) => week.weekId === requestedWeekId)
+            ? { ...normalized, weeks, activeWeekId: requestedWeekId }
+            : { ...normalized, weeks },
+          presidingTombstones: tombstones,
         });
       }),
       setPresidingPrefs: (patch) =>
-        set((s) => withPendingSync({ presidingPrefs: { ...s.presidingPrefs, ...patch } })),
+        set((s) => withPendingSync({ presidingPrefs: { ...s.presidingPrefs, ...patch, updatedAt: now() } })),
       ensureActiveProgramWeek: (date = new Date()) =>
         set((s) => {
           const weekId = getProgramWeekId(date);
@@ -1201,7 +1298,7 @@ export const useStore = create<AppState>()(
           const weeks = existing
             ? s.presidingConfig.weeks
             : [...s.presidingConfig.weeks, { ...template, ...(catalog ?? {}), weekId }];
-          return withPendingSync({ presidingConfig: { weeks, activeWeekId: weekId } });
+           return withPendingSync({ presidingConfig: { weeks, activeWeekId: weekId } });
         }),
       startPresidingSession: () =>
         set((s) => {
@@ -1209,8 +1306,9 @@ export const useStore = create<AppState>()(
             id: uuid(),
             weekId: s.presidingConfig.activeWeekId ?? getProgramWeekId(),
             date: new Date().toISOString().slice(0, 10),
-            startedAt: new Date().toISOString(),
-            log: [],
+             startedAt: new Date().toISOString(),
+             log: [],
+             updatedAt: now(),
           };
           return withPendingSync({ presidingSession: session, presidingSessions: [...s.presidingSessions, session] });
         }),
@@ -1219,25 +1317,67 @@ export const useStore = create<AppState>()(
           const current = s.presidingSession ?? {
             id: uuid(),
             weekId: s.presidingConfig.activeWeekId ?? getProgramWeekId(),
-            date: new Date().toISOString().slice(0, 10),
-            startedAt: new Date().toISOString(),
-            log: [],
-          };
-          const nextSession = {
-            ...current,
-            log: [...current.log, {
-              ...entry,
-              id: entry.id ?? uuid(),
-              actualDurationSec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60),
-            }],
+             date: new Date().toISOString().slice(0, 10),
+             startedAt: new Date().toISOString(),
+             log: [],
+             updatedAt: now(),
+           };
+           const timestamp = now();
+           const nextSession = {
+             ...current,
+             updatedAt: timestamp,
+             log: [...current.log, {
+               ...entry,
+               id: entry.id ?? uuid(),
+               actualDurationSec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60),
+               updatedAt: timestamp,
+             }],
           };
           const sessions = s.presidingSessions.some((session) => session.id === nextSession.id)
             ? s.presidingSessions.map((session) => session.id === nextSession.id ? nextSession : session)
             : [...s.presidingSessions, nextSession];
-          return withPendingSync({ presidingSession: nextSession, presidingSessions: sessions });
+           return withPendingSync({
+             presidingSession: nextSession,
+             presidingSessions: sessions,
+             presidingTombstones: s.presidingTombstones.filter((item) => !(item.entityType === "log" && item.entityKey === (entry.id ?? ""))),
+           });
+         }),
+      updatePresidingLogEntry: (logId, patch) =>
+        set((s) => {
+          const timestamp = now();
+          let found = false;
+          const updateEntry = (entry: TimerLogEntry): TimerLogEntry => {
+            if (entry.id !== logId) return entry;
+            found = true;
+            const next = { ...entry, ...patch };
+            const startMs = Date.parse(next.actualStartISO);
+            const endMs = Date.parse(next.actualEndISO);
+            const durationSec = Number.isFinite(startMs) && Number.isFinite(endMs)
+              ? Math.max(0, Math.round((endMs - startMs) / 1000))
+              : Math.max(0, next.actualDurationSec ?? next.actualDurationMin * 60);
+            return {
+              ...next,
+              actualDurationSec: durationSec,
+              actualDurationMin: Math.round(durationSec / 60),
+              wasOvertime: durationSec > next.scheduledDurationMin * 60,
+              updatedAt: timestamp,
+            };
+          };
+          const nextSessions = s.presidingSessions.map((session) => {
+            const nextLog = session.log.map(updateEntry);
+            return nextLog.some((entry, index) => entry !== session.log[index])
+              ? { ...session, log: nextLog, updatedAt: timestamp }
+              : session;
+          });
+          if (!found) return {};
+          const nextSession = s.presidingSession
+            ? nextSessions.find((session) => session.id === s.presidingSession?.id) ?? s.presidingSession
+            : null;
+          return withPendingSync({ presidingSession: nextSession, presidingSessions: nextSessions });
         }),
       deletePresidingLogEntry: (logId) =>
         set((s) => {
+          const timestamp = now();
           const removeFromLog = (log: TimerLogEntry[]) => log.filter((entry) => entry.id !== logId);
           const nextSession = s.presidingSession
             ? { ...s.presidingSession, log: removeFromLog(s.presidingSession.log) }
@@ -1246,19 +1386,24 @@ export const useStore = create<AppState>()(
             ...session,
             log: removeFromLog(session.log),
           })).filter((session) => session.log.length > 0 || session.id === nextSession?.id);
-          return withPendingSync({ presidingSession: nextSession, presidingSessions: nextSessions });
+           return withPendingSync({
+             presidingSession: nextSession,
+             presidingSessions: nextSessions,
+             presidingTombstones: addProgramTombstone(s.presidingTombstones, "log", logId, timestamp),
+           });
         }),
       resetPresidingConfig: () =>
-        set(() => withPendingSync({
-          presidingConfig: getDefaultPresidingConfig(),
-          presidingPrefs: getDefaultPresidingPrefs(),
-          presidingSession: null,
-          presidingSessions: [],
-        })),
+        set((s) => withPendingSync({
+           presidingConfig: getDefaultPresidingConfig(),
+           presidingPrefs: getDefaultPresidingPrefs(),
+            presidingSession: null,
+            presidingSessions: [],
+            presidingTombstones: collectProgramTombstones(s),
+         })),
 
       resetData: () =>
         set(
-          withPendingSync({
+           withPendingSync({
             profile: null,
             settings: INITIAL_SETTINGS,
             serviceTypes: ensureServiceTypesNotEmpty([], INITIAL_SETTINGS),
@@ -1271,6 +1416,7 @@ export const useStore = create<AppState>()(
              presidingPrefs: getDefaultPresidingPrefs(),
              presidingSession: null,
              presidingSessions: [],
+             presidingTombstones: collectProgramTombstones(get()),
            })
         ),
     }),
@@ -1289,8 +1435,9 @@ export const useStore = create<AppState>()(
         syncMetadata: state.syncMetadata,
         presidingConfig: state.presidingConfig,
          presidingPrefs: state.presidingPrefs,
-         presidingSession: state.presidingSession,
-         presidingSessions: state.presidingSessions,
+          presidingSession: state.presidingSession,
+          presidingSessions: state.presidingSessions,
+          presidingTombstones: state.presidingTombstones,
       }) as unknown as AppState,
       // CRITICAL: Prevent stale IndexedDB data from overwriting freshly-synced
       // Supabase data. If current state has real data (sync already imported),
@@ -1334,8 +1481,9 @@ export const useStore = create<AppState>()(
           uiState: current.uiState,
             presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingConfig),
             presidingPrefs: p.presidingPrefs ?? current.presidingPrefs,
-            presidingSession: migratePresidingSession(p.presidingSession ?? current.presidingSession),
-            presidingSessions: migratePresidingSessions(p.presidingSessions, migratePresidingSession(p.presidingSession ?? current.presidingSession)),
+             presidingSession: migratePresidingSession(p.presidingSession ?? current.presidingSession),
+             presidingSessions: migratePresidingSessions(p.presidingSessions, migratePresidingSession(p.presidingSession ?? current.presidingSession)),
+             presidingTombstones: migrateProgramTombstones(p.presidingTombstones ?? current.presidingTombstones),
         };
       },
     }
