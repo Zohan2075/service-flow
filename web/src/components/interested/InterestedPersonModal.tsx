@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { commentTimestamp, useT } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
 // Fix Leaflet default marker icon for Next.js/webpack
@@ -52,6 +52,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const deleteInterestedPerson = useStore((s) => s.deleteInterestedPerson);
   const interestedStatuses = useStore((s) => s.interestedStatuses);
   const language = useStore((s) => s.settings.language);
+  const timestampShortcutEnabled = useStore((s) => s.settings.interestedCommentsTimestampShortcutEnabled);
   const { t } = useT();
 
   // Build status lookup from customizable config
@@ -170,6 +171,35 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
         toast.error(err.message);
       }
     );
+  };
+
+  const insertCommentTimestamp = () => {
+    const textarea = commentsRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart ?? comments.length;
+    const end = textarea.selectionEnd ?? start;
+    const timestamp = commentTimestamp(new Date(), language);
+    const nextComments = `${comments.slice(0, start)}${timestamp}${comments.slice(end)}`;
+    setComments(nextComments);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursorPosition = start + timestamp.length;
+      textarea.setSelectionRange(cursorPosition, cursorPosition);
+    });
+  };
+
+  const handleCommentsKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      timestampShortcutEnabled &&
+      (e.ctrlKey || e.metaKey) &&
+      e.shiftKey &&
+      e.key.toLowerCase() === "d"
+    ) {
+      e.preventDefault();
+      insertCommentTimestamp();
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -543,14 +573,30 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             </div>
           </div>
 
-          {/* Comments */}
-          <div>
-            <label className="block text-sm font-semibold mb-1">{t("interested.comments")}</label>
-            <textarea
-              ref={commentsRef}
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              rows={1}
+           {/* Comments */}
+           <div>
+             <div className="flex items-center justify-between gap-2 mb-1">
+               <label htmlFor="interested-comments" className="block text-sm font-semibold">{t("interested.comments")}</label>
+               {timestampShortcutEnabled && (
+                 <button
+                   type="button"
+                   onClick={insertCommentTimestamp}
+                   title={t("interested.timestampShortcut")}
+                   aria-label={`${t("interested.insertTimestamp")} (${t("interested.timestampShortcut")})`}
+                   className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-2.5 text-xs font-semibold text-slate-600 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300"
+                 >
+                   <span className="material-symbols-outlined text-base">event</span>
+                   <span>{t("interested.insertTimestamp")}</span>
+                 </button>
+               )}
+             </div>
+             <textarea
+               id="interested-comments"
+               ref={commentsRef}
+               value={comments}
+               onChange={(e) => setComments(e.target.value)}
+               onKeyDown={handleCommentsKeyDown}
+               rows={1}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none overflow-hidden"
             />
           </div>

@@ -304,6 +304,7 @@ const INITIAL_SETTINGS: AppSettings = {
     sound: "off",
     showPreview: false,
   },
+  interestedCommentsTimestampShortcutEnabled: true,
   autoSync: true,
   monthlyCapEnabled: false,
   monthlyCapHours: 55,
@@ -350,6 +351,8 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   return {
     ...rest,
     notifications,
+    interestedCommentsTimestampShortcutEnabled:
+      input.interestedCommentsTimestampShortcutEnabled !== false,
     customSurfaceLight: (settings?.customSurfaceLight as string | null) ?? legacySurface ?? rest.customSurfaceLight,
     customSurfaceDark: (settings?.customSurfaceDark as string | null) ?? legacySurface ?? rest.customSurfaceDark,
     customBackgroundLight: (settings?.customBackgroundLight as string | null) ?? legacyBackground ?? rest.customBackgroundLight,

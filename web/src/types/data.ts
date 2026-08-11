@@ -48,6 +48,8 @@ export interface AppSettings {
   showYearTotals: boolean;
   // Interested People notifications
   notifications: NotificationPreferences;
+  // Interested People comment shortcut
+  interestedCommentsTimestampShortcutEnabled: boolean;
   // Auto-sync to Supabase (opt-out)
   autoSync: boolean;
   // Monthly hour cap (self-imposed limit, opt-in)

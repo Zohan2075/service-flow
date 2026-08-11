@@ -1291,7 +1291,7 @@ export default function SettingsPage() {
           <p className="text-xs text-slate-400 mb-4">{t("settings.interestedStatusDesc")}</p>
 
           {/* Custom labels */}
-          <div className="space-y-3 mb-6 pb-6 border-b border-slate-200 dark:border-slate-700">
+           <div className="space-y-3 mb-6 pb-6 border-b border-slate-200 dark:border-slate-700">
             <div>
               <label className="block text-xs font-semibold mb-1">{t("settings.interestedNavLabel")}</label>
               <input
@@ -1313,10 +1313,31 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <p className="text-[10px] text-slate-400 mt-0.5">{t("settings.interestedSettingsLabelDesc")}</p>
-            </div>
-          </div>
+             </div>
+           </div>
 
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
+           <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 mb-6 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
+             <div>
+               <p className="text-sm font-semibold">{t("settings.interestedTimestampShortcut")}</p>
+               <p className="text-xs text-slate-400">{t("settings.interestedTimestampShortcutDesc")}</p>
+             </div>
+             <button
+               type="button"
+               onClick={() => updateSettings({ interestedCommentsTimestampShortcutEnabled: !settings.interestedCommentsTimestampShortcutEnabled })}
+               aria-pressed={settings.interestedCommentsTimestampShortcutEnabled}
+               className={cn(
+                 "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                 settings.interestedCommentsTimestampShortcutEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
+               )}
+             >
+               <div className={cn(
+                 "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
+                 settings.interestedCommentsTimestampShortcutEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
+               )} />
+             </button>
+           </div>
+
+           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
             if (!over || active.id === over.id) return;
             const oldIndex = interestedStatuses.findIndex((s) => s.id === active.id);
             const newIndex = interestedStatuses.findIndex((s) => s.id === over.id);

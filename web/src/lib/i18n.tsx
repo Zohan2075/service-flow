@@ -154,6 +154,8 @@ const translations = {
     "settings.interestedNavLabel": "Navigation label",
     "settings.interestedNavLabelDesc": "Custom label shown in the sidebar and mobile navigation.",
     "settings.interestedSettingsLabelDesc": "Custom heading for this settings section.",
+    "settings.interestedTimestampShortcut": "Comment timestamp shortcut",
+    "settings.interestedTimestampShortcutDesc": "Show a button and enable Ctrl+Shift+D / Cmd+Shift+D to insert the current date and time in comments.",
     "settings.name": "Name",
     "settings.dataBackup": "Data & Backup",
     "settings.organizedSettingsTitle": "Settings by category",
@@ -318,6 +320,8 @@ const translations = {
     "interested.age": "Age",
     "interested.address": "Address",
     "interested.comments": "Comments",
+    "interested.insertTimestamp": "Insert timestamp",
+    "interested.timestampShortcut": "Ctrl+Shift+D / Cmd+Shift+D",
     "interested.location": "Location",
     "interested.initialConversation": "Initial Conversation",
     "interested.nextVisit": "Next Visit",
@@ -499,6 +503,8 @@ const translations = {
     "settings.interestedNavLabel": "Etiqueta de navegación",
     "settings.interestedNavLabelDesc": "Etiqueta personalizada en la barra lateral y navegación móvil.",
     "settings.interestedSettingsLabelDesc": "Título personalizado para esta sección de ajustes.",
+    "settings.interestedTimestampShortcut": "Atajo de fecha y hora en comentarios",
+    "settings.interestedTimestampShortcutDesc": "Muestra un botón y activa Ctrl+Shift+D / Cmd+Shift+D para insertar la fecha y hora actuales en los comentarios.",
     "settings.name": "Nombre",
     "settings.dataBackup": "Datos y Respaldo",
     "settings.organizedSettingsTitle": "Ajustes por categoria",
@@ -663,6 +669,8 @@ const translations = {
     "interested.age": "Edad",
     "interested.address": "Dirección",
     "interested.comments": "Comentarios",
+    "interested.insertTimestamp": "Insertar fecha y hora",
+    "interested.timestampShortcut": "Ctrl+Shift+D / Cmd+Shift+D",
     "interested.location": "Ubicación",
     "interested.initialConversation": "Conversación Inicial",
     "interested.nextVisit": "Próxima Visita",
@@ -781,6 +789,21 @@ export function dateTimeString(date: Date, lang: Language): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+export function commentTimestamp(date: Date, lang: Language): string {
+  const formattedDate = new Intl.DateTimeFormat(localeTag(lang), {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  const formattedTime = new Intl.DateTimeFormat(localeTag(lang), {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+
+  return `${formattedDate} - ${formattedTime} →`;
 }
 
 const WEEKDAY_KEYS: TranslationKey[] = [
