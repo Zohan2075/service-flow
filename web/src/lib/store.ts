@@ -1352,9 +1352,12 @@ export const useStore = create<AppState>()(
             const next = { ...entry, ...patch };
             const startMs = Date.parse(next.actualStartISO);
             const endMs = Date.parse(next.actualEndISO);
-            const durationSec = Number.isFinite(startMs) && Number.isFinite(endMs)
-              ? Math.max(0, Math.round((endMs - startMs) / 1000))
-              : Math.max(0, next.actualDurationSec ?? next.actualDurationMin * 60);
+             const hasExplicitDuration = typeof patch.actualDurationSec === "number" && Number.isFinite(patch.actualDurationSec);
+             const durationSec = hasExplicitDuration
+               ? Math.max(0, Math.round(patch.actualDurationSec as number))
+               : Number.isFinite(startMs) && Number.isFinite(endMs)
+                 ? Math.max(0, Math.round((endMs - startMs) / 1000))
+                 : Math.max(0, next.actualDurationSec ?? next.actualDurationMin * 60);
             return {
               ...next,
               actualDurationSec: durationSec,

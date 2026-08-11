@@ -189,7 +189,7 @@ const L = {
     stop: "Stop",
     overtime: "Overtime", complete: "Complete", restart: "Restart",
      totalTime: "Total", sessionLog: "Session Log", logEmpty: "No parts timed yet.", end: "End", editLog: "Edit log", deleteLog: "Delete log", save: "Save", cancel: "Cancel",
-     saving: "Saving", saved: "Saved", offline: "Offline — saved locally", saveError: "Save error", resetUnsaved: "Reset unsaved time",
+     saving: "Saving", saved: "Saved", offline: "Offline — saved locally", saveError: "Save error", retry: "Retry", resetUnsaved: "Reset unsaved time",
     noSections: "No parts. Reset in Settings.", 
     weekLabel: "Week", newWeek: "New Week", deleteWeek: "Delete Week",
     deleteWeekConfirm: "Delete this week's program?",
@@ -206,7 +206,7 @@ const L = {
     stop: "Detener",
     overtime: "Excedido", complete: "Completa", restart: "Reiniciar",
       totalTime: "Total", sessionLog: "Registro", logEmpty: "Aún no se ha medido ninguna parte.", end: "Fin", editLog: "Editar registro", deleteLog: "Eliminar registro", save: "Guardar", cancel: "Cancelar",
-     saving: "Guardando", saved: "Guardado", offline: "Sin conexión — guardado localmente", saveError: "Error al guardar", resetUnsaved: "Restablecer tiempo sin guardar",
+       saving: "Guardando", saved: "Guardado", offline: "Sin conexión — guardado localmente", saveError: "Error al guardar", retry: "Reintentar", resetUnsaved: "Restablecer tiempo sin guardar",
     noSections: "No hay partes. Restablecer en Configuración.",
     weekLabel: "Semana", newWeek: "Nueva Semana", deleteWeek: "Eliminar Semana",
     deleteWeekConfirm: "¿Eliminar el programa de esta semana?",
@@ -220,6 +220,7 @@ const L = {
 interface TimerRecord {
   persistedSec: number;
   unsavedSec: number;
+  logId?: string;
 }
 
 interface ActiveTimer {
@@ -244,25 +245,13 @@ function logDurationSec(entry: TimerLogEntry): number {
   return Math.max(0, Math.round(entry.actualDurationMin * 60));
 }
 
-function hydrateTimerRecords(sessionLog: TimerLogEntry[], sessionHistory: MeetingSession[]): Record<string, TimerRecord> {
+function hydrateTimerRecords(sessionLog: TimerLogEntry[]): Record<string, TimerRecord> {
   const records: Record<string, TimerRecord> = {};
-  const seen = new Set<string>();
-  const entries = [
-    ...sessionHistory.flatMap((session) => session.log),
-    ...sessionLog,
-  ];
 
-  for (const entry of entries) {
+  for (const entry of sessionLog) {
     const durationSec = logDurationSec(entry);
-    const identity = entry.id
-      ? `id:${entry.id}`
-      : `${entry.sectionId}:${entry.role ?? "single"}:${entry.actualStartISO}:${entry.actualEndISO}:${durationSec}`;
-    if (seen.has(identity)) continue;
-    seen.add(identity);
-
     const key = timerKey(entry.sectionId, entry.role ?? null);
-    const current = records[key] ?? { persistedSec: 0, unsavedSec: 0 };
-    records[key] = { persistedSec: current.persistedSec + durationSec, unsavedSec: 0 };
+    records[key] = { persistedSec: durationSec, unsavedSec: 0, logId: entry.id };
   }
 
   return records;
@@ -271,13 +260,13 @@ function hydrateTimerRecords(sessionLog: TimerLogEntry[], sessionHistory: Meetin
 function useProgramTimers(
   sections: PresidingSection[],
   sessionLog: TimerLogEntry[],
-  sessionHistory: MeetingSession[],
   onLog: (entry: TimerLogEntry) => void,
+  onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void,
 ) {
   const flat = useMemo(() => flattenAll(sections), [sections]);
   const hydratedRecords = useMemo(
-    () => hydrateTimerRecords(sessionLog, sessionHistory),
-    [sessionHistory, sessionLog],
+    () => hydrateTimerRecords(sessionLog),
+    [sessionLog],
   );
   const [records, setRecords] = useState<Record<string, TimerRecord>>(() => hydratedRecords);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -311,26 +300,37 @@ function useProgramTimers(
     stopInterval();
     const segmentSec = Math.max(0, Math.floor((Date.now() - active.startedAtMs) / 1000));
     const current = recordsR.current[active.key] ?? { persistedSec: 0, unsavedSec: 0 };
+    const totalSec = current.persistedSec + segmentSec;
+    const actualEndISO = new Date().toISOString();
     const next = {
       ...recordsR.current,
-      [active.key]: { persistedSec: current.persistedSec + segmentSec, unsavedSec: 0 },
+      [active.key]: { ...current, persistedSec: totalSec, unsavedSec: 0 },
     };
     activeR.current = null;
     setActiveKey(null);
     commitRecords(next);
-    onLog({
-      sectionId: active.sectionId,
-      titleEn: active.titleEn,
-      titleEs: active.titleEs,
-      scheduledDurationMin: active.scheduledDurationMin,
-      actualStartISO: active.startedAtISO,
-      actualEndISO: new Date().toISOString(),
-      actualDurationMin: Math.round(segmentSec / 60),
-      actualDurationSec: segmentSec,
-      role: active.role ?? undefined,
-      wasOvertime: segmentSec > active.scheduledDurationMin * 60,
-    });
-  }, [commitRecords, onLog, stopInterval]);
+    if (current.logId && onUpdateLog) {
+      onUpdateLog(current.logId, {
+        actualEndISO,
+        actualDurationMin: Math.round(totalSec / 60),
+        actualDurationSec: totalSec,
+        wasOvertime: totalSec > active.scheduledDurationMin * 60,
+      });
+    } else if (!current.logId) {
+      onLog({
+        sectionId: active.sectionId,
+        titleEn: active.titleEn,
+        titleEs: active.titleEs,
+        scheduledDurationMin: active.scheduledDurationMin,
+        actualStartISO: active.startedAtISO,
+        actualEndISO,
+        actualDurationMin: Math.round(totalSec / 60),
+        actualDurationSec: totalSec,
+        role: active.role ?? undefined,
+        wasOvertime: totalSec > active.scheduledDurationMin * 60,
+      });
+    }
+  }, [commitRecords, onLog, onUpdateLog, stopInterval]);
 
   const toggleTimer = useCallback((sectionId: string, role: TimerRole | null) => {
     const item = flat.find((candidate) => candidate.sectionId === sectionId);
@@ -528,7 +528,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
     if (i === 0) legacyOffset += 5;
   }
 
-  const timer = useProgramTimers(sections, sessionLog, sessionHistory, onLogEntry);
+  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog);
   const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timer;
 
   if (sections.length === 0) {
@@ -771,23 +771,27 @@ function roleLabel(role: TimerRole | null, section: PresidingSection, lbl: typeo
 }
 
 function SaveStatus({ lbl }: { lbl: typeof L.en }) {
-  const { status, error, isOnline } = useSync();
+  const { status, error, isOnline, syncNow } = useSync();
   const hasPendingChanges = useStore((state) => state.syncMetadata.hasPendingChanges);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
-  const isSaving = mounted && isOnline && (status === "syncing" || hasPendingChanges);
-  const isError = mounted && isOnline && status === "error";
+  const isError = mounted && status === "error";
+  const isSaving = mounted && !isError && isOnline && (status === "syncing" || hasPendingChanges);
   const isOffline = mounted && !isOnline;
-  const icon = isSaving ? "sync" : isError ? "error" : isOffline ? "cloud_off" : "cloud_done";
-  const text = isSaving ? lbl.saving : isError ? lbl.saveError : isOffline ? lbl.offline : lbl.saved;
+  const icon = isError ? "error" : isSaving ? "sync" : isOffline ? "cloud_off" : "cloud_done";
+  const text = isError ? lbl.saveError : isSaving ? lbl.saving : isOffline ? lbl.offline : lbl.saved;
 
   return (
     <div role="status" aria-live="polite" title={isError ? (error ?? lbl.saveError) : text}
       className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold", isError ? "text-red-500" : isOffline ? "text-amber-600" : isSaving ? "text-primary" : "text-emerald-600")}>
       <span className={cn("material-symbols-outlined text-sm", isSaving && "animate-spin")}>{icon}</span>
       <span>{text}</span>
+      {isError && (
+        <button type="button" onClick={() => { void syncNow().catch(() => undefined); }}
+          className="font-bold underline underline-offset-2 hover:text-red-700">{lbl.retry}</button>
+      )}
     </div>
   );
 }
