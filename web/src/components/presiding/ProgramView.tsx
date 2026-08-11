@@ -69,7 +69,7 @@ function SectionIcon({ icon, className }: { icon: string | null; className?: str
   if (!icon) return null;
   if (icon === "sheep") {
     return (
-      <svg viewBox="0 0 1280 1278" className={className} fill="currentColor">
+      <svg viewBox="0 0 12800 12800" className={className} fill="currentColor">
         <path d="M10960 12738 l-64 -41 -153 27 -153 28 -92 -27 c-51 -15 -98 -30
 -104 -34 -6 -3 -45 -45 -88 -93 l-77 -88 -173 0 c-122 0 -177 -4 -188 -12 -9
 -7 -69 -71 -132 -142 -102 -115 -126 -135 -213 -187 -91 -53 -102 -63 -153
