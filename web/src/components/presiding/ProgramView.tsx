@@ -351,7 +351,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-canvas">
+    <div className="flex flex-col min-h-0 h-full bg-canvas overflow-hidden">
       {/* ===== HEADER: Week selector + info ===== */}
       <div className="shrink-0 px-4 pt-4 pb-2 space-y-3">
         {/* Week selector */}
@@ -584,12 +584,13 @@ function TimerButton({ role, label, elapsedSec, running, onClick }: {
   return (
     <button onClick={(event) => { event.stopPropagation(); onClick(); }}
       className={cn(
-        "size-14 rounded-full flex flex-col items-center justify-center gap-0.5 text-white shadow-sm transition-all active:scale-95 shrink-0",
-        running ? "bg-amber-500 text-black" : presiding ? "bg-violet-600 hover:bg-violet-700" : "bg-primary hover:bg-primary/90",
+        "size-12 sm:size-14 rounded-full flex flex-col items-center justify-center gap-0 shadow-sm transition-all active:scale-95 shrink-0",
+        running ? "bg-amber-500 text-black" : presiding ? "bg-violet-600" : "bg-primary",
+        !running && (presiding ? "active:bg-violet-800" : "active:bg-primary/80"),
       )}
       aria-label={`${label} ${running ? "stop" : "start"}`}>
-      <span className="material-symbols-outlined text-sm leading-none">{running ? "stop" : "play_arrow"}</span>
-      <span className="font-mono text-[10px] font-bold leading-none tabular-nums">{fmtTime(elapsedSec)}</span>
+      <span className="material-symbols-outlined text-xs sm:text-sm leading-none">{running ? "stop" : "play_arrow"}</span>
+      <span className="font-mono text-[9px] sm:text-[10px] font-bold leading-none tabular-nums">{fmtTime(elapsedSec)}</span>
     </button>
   );
 }
@@ -809,12 +810,12 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteL
     return entry.role === "assignee" ? lbl.assignee : lbl.presiding;
   };
   return (
-    <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/70">
+    <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/95 pb-safe-mobile">
       <button type="button" onClick={() => setShow((current) => !current)} aria-expanded={show}
         aria-controls="session-review-log"
-        className="w-full flex items-center justify-between px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <span>⏱ {lbl.sessionLog} {sessionLog.length > 0 && `(${sessionLog.length})`}</span>
-        <span className="text-slate-400">{show ? "▲" : "▼"}</span>
+        className="w-full flex items-center justify-between px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 active:bg-slate-50 dark:active:bg-slate-800/50 sticky bottom-0 z-10 bg-surface/95">
+        <span>⏱ {lbl.sessionLog} {reviewEntries.length > 0 && `(${reviewEntries.length})`}</span>
+        <span className="text-slate-400 text-lg leading-none">{show ? "▲" : "▼"}</span>
       </button>
       {show && (
          <div id="session-review-log" className="min-h-0 max-h-[min(28rem,55vh)] overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 pb-5 space-y-2">
