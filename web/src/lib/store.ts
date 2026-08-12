@@ -366,11 +366,16 @@ function normalizePresidingPrefs(prefs?: Partial<PresidingPrefs>): PresidingPref
   const chairmanExpectedCount = typeof rawCount === "number" && Number.isFinite(rawCount)
     ? Math.min(99, Math.max(1, Math.floor(rawCount)))
     : defaults.chairmanExpectedCount;
+  const rawSeconds = prefs?.chairmanExpectedSeconds;
+  const chairmanExpectedSeconds = typeof rawSeconds === "number" && Number.isFinite(rawSeconds)
+    ? Math.min(59, Math.max(0, Math.floor(rawSeconds)))
+    : defaults.chairmanExpectedSeconds;
 
   return {
     ...defaults,
     ...(prefs ?? {}),
     chairmanExpectedCount,
+    chairmanExpectedSeconds,
   };
 }
 

@@ -84,6 +84,7 @@ export interface PresidingPrefs {
   meetingStartMinute: number; // 0-59
   timeFormat: "24h" | "12h";
   chairmanExpectedCount: number;
+  chairmanExpectedSeconds: number; // 0-59
   updatedAt?: string;
 }
 
@@ -216,7 +217,7 @@ export function getDefaultPresidingConfig(): PresidingConfig {
 }
 
 export function getDefaultPresidingPrefs(): PresidingPrefs {
-  return { autoAdvance: false, meetingStartHour: 19, meetingStartMinute: 30, timeFormat: "24h", chairmanExpectedCount: 1 };
+  return { autoAdvance: false, meetingStartHour: 19, meetingStartMinute: 30, timeFormat: "24h", chairmanExpectedCount: 1, chairmanExpectedSeconds: 0 };
 }
 
 let _counter = 0;

@@ -185,7 +185,7 @@ const L = {
     namePlaceholder: "Name", remove: "Remove", removeConfirm: "Remove this part?",
     master: "Active timer", current: "Now", start: "Start", pause: "Pause",
     resume: "Resume", reset: "Reset", skip: "Next", timer: "Timer",
-    assignee: "Assignee", presiding: "Presiding", reader: "Reader", conductor: "Conductor",
+    assignee: "Assignee", presiding: "Presiding", reader: "Reader", conductor: "Chairman",
     stop: "Stop",
     overtime: "Overtime", complete: "Complete", restart: "Restart",
      totalTime: "Total", sessionLog: "Session Log", logEmpty: "No parts timed yet.", end: "End", editLog: "Edit log", deleteLog: "Delete log", save: "Save", cancel: "Cancel",
@@ -194,7 +194,7 @@ const L = {
     weekLabel: "Week", newWeek: "New Week", deleteWeek: "Delete Week",
     deleteWeekConfirm: "Delete this week's program?",
     congrats: "Congregation Bible Study", concluding: "Concluding Comments", edit: "Edit",
-    legend: "Timer legend", activeRole: "Active", assigneeRole: "Assignee / Reader", presidingRole: "Presiding / Conductor",
+    legend: "Timer legend", activeRole: "Active", assigneeRole: "Assignee / Reader", presidingRole: "Presiding / Chairman",
   },
   es: {
      chairman: "PRESIDENTE", expected: "esperados", seconds: "seg.", song: "Canción y Oración", openingCmt: "Palabras de introducción",
@@ -202,7 +202,7 @@ const L = {
     namePlaceholder: "Nombre", remove: "Eliminar", removeConfirm: "¿Eliminar esta parte?",
     master: "Temporizador activo", current: "Ahora", start: "Iniciar", pause: "Pausar",
     resume: "Reanudar", reset: "Reiniciar", skip: "Sig.", timer: "Temporizador",
-    assignee: "Asignado", presiding: "Presidente", reader: "Lector", conductor: "Conductor",
+    assignee: "Asignado", presiding: "Presidente", reader: "Lector", conductor: "Presidente",
     stop: "Detener",
     overtime: "Excedido", complete: "Completa", restart: "Reiniciar",
       totalTime: "Total", sessionLog: "Registro", logEmpty: "Aún no se ha medido ninguna parte.", end: "Fin", editLog: "Editar registro", deleteLog: "Eliminar registro", save: "Guardar", cancel: "Cancelar",
@@ -211,7 +211,7 @@ const L = {
     weekLabel: "Semana", newWeek: "Nueva Semana", deleteWeek: "Eliminar Semana",
     deleteWeekConfirm: "¿Eliminar el programa de esta semana?",
     congrats: "Estudio Bíblico de la Congregación", concluding: "Palabras de conclusión", edit: "Editar",
-    legend: "Leyenda de temporizadores", activeRole: "Activo", assigneeRole: "Asignado / Lector", presidingRole: "Presidente / Conductor",
+    legend: "Leyenda de temporizadores", activeRole: "Activo", assigneeRole: "Asignado / Lector", presidingRole: "Presidente",
   },
 };
 
@@ -263,6 +263,7 @@ function useProgramTimers(
   onLog: (entry: TimerLogEntry) => void,
   onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void,
   chairmanExpectedCount: number = 1,
+  chairmanExpectedSeconds: number = 0,
 ) {
   const flat = useMemo(() => flattenAll(sections), [sections]);
   const hydratedRecords = useMemo(
@@ -315,7 +316,7 @@ function useProgramTimers(
         actualEndISO,
         actualDurationMin: Math.round(totalSec / 60),
         actualDurationSec: totalSec,
-        wasOvertime: totalSec > (active.role === "presiding" ? chairmanExpectedCount * 60 : active.scheduledDurationMin * 60),
+        wasOvertime: totalSec > (active.role === "presiding" ? chairmanExpectedCount * 60 + chairmanExpectedSeconds : active.scheduledDurationMin * 60),
       });
     } else if (!current.logId) {
       onLog({
@@ -328,10 +329,10 @@ function useProgramTimers(
         actualDurationMin: Math.round(totalSec / 60),
         actualDurationSec: totalSec,
         role: active.role ?? undefined,
-        wasOvertime: totalSec > (active.role === "presiding" ? chairmanExpectedCount * 60 : active.scheduledDurationMin * 60),
+        wasOvertime: totalSec > (active.role === "presiding" ? chairmanExpectedCount * 60 + chairmanExpectedSeconds : active.scheduledDurationMin * 60),
       });
     }
-  }, [chairmanExpectedCount, commitRecords, onLog, onUpdateLog, stopInterval]);
+  }, [chairmanExpectedCount, chairmanExpectedSeconds, commitRecords, onLog, onUpdateLog, stopInterval]);
 
   const toggleTimer = useCallback((sectionId: string, role: TimerRole | null) => {
     const item = flat.find((candidate) => candidate.sectionId === sectionId);
@@ -424,10 +425,20 @@ interface Props {
 
 export default function ProgramView({ lang, config, prefs, sessionLog, sessionHistory = [], onConfigChange, onLogEntry, onDeleteLog, onUpdateLog }: Props) {
   const isEs = lang === "es"; const lbl = L[lang];
+  const accentColor = useStore((state) => state.settings.accentColor);
 
   const activeWeek = useMemo(() =>
     config?.weeks?.find((w) => w.weekId === config.activeWeekId) ?? config?.weeks?.[0], [config]);
   const sections = activeWeek?.sections ?? [];
+  const sectionGroupById = useMemo(() => {
+    const map = new Map<string, SectionGroup>();
+    for (const flat of flattenAll(sections)) map.set(flat.sectionId, flat.group);
+    return map;
+  }, [sections]);
+  const sectionColorFor = (sectionId: string): string => {
+    const group = sectionGroupById.get(sectionId);
+    return (group && SECTION_COLORS[group]) || accentColor;
+  };
   const catalogEntry = activeWeek ? getJwWolWeekCatalogEntry(activeWeek.weekId) : undefined;
   const weekRangeEn = catalogEntry?.weekRangeEn ?? activeWeek?.weekRangeEn ?? "";
   const weekRangeEs = catalogEntry?.weekRangeEs ?? activeWeek?.weekRangeEs ?? "";
@@ -529,7 +540,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
     if (i === 0) legacyOffset += 5;
   }
 
-  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog, prefs.chairmanExpectedCount);
+  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog, prefs.chairmanExpectedCount, prefs.chairmanExpectedSeconds);
   const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timer;
 
   if (sections.length === 0) {
@@ -617,13 +628,13 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
       {/* ===== PROGRAM BODY ===== */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-6 space-y-4">
-        <TimerLegend isEs={isEs} lbl={lbl} />
+        <TimerLegend isEs={isEs} lbl={lbl} accentColor={accentColor} />
 
         {/* Opening section */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface p-4 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex-1">
-               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{lbl.chairman} ({prefs.chairmanExpectedCount} {lbl.expected}):</p>
+               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2" style={{ color: accentColor }}>{lbl.chairman} ({prefs.chairmanExpectedCount} {lbl.expected}):</p>
               <input value={sections[0]?.assigneeName || ""}
                 onChange={e => updateSection(sections[0]?.id ?? "", s => ({ ...s, assigneeName: e.target.value }))}
                 placeholder="————" className="w-full bg-transparent text-sm italic text-slate-500 dark:text-slate-400 focus:outline-none border-b border-dashed border-slate-200 dark:border-slate-700 pb-0.5" />
@@ -755,6 +766,8 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
       {/* ===== SESSION REVIEW ===== */}
       <SessionReview sessionLog={sessionLog} sessionHistory={sessionHistory} prefs={prefs} isEs={isEs} lbl={lbl}
+        accentColor={accentColor} sectionColorFor={sectionColorFor}
+        chairmanExpectedCount={prefs.chairmanExpectedCount} chairmanExpectedSeconds={prefs.chairmanExpectedSeconds}
         onDeleteLog={onDeleteLog} onUpdateLog={onUpdateLog} />
     </div>
   );
@@ -825,12 +838,12 @@ function TimerButton({ role, label, elapsedSec, running, onClick, onReset, actio
   );
 }
 
-function TimerLegend({ isEs, lbl }: { isEs: boolean; lbl: typeof L.en }) {
+function TimerLegend({ isEs, lbl, accentColor }: { isEs: boolean; lbl: typeof L.en; accentColor: string }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[9px] font-semibold text-slate-400">
       <span className="uppercase tracking-wider">{lbl.legend}</span>
       <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-primary" />{isEs ? lbl.assigneeRole : lbl.assigneeRole}</span>
-      <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-violet-600" />{isEs ? lbl.presidingRole : lbl.presidingRole}</span>
+      <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full" style={{ backgroundColor: accentColor }} />{isEs ? lbl.presidingRole : lbl.presidingRole}</span>
       <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-amber-500" />{lbl.activeRole}</span>
     </div>
   );
@@ -979,8 +992,8 @@ function InterventionRow({
 
 /* ---------- Session Review ---------- */
 
-function LogEditor({ entry, lbl, chairmanExpectedCount, onCancel, onSave }: {
-  entry: TimerLogEntry; lbl: typeof L.en; chairmanExpectedCount: number;
+function LogEditor({ entry, lbl, chairmanExpectedCount, chairmanExpectedSeconds, onCancel, onSave }: {
+  entry: TimerLogEntry; lbl: typeof L.en; chairmanExpectedCount: number; chairmanExpectedSeconds: number;
   onCancel: () => void; onSave: (patch: Partial<TimerLogEntry>) => void;
 }) {
   const [role, setRole] = useState<TimerRole | "none">(entry.role ?? "none");
@@ -993,7 +1006,7 @@ function LogEditor({ entry, lbl, chairmanExpectedCount, onCancel, onSave }: {
       + Math.min(59, Math.max(0, Math.floor(durationSeconds)));
     const startMs = Date.parse(entry.actualStartISO);
     const actualEndISO = new Date(startMs + durationSec * 1000).toISOString();
-    const overtimeLimitMin = role === "presiding" ? chairmanExpectedCount : scheduledDurationMin;
+    const overtimeLimitSec = role === "presiding" ? chairmanExpectedCount * 60 + chairmanExpectedSeconds : scheduledDurationMin * 60;
     onSave({
       role: role === "none" ? undefined : role,
       actualStartISO: entry.actualStartISO,
@@ -1001,14 +1014,14 @@ function LogEditor({ entry, lbl, chairmanExpectedCount, onCancel, onSave }: {
       actualDurationSec: durationSec,
       actualDurationMin: Math.round(durationSec / 60),
       scheduledDurationMin,
-      wasOvertime: durationSec > overtimeLimitMin * 60,
+      wasOvertime: durationSec > overtimeLimitSec,
     });
   };
   return (
     <div className="grid min-w-0 gap-2 sm:grid-cols-2">
       <label className="min-w-0 text-[11px] font-semibold">Role
         <select value={role} onChange={(event) => setRole(event.target.value as TimerRole | "none")} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700">
-          <option value="none">{lbl.timer}</option><option value="assignee">{lbl.assignee}</option><option value="presiding">{lbl.presiding}</option>
+          <option value="none">{lbl.timer}</option><option value="assignee">{lbl.assignee}</option><option value="presiding">{lbl.conductor}</option>
         </select>
       </label>
       <label className="min-w-0 text-[11px] font-semibold">{lbl.min}
@@ -1028,8 +1041,10 @@ function LogEditor({ entry, lbl, chairmanExpectedCount, onCancel, onSave }: {
   );
 }
 
-function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteLog, onUpdateLog }: {
+function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentColor, sectionColorFor, chairmanExpectedCount, chairmanExpectedSeconds, onDeleteLog, onUpdateLog }: {
   sessionLog: TimerLogEntry[]; sessionHistory: MeetingSession[]; prefs: PresidingPrefs; isEs: boolean; lbl: typeof L.en;
+  accentColor: string; sectionColorFor: (sectionId: string) => string;
+  chairmanExpectedCount: number; chairmanExpectedSeconds: number;
   onDeleteLog?: (logId: string) => void;
   onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void;
 }) {
@@ -1060,22 +1075,28 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteL
              reviewEntries.map(({ entry, date }, i) => {
                const cf = (iso: string) => { const d = new Date(iso); return fmtClock(d.getHours() * 60 + d.getMinutes(), prefs.timeFormat === "24h"); };
                const editing = editingId === entry.id;
+               const chairmanLimitSec = chairmanExpectedCount * 60 + chairmanExpectedSeconds;
+               const durSec = logDurationSec(entry);
+               const isOvertime = entry.wasOvertime || (entry.role === "presiding" && durSec > chairmanLimitSec);
+               const limitSec = entry.role === "presiding" ? chairmanLimitSec : entry.scheduledDurationMin * 60;
+               const overage = Math.max(0, durSec - limitSec);
+               const chipColor = entry.role === "presiding" ? accentColor : sectionColorFor(entry.sectionId);
                return (
                  <div key={entry.id ?? `${date}-${entry.sectionId}-${i}`} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-canvas px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
                    {editing && entry.id && onUpdateLog ? (
-                     <LogEditor entry={entry} lbl={lbl} chairmanExpectedCount={prefs.chairmanExpectedCount} onCancel={() => setEditingId(null)} onSave={(patch) => { onUpdateLog(entry.id!, patch); setEditingId(null); }} />
+                     <LogEditor entry={entry} lbl={lbl} chairmanExpectedCount={prefs.chairmanExpectedCount} chairmanExpectedSeconds={prefs.chairmanExpectedSeconds} onCancel={() => setEditingId(null)} onSave={(patch) => { onUpdateLog(entry.id!, patch); setEditingId(null); }} />
                    ) : (
                      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
                        <span className="text-slate-400 text-[10px]">{i + 1}.</span>
                        <div className="min-w-0 break-words">{date && <span className="mr-2 text-[10px] text-slate-400">{date}</span>}<span>{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span></div>
                        <div className="flex flex-wrap justify-end gap-1">
-                         <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-500">{roleName(entry)}</span>
+                         <span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ color: chipColor, backgroundColor: chipColor + "15" }}>{roleName(entry)}</span>
                          {entry.id && onUpdateLog && <button type="button" onClick={() => setEditingId(entry.id!)} aria-label={`${lbl.editLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-primary/10 hover:text-primary"><span className="material-symbols-outlined text-base">edit</span></button>}
                          {onDeleteLog && entry.id && <button type="button" onClick={() => onDeleteLog(entry.id!)} aria-label={`${lbl.deleteLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"><span className="material-symbols-outlined text-base">delete</span></button>}
                        </div>
                        <span className="col-span-2 font-mono text-[11px] text-slate-400">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
-                       <span className={cn("justify-self-end font-mono font-semibold", entry.wasOvertime ? "text-red-500" : "text-emerald-600")}>
-                      {fmtTime(entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60))}{entry.wasOvertime ? ` (+${Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60) > 0 ? fmtTime(Math.max(0, (entry.actualDurationSec ?? entry.actualDurationMin * 60) - entry.scheduledDurationMin * 60)) : "0:00"})` : ""}
+                        <span className={cn("justify-self-end font-mono font-semibold", isOvertime ? "text-red-500" : "text-emerald-600")}>
+                      {fmtTime(durSec)}{isOvertime ? ` (+${overage > 0 ? fmtTime(overage) : "0:00"})` : ""}
                        </span>
                      </div>
                    )}

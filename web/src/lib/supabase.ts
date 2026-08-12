@@ -539,7 +539,8 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
     const { error: prefsError } = await client.from("program_preferences").upsert({
       user_id: userId, active_week_id: program.config.activeWeekId, auto_advance: program.prefs.autoAdvance,
       meeting_start_hour: program.prefs.meetingStartHour, meeting_start_minute: program.prefs.meetingStartMinute,
-      time_format: program.prefs.timeFormat, updated_at: localPrefsUpdated,
+      time_format: program.prefs.timeFormat, chairman_expected_count: program.prefs.chairmanExpectedCount,
+      chairman_expected_seconds: program.prefs.chairmanExpectedSeconds, updated_at: localPrefsUpdated,
     }, { onConflict: "user_id" });
     if (prefsError) throw new Error(`pushProgram preferences: ${prefsError.message}`);
   }
@@ -637,7 +638,8 @@ export async function pullProgram(userId: string): Promise<ProgramSyncState | nu
   const prefs = prefsResult.data ? {
     autoAdvance: Boolean(prefsResult.data.auto_advance), meetingStartHour: Number(prefsResult.data.meeting_start_hour ?? 19),
     meetingStartMinute: Number(prefsResult.data.meeting_start_minute ?? 30), timeFormat: prefsResult.data.time_format === "12h" ? "12h" : "24h",
-    chairmanExpectedCount: 1,
+    chairmanExpectedCount: Number(prefsResult.data.chairman_expected_count ?? 1),
+    chairmanExpectedSeconds: Number(prefsResult.data.chairman_expected_seconds ?? 0),
     updatedAt: typeof prefsResult.data.updated_at === "string" ? prefsResult.data.updated_at : undefined,
   } satisfies PresidingPrefs : getDefaultPresidingPrefs();
   const logsBySession = new Map<string, TimerLogEntry[]>();
