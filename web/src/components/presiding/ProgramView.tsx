@@ -1060,7 +1060,7 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
     return entry.role === "assignee" ? lbl.assignee : lbl.presiding;
   };
   return (
-    <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/95 pb-safe-mobile">
+    <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/95 pb-safe-mobile md:pb-0">
       <button type="button" onClick={() => setShow((current) => !current)} aria-expanded={show}
         aria-controls="session-review-log"
         className="w-full flex items-center justify-between px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 active:bg-slate-50 dark:active:bg-slate-800/50 sticky bottom-0 z-10 bg-surface/95">
