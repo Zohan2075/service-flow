@@ -227,6 +227,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
     console.info("[ServiceFlow] Auto-sync starting");
     syncingRef.current = true;
+    setState({ status: "syncing", error: null });
+    let syncError: string | null = null;
     try {
       // CRITICAL: Always pull first on a fresh device to prevent overwriting remote data
       if (!hasPulledOnceRef.current) {
@@ -278,6 +280,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             console.info("[ServiceFlow] First sync: pushed local data (remote was empty)");
           }
         } catch (err) {
+          syncError = err instanceof Error ? err.message : "Initial sync failed";
           console.warn("[ServiceFlow] First sync pull failed:", err instanceof Error ? err.message : err);
         }
         return;
@@ -341,6 +344,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             console.info("[ServiceFlow] Auto-restore: no remote data to restore");
           }
         } catch (err) {
+          syncError = err instanceof Error ? err.message : "Restore failed";
           console.info(
             "[ServiceFlow] Auto-restore: pull failed or no data found",
             err instanceof Error ? err.message : err,
@@ -348,12 +352,22 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (err) {
+      syncError = err instanceof Error ? err.message : "Sync failed";
       console.warn(
         "[ServiceFlow] Auto-sync failed:",
         err instanceof Error ? err.message : err,
       );
     } finally {
       syncingRef.current = false;
+      const pendingAfterSync = useStore.getState().syncMetadata.hasPendingChanges;
+      if (syncError || pendingAfterSync) {
+        setState({
+          status: "error",
+          error: syncError ?? "Sync incomplete. Please retry.",
+        });
+      } else {
+        setState({ status: "idle", error: null });
+      }
     }
   }, [autoSyncEnabled, hasPendingChanges, importData, performSync]);
 

@@ -360,6 +360,20 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   };
 }
 
+function normalizePresidingPrefs(prefs?: Partial<PresidingPrefs>): PresidingPrefs {
+  const defaults = getDefaultPresidingPrefs();
+  const rawCount = prefs?.chairmanExpectedCount;
+  const chairmanExpectedCount = typeof rawCount === "number" && Number.isFinite(rawCount)
+    ? Math.min(99, Math.max(1, Math.floor(rawCount)))
+    : defaults.chairmanExpectedCount;
+
+  return {
+    ...defaults,
+    ...(prefs ?? {}),
+    chairmanExpectedCount,
+  };
+}
+
 function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): PresidingConfig {
   const cfg = raw as Record<string, unknown> | null;
   const normalizeSections = (sections: unknown[], inheritedGroup: SectionGroup = null, initialOffset = 0): PresidingSection[] => {
@@ -1231,9 +1245,9 @@ export const useStore = create<AppState>()(
             interestedPeople: file.interested_people ?? [],
             interestedStatuses: file.interested_statuses?.length ? file.interested_statuses : get().interestedStatuses,
             presidingConfig: remoteProgram?.config ? preserveLocalAssigneeNames(s.presidingConfig, nextProgramConfig) : nextProgramConfig,
-            presidingPrefs: remoteProgram?.prefs && typeof remoteProgram.prefs === "object"
-              ? { ...s.presidingPrefs, ...(remoteProgram.prefs as Partial<PresidingPrefs>) }
-              : s.presidingPrefs,
+             presidingPrefs: remoteProgram?.prefs && typeof remoteProgram.prefs === "object"
+               ? normalizePresidingPrefs({ ...s.presidingPrefs, ...(remoteProgram.prefs as Partial<PresidingPrefs>) })
+               : normalizePresidingPrefs(s.presidingPrefs),
              presidingSession: nextSessions[nextSessions.length - 1] ?? null,
              presidingSessions: nextSessions,
              presidingTombstones: nextTombstones,
@@ -1290,7 +1304,9 @@ export const useStore = create<AppState>()(
         });
       }),
       setPresidingPrefs: (patch) =>
-        set((s) => withPendingSync({ presidingPrefs: { ...s.presidingPrefs, ...patch, updatedAt: now() } })),
+        set((s) => withPendingSync({
+          presidingPrefs: normalizePresidingPrefs({ ...s.presidingPrefs, ...patch, updatedAt: now() }),
+        })),
       ensureActiveProgramWeek: (date = new Date()) =>
         set((s) => {
           const weekId = getProgramWeekId(date);
@@ -1486,7 +1502,7 @@ export const useStore = create<AppState>()(
           syncMetadata: hasCurrentData ? current.syncMetadata : (p.syncMetadata ?? current.syncMetadata),
           uiState: current.uiState,
             presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingConfig),
-            presidingPrefs: p.presidingPrefs ?? current.presidingPrefs,
+             presidingPrefs: normalizePresidingPrefs(p.presidingPrefs ?? current.presidingPrefs),
              presidingSession: migratePresidingSession(p.presidingSession ?? current.presidingSession),
              presidingSessions: migratePresidingSessions(p.presidingSessions, migratePresidingSession(p.presidingSession ?? current.presidingSession)),
              presidingTombstones: migrateProgramTombstones(p.presidingTombstones ?? current.presidingTombstones),

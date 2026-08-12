@@ -43,19 +43,19 @@ export const JW_WOL_WEEKLY_PROGRAM_CATALOG: Record<string, ProgramWeekCatalogEnt
     weekId: "2026-W32",
     weekRangeEn: "AUGUST 3-9",
     weekRangeEs: "3-9 DE AGOSTO",
-    bibleReading: "JEREMIAH 22-23",
+    bibleReading: "Jeremiah 22, 23",
   },
   "2026-W33": {
     weekId: "2026-W33",
     weekRangeEn: "AUGUST 10-16",
     weekRangeEs: "10-16 DE AGOSTO",
-    bibleReading: "JEREMIAH 24-25",
+    bibleReading: "Jeremiah 24, 25",
   },
   "2026-W34": {
     weekId: "2026-W34",
     weekRangeEn: "AUGUST 17-23",
     weekRangeEs: "17-23 DE AGOSTO",
-    bibleReading: "JEREMIAH 26-28",
+    bibleReading: "Jeremiah 26-28",
   },
 };
 
@@ -83,6 +83,7 @@ export interface PresidingPrefs {
   meetingStartHour: number;   // 0-23
   meetingStartMinute: number; // 0-59
   timeFormat: "24h" | "12h";
+  chairmanExpectedCount: number;
   updatedAt?: string;
 }
 
@@ -215,7 +216,7 @@ export function getDefaultPresidingConfig(): PresidingConfig {
 }
 
 export function getDefaultPresidingPrefs(): PresidingPrefs {
-  return { autoAdvance: false, meetingStartHour: 19, meetingStartMinute: 30, timeFormat: "24h" };
+  return { autoAdvance: false, meetingStartHour: 19, meetingStartMinute: 30, timeFormat: "24h", chairmanExpectedCount: 1 };
 }
 
 let _counter = 0;

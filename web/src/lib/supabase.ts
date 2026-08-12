@@ -637,6 +637,7 @@ export async function pullProgram(userId: string): Promise<ProgramSyncState | nu
   const prefs = prefsResult.data ? {
     autoAdvance: Boolean(prefsResult.data.auto_advance), meetingStartHour: Number(prefsResult.data.meeting_start_hour ?? 19),
     meetingStartMinute: Number(prefsResult.data.meeting_start_minute ?? 30), timeFormat: prefsResult.data.time_format === "12h" ? "12h" : "24h",
+    chairmanExpectedCount: 1,
     updatedAt: typeof prefsResult.data.updated_at === "string" ? prefsResult.data.updated_at : undefined,
   } satisfies PresidingPrefs : getDefaultPresidingPrefs();
   const logsBySession = new Map<string, TimerLogEntry[]>();

@@ -180,7 +180,7 @@ l-46 12 -11 76 c-11 69 -17 82 -71 151 l-59 76 -102 28 -102 28 -65 -26 -65
 
 const L = {
   en: {
-    chairman: "CHAIRMAN", song: "Song & Prayer", openingCmt: "Opening Comments",
+     chairman: "CHAIRMAN", expected: "expected", seconds: "sec.", song: "Song & Prayer", openingCmt: "Opening Comments",
     min: "min.", addPart: "Add Part", done: "Done",
     namePlaceholder: "Name", remove: "Remove", removeConfirm: "Remove this part?",
     master: "Active timer", current: "Now", start: "Start", pause: "Pause",
@@ -197,7 +197,7 @@ const L = {
     legend: "Timer legend", activeRole: "Active", assigneeRole: "Assignee / Reader", presidingRole: "Presiding / Conductor",
   },
   es: {
-    chairman: "PRESIDENTE", song: "Canción y Oración", openingCmt: "Palabras de introducción",
+     chairman: "PRESIDENTE", expected: "esperados", seconds: "seg.", song: "Canción y Oración", openingCmt: "Palabras de introducción",
     min: "min.", addPart: "Agregar Parte", done: "Listo",
     namePlaceholder: "Nombre", remove: "Eliminar", removeConfirm: "¿Eliminar esta parte?",
     master: "Temporizador activo", current: "Ahora", start: "Iniciar", pause: "Pausar",
@@ -622,7 +622,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface p-4 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{lbl.chairman}:</p>
+               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{lbl.chairman} ({prefs.chairmanExpectedCount} {lbl.expected}):</p>
               <input value={sections[0]?.assigneeName || ""}
                 onChange={e => updateSection(sections[0]?.id ?? "", s => ({ ...s, assigneeName: e.target.value }))}
                 placeholder="————" className="w-full bg-transparent text-sm italic text-slate-500 dark:text-slate-400 focus:outline-none border-b border-dashed border-slate-200 dark:border-slate-700 pb-0.5" />
@@ -978,26 +978,30 @@ function InterventionRow({
 
 /* ---------- Session Review ---------- */
 
-function toLocalDateTimeInput(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function fromLocalDateTimeInput(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
-}
-
 function LogEditor({ entry, lbl, onCancel, onSave }: {
   entry: TimerLogEntry; lbl: typeof L.en;
   onCancel: () => void; onSave: (patch: Partial<TimerLogEntry>) => void;
 }) {
   const [role, setRole] = useState<TimerRole | "none">(entry.role ?? "none");
-  const [start, setStart] = useState(toLocalDateTimeInput(entry.actualStartISO));
-  const [end, setEnd] = useState(toLocalDateTimeInput(entry.actualEndISO));
+  const initialDurationSec = logDurationSec(entry);
+  const [durationMinutes, setDurationMinutes] = useState(Math.floor(initialDurationSec / 60));
+  const [durationSeconds, setDurationSeconds] = useState(initialDurationSec % 60);
   const [scheduledDurationMin, setScheduledDurationMin] = useState(entry.scheduledDurationMin);
+  const save = () => {
+    const durationSec = Math.max(0, Math.floor(durationMinutes)) * 60
+      + Math.min(59, Math.max(0, Math.floor(durationSeconds)));
+    const startMs = Date.parse(entry.actualStartISO);
+    const actualEndISO = new Date(startMs + durationSec * 1000).toISOString();
+    onSave({
+      role: role === "none" ? undefined : role,
+      actualStartISO: entry.actualStartISO,
+      actualEndISO,
+      actualDurationSec: durationSec,
+      actualDurationMin: Math.round(durationSec / 60),
+      scheduledDurationMin,
+      wasOvertime: durationSec > scheduledDurationMin * 60,
+    });
+  };
   return (
     <div className="grid min-w-0 gap-2 sm:grid-cols-2">
       <label className="min-w-0 text-[11px] font-semibold">Role
@@ -1008,14 +1012,14 @@ function LogEditor({ entry, lbl, onCancel, onSave }: {
       <label className="min-w-0 text-[11px] font-semibold">{lbl.min}
         <input type="number" min={0} max={240} value={scheduledDurationMin} onChange={(event) => setScheduledDurationMin(Math.max(0, Number(event.target.value) || 0))} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
       </label>
-      <label className="min-w-0 text-[11px] font-semibold">Start
-        <input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
+      <label className="min-w-0 text-[11px] font-semibold">{lbl.min} (actual)
+        <input type="number" min={0} max={240} value={durationMinutes} onChange={(event) => setDurationMinutes(Math.max(0, Math.min(240, Number(event.target.value) || 0)))} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
       </label>
-      <label className="min-w-0 text-[11px] font-semibold">{lbl.end}
-        <input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
+      <label className="min-w-0 text-[11px] font-semibold">{lbl.seconds} (actual)
+        <input type="number" min={0} max={59} value={durationSeconds} onChange={(event) => setDurationSeconds(Math.min(59, Math.max(0, Number(event.target.value) || 0)))} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm dark:border-slate-700" />
       </label>
       <div className="flex gap-2 sm:col-span-2">
-        <button type="button" onClick={() => onSave({ role: role === "none" ? undefined : role, actualStartISO: fromLocalDateTimeInput(start), actualEndISO: fromLocalDateTimeInput(end), scheduledDurationMin })} className="min-h-10 flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">{lbl.save}</button>
+        <button type="button" onClick={save} className="min-h-10 flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">{lbl.save}</button>
         <button type="button" onClick={onCancel} className="min-h-10 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-slate-700">{lbl.cancel}</button>
       </div>
     </div>

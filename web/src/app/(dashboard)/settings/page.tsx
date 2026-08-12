@@ -1400,6 +1400,25 @@ export default function SettingsPage() {
               </div>
             </button>
 
+            {/* Chairman / president expected count */}
+            <div className="pt-2">
+              <label className="block text-sm font-semibold" htmlFor="chairman-expected-count">
+                {t("settings.chairmanExpectedCount")}
+              </label>
+              <p className="mt-0.5 text-xs text-slate-400">{t("settings.chairmanExpectedCountDesc")}</p>
+              <input
+                id="chairman-expected-count"
+                type="number"
+                min={1}
+                max={99}
+                value={programPrefs.chairmanExpectedCount}
+                onChange={(event) => setPresidingPrefs({
+                  chairmanExpectedCount: Math.min(99, Math.max(1, Number(event.target.value) || 1)),
+                })}
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800"
+              />
+            </div>
+
             {/* Meeting start time */}
             <div className="pt-2">
               <p className="text-sm font-semibold">Meeting Start Time</p>
