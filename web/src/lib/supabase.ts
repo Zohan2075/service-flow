@@ -582,7 +582,7 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
     updated_at: entry.updatedAt ?? new Date(0).toISOString(),
   }; })).filter((entry) => Boolean(entry.session_id) && isCurrent("log", entry.id, entry.updated_at));
   if (logs.length > 0) {
-    const { error } = await client.from("program_timer_logs").upsert(logs, { onConflict: "id" });
+    const { error } = await client.from("program_timer_logs").upsert(logs, { onConflict: "user_id,week_id,session_id,section_id,role" });
     if (error) throw new Error(`pushProgram logs: ${error.message}`);
   }
 

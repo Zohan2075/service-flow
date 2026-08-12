@@ -262,6 +262,7 @@ function useProgramTimers(
   sessionLog: TimerLogEntry[],
   onLog: (entry: TimerLogEntry) => void,
   onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void,
+  chairmanExpectedCount: number = 1,
 ) {
   const flat = useMemo(() => flattenAll(sections), [sections]);
   const hydratedRecords = useMemo(
@@ -314,7 +315,7 @@ function useProgramTimers(
         actualEndISO,
         actualDurationMin: Math.round(totalSec / 60),
         actualDurationSec: totalSec,
-        wasOvertime: totalSec > active.scheduledDurationMin * 60,
+        wasOvertime: totalSec > (active.role === "presiding" ? chairmanExpectedCount * 60 : active.scheduledDurationMin * 60),
       });
     } else if (!current.logId) {
       onLog({
@@ -327,10 +328,10 @@ function useProgramTimers(
         actualDurationMin: Math.round(totalSec / 60),
         actualDurationSec: totalSec,
         role: active.role ?? undefined,
-        wasOvertime: totalSec > active.scheduledDurationMin * 60,
+        wasOvertime: totalSec > (active.role === "presiding" ? chairmanExpectedCount * 60 : active.scheduledDurationMin * 60),
       });
     }
-  }, [commitRecords, onLog, onUpdateLog, stopInterval]);
+  }, [chairmanExpectedCount, commitRecords, onLog, onUpdateLog, stopInterval]);
 
   const toggleTimer = useCallback((sectionId: string, role: TimerRole | null) => {
     const item = flat.find((candidate) => candidate.sectionId === sectionId);
@@ -528,7 +529,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
     if (i === 0) legacyOffset += 5;
   }
 
-  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog);
+  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog, prefs.chairmanExpectedCount);
   const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timer;
 
   if (sections.length === 0) {
@@ -978,8 +979,8 @@ function InterventionRow({
 
 /* ---------- Session Review ---------- */
 
-function LogEditor({ entry, lbl, onCancel, onSave }: {
-  entry: TimerLogEntry; lbl: typeof L.en;
+function LogEditor({ entry, lbl, chairmanExpectedCount, onCancel, onSave }: {
+  entry: TimerLogEntry; lbl: typeof L.en; chairmanExpectedCount: number;
   onCancel: () => void; onSave: (patch: Partial<TimerLogEntry>) => void;
 }) {
   const [role, setRole] = useState<TimerRole | "none">(entry.role ?? "none");
@@ -992,6 +993,7 @@ function LogEditor({ entry, lbl, onCancel, onSave }: {
       + Math.min(59, Math.max(0, Math.floor(durationSeconds)));
     const startMs = Date.parse(entry.actualStartISO);
     const actualEndISO = new Date(startMs + durationSec * 1000).toISOString();
+    const overtimeLimitMin = role === "presiding" ? chairmanExpectedCount : scheduledDurationMin;
     onSave({
       role: role === "none" ? undefined : role,
       actualStartISO: entry.actualStartISO,
@@ -999,7 +1001,7 @@ function LogEditor({ entry, lbl, onCancel, onSave }: {
       actualDurationSec: durationSec,
       actualDurationMin: Math.round(durationSec / 60),
       scheduledDurationMin,
-      wasOvertime: durationSec > scheduledDurationMin * 60,
+      wasOvertime: durationSec > overtimeLimitMin * 60,
     });
   };
   return (
@@ -1061,7 +1063,7 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, onDeleteL
                return (
                  <div key={entry.id ?? `${date}-${entry.sectionId}-${i}`} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-canvas px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
                    {editing && entry.id && onUpdateLog ? (
-                     <LogEditor entry={entry} lbl={lbl} onCancel={() => setEditingId(null)} onSave={(patch) => { onUpdateLog(entry.id!, patch); setEditingId(null); }} />
+                     <LogEditor entry={entry} lbl={lbl} chairmanExpectedCount={prefs.chairmanExpectedCount} onCancel={() => setEditingId(null)} onSave={(patch) => { onUpdateLog(entry.id!, patch); setEditingId(null); }} />
                    ) : (
                      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
                        <span className="text-slate-400 text-[10px]">{i + 1}.</span>
