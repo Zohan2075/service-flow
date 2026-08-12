@@ -262,6 +262,7 @@ function useProgramTimers(
   sessionLog: TimerLogEntry[],
   onLog: (entry: TimerLogEntry) => void,
   onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void,
+  onDeleteLog?: (logId: string) => void,
   chairmanExpectedCount: number = 1,
   chairmanExpectedSeconds: number = 0,
 ) {
@@ -374,9 +375,9 @@ function useProgramTimers(
     }
 
     const current = recordsR.current[key];
-    if (!current || current.unsavedSec === 0) return;
-    commitRecords({ ...recordsR.current, [key]: { ...current, unsavedSec: 0 } });
-  }, [commitRecords, stopInterval]);
+    if (current?.logId && onDeleteLog) onDeleteLog(current.logId);
+    commitRecords({ ...recordsR.current, [key]: { persistedSec: 0, unsavedSec: 0 } });
+  }, [commitRecords, onDeleteLog, stopInterval]);
 
   useEffect(() => {
     const active = activeR.current;
@@ -540,7 +541,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
     if (i === 0) legacyOffset += 5;
   }
 
-  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog, prefs.chairmanExpectedCount, prefs.chairmanExpectedSeconds);
+  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog, onDeleteLog, prefs.chairmanExpectedCount, prefs.chairmanExpectedSeconds);
   const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timer;
 
   if (sections.length === 0) {
