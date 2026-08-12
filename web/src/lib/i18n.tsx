@@ -156,6 +156,9 @@ const translations = {
     "settings.interestedSettingsLabelDesc": "Custom heading for this settings section.",
     "settings.interestedTimestampShortcut": "Comment timestamp shortcut",
     "settings.interestedTimestampShortcutDesc": "Show a button and enable Ctrl+Shift+D / Cmd+Shift+D to insert the current date and time in comments.",
+    "settings.commentsTimestampFormat": "Time format",
+    "settings.timeFormat12h": "12-hour (1:30 PM)",
+    "settings.timeFormat24h": "24-hour (13:30)",
     "settings.name": "Name",
     "settings.dataBackup": "Data & Backup",
     "settings.organizedSettingsTitle": "Settings by category",
@@ -507,6 +510,9 @@ const translations = {
     "settings.interestedSettingsLabelDesc": "Título personalizado para esta sección de ajustes.",
     "settings.interestedTimestampShortcut": "Atajo de fecha y hora en comentarios",
     "settings.interestedTimestampShortcutDesc": "Muestra un botón y activa Ctrl+Shift+D / Cmd+Shift+D para insertar la fecha y hora actuales en los comentarios.",
+    "settings.commentsTimestampFormat": "Formato de hora",
+    "settings.timeFormat12h": "12 horas (1:30 PM)",
+    "settings.timeFormat24h": "24 horas (13:30)",
     "settings.name": "Nombre",
     "settings.dataBackup": "Datos y Respaldo",
     "settings.organizedSettingsTitle": "Ajustes por categoria",
@@ -795,7 +801,7 @@ export function dateTimeString(date: Date, lang: Language): string {
   }).format(date);
 }
 
-export function commentTimestamp(date: Date, lang: Language): string {
+export function commentTimestamp(date: Date, lang: Language, format: "12h" | "24h"): string {
   const formattedDate = new Intl.DateTimeFormat(localeTag(lang), {
     year: "numeric",
     month: "2-digit",
@@ -805,6 +811,7 @@ export function commentTimestamp(date: Date, lang: Language): string {
     hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
+    hour12: format === "12h",
   }).format(date);
 
   return `${formattedDate} - ${formattedTime} →`;

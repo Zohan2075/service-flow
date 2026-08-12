@@ -50,6 +50,8 @@ export interface AppSettings {
   notifications: NotificationPreferences;
   // Interested People comment shortcut
   interestedCommentsTimestampShortcutEnabled: boolean;
+  // Interested People comment timestamp format
+  interestedCommentsTimestampFormat: "12h" | "24h";
   // Auto-sync to Supabase (opt-out)
   autoSync: boolean;
   // Monthly hour cap (self-imposed limit, opt-in)

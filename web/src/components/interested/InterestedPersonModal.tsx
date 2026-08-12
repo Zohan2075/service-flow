@@ -53,6 +53,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const interestedStatuses = useStore((s) => s.interestedStatuses);
   const language = useStore((s) => s.settings.language);
   const timestampShortcutEnabled = useStore((s) => s.settings.interestedCommentsTimestampShortcutEnabled);
+  const timestampFormat = useStore((s) => s.settings.interestedCommentsTimestampFormat);
   const { t } = useT();
 
   // Build status lookup from customizable config
@@ -179,7 +180,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
 
     const start = textarea.selectionStart ?? comments.length;
     const end = textarea.selectionEnd ?? start;
-    const timestamp = commentTimestamp(new Date(), language);
+    const timestamp = commentTimestamp(new Date(), language, timestampFormat);
     const nextComments = `${comments.slice(0, start)}${timestamp}${comments.slice(end)}`;
     setComments(nextComments);
 

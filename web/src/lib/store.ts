@@ -305,6 +305,7 @@ const INITIAL_SETTINGS: AppSettings = {
     showPreview: false,
   },
   interestedCommentsTimestampShortcutEnabled: true,
+  interestedCommentsTimestampFormat: "12h",
   autoSync: true,
   monthlyCapEnabled: false,
   monthlyCapHours: 55,

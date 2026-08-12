@@ -1337,6 +1337,41 @@ export default function SettingsPage() {
              </button>
            </div>
 
+           <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 mb-6 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
+             <div>
+               <p className="text-sm font-semibold">{t("settings.commentsTimestampFormat")}</p>
+               <p className="text-xs text-slate-400">{t("settings.interestedTimestampShortcutDesc")}</p>
+             </div>
+             <div className="flex shrink-0 gap-2">
+               <button
+                 type="button"
+                 onClick={() => updateSettings({ interestedCommentsTimestampFormat: "12h" })}
+                 aria-pressed={settings.interestedCommentsTimestampFormat === "12h"}
+                 className={cn(
+                   "rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+                   settings.interestedCommentsTimestampFormat === "12h"
+                     ? "border-primary bg-primary text-white"
+                     : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                 )}
+               >
+                 {t("settings.timeFormat12h")}
+               </button>
+               <button
+                 type="button"
+                 onClick={() => updateSettings({ interestedCommentsTimestampFormat: "24h" })}
+                 aria-pressed={settings.interestedCommentsTimestampFormat === "24h"}
+                 className={cn(
+                   "rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+                   settings.interestedCommentsTimestampFormat === "24h"
+                     ? "border-primary bg-primary text-white"
+                     : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                 )}
+               >
+                 {t("settings.timeFormat24h")}
+               </button>
+             </div>
+           </div>
+
            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
             if (!over || active.id === over.id) return;
             const oldIndex = interestedStatuses.findIndex((s) => s.id === active.id);
