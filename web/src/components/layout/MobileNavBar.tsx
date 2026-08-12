@@ -34,8 +34,8 @@ export default function MobileNavBar() {
   const navItems = useMemo(() => {
     const all = [
       { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
-      ...(programEnabled ? [{ href: "/presiding", icon: "menu_book", labelKey: "nav.program" as const }] : []),
       { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
+      ...(programEnabled ? [{ href: "/presiding", icon: "menu_book", labelKey: "nav.program" as const }] : []),
       { href: "/interested", icon: "people", labelKey: "nav.interested" as const },
       { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
     ];
