@@ -193,7 +193,7 @@ async function processUser(
           : "You have an upcoming Interested People visit.",
       tag: notificationKey,
       icon: "/android-chrome-192x192.png",
-      badge: "/android-chrome-192x192.png",
+      badge: "/icons/badge-96.png",
       data: {
         url: `/interested?personId=${encodeURIComponent(person.id)}`,
         personId: person.id,

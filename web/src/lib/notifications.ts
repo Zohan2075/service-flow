@@ -217,7 +217,7 @@ export async function showBrowserNotification(notification: InterestedNotificati
   const options: NotificationOptions = {
     body: notification.body,
     icon: "/android-chrome-192x192.png",
-    badge: "/android-chrome-192x192.png",
+    badge: "/icons/badge-96.png",
     tag: `serviceflow-${notification.key}`,
     data: { url: notification.url, personId: notification.personId, notificationKey: notification.key },
   };
