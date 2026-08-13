@@ -14,6 +14,7 @@ import type {
   NotificationPreferences,
 } from "@/types/data";
 import { DEFAULT_INTERESTED_STATUSES } from "@/types/data";
+import { isoWeekKey, isInterestedPersonCompleted } from "@/lib/isoWeek";
 import type {
   PresidingConfig,
   PresidingPrefs,
@@ -133,6 +134,7 @@ interface AppState {
   // interested person actions
   addInterestedPerson: (person: Omit<InterestedPerson, "id" | "created_at" | "updated_at">) => void;
   updateInterestedPerson: (id: string, patch: Partial<InterestedPerson>) => void;
+  toggleInterestedPersonCompleted: (id: string) => void;
   deleteInterestedPerson: (id: string) => void;
 
   // interested status config actions
@@ -1110,6 +1112,21 @@ export const useStore = create<AppState>()(
             ),
           })
         ),
+
+      toggleInterestedPersonCompleted: (id) =>
+        set((s) => {
+          const person = s.interestedPeople.find((p) => p.id === id);
+          if (!person) return { interestedPeople: s.interestedPeople };
+          const done = isInterestedPersonCompleted(person);
+          const patch = done
+            ? { completed: false, completedWeekKey: null }
+            : { completed: true, completedWeekKey: isoWeekKey(new Date()) };
+          return withPendingSync({
+            interestedPeople: s.interestedPeople.map((p) =>
+              p.id === id ? { ...p, ...patch, updated_at: now() } : p
+            ),
+          });
+        }),
 
       deleteInterestedPerson: (id) =>
         set((s) =>

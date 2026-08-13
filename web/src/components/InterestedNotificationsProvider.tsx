@@ -43,6 +43,7 @@ export function InterestedNotificationsProvider({ children }: { children: ReactN
   const { session } = useSupabaseAuth();
   const settings = useStore((state) => state.settings);
   const people = useStore((state) => state.interestedPeople);
+  const interestedStatuses = useStore((state) => state.interestedStatuses);
   const updateSettings = useStore((state) => state.updateSettings);
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,14 +65,14 @@ export function InterestedNotificationsProvider({ children }: { children: ReactN
 
   const checkForeground = useCallback(async () => {
     if (!session?.user?.id || !settings.notifications.enabled || notificationPermission() !== "granted") return;
-    const due = findDueInterestedNotifications(people, settings.notifications);
+    const due = findDueInterestedNotifications(people, settings.notifications, settings.language, interestedStatuses);
     for (const notification of due) {
       if (hasSeenNotification(session.user.id, notification.key)) continue;
       markNotificationSeen(session.user.id, notification.key);
       await showBrowserNotification(notification);
       await playNotificationSound(settings.notifications.sound);
     }
-  }, [people, session?.user?.id, settings.notifications]);
+  }, [people, interestedStatuses, session?.user?.id, settings.language, settings.notifications]);
 
   const refreshSubscription = useCallback(async () => {
     if (!support.pushSupported || !session?.user?.id) return;
@@ -145,6 +146,10 @@ export function InterestedNotificationsProvider({ children }: { children: ReactN
       url: "/interested",
       personId: "",
       visitDate: "",
+      categoryId: "",
+      categoryName: "ServiceFlow",
+      categoryIcon: "🔔",
+      language: settings.language,
     });
     await playNotificationSound(settings.notifications.sound);
     return true;

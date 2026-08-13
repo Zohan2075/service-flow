@@ -109,8 +109,8 @@ self.addEventListener("push", (event) => {
       event.waitUntil(
         self.registration.showNotification(payload.title || "ServiceFlow", {
           body: payload.body || "",
-        icon: "/android-chrome-192x192.png",
-        badge: "/android-chrome-192x192.png",
+        icon: payload.icon || "/android-chrome-192x192.png",
+        badge: payload.badge || "/android-chrome-192x192.png",
         tag: payload.tag || "serviceflow",
           data: { ...data, url: data.url || payload.url || "/interested" },
         requireInteraction: payload.requireInteraction ?? false,

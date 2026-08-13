@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
+import { isInterestedPersonCompleted } from "@/lib/isoWeek";
 import { cn } from "@/lib/utils";
 import { useT, dateTimeString } from "@/lib/i18n";
 
@@ -25,7 +26,7 @@ export default function InterestedPeoplePage() {
   const settings = useStore((s) => s.settings);
   const interestedPeople = useStore((s) => s.interestedPeople);
   const interestedStatuses = useStore((s) => s.interestedStatuses);
-  const updateInterestedPerson = useStore((s) => s.updateInterestedPerson);
+  const toggleInterestedPersonCompleted = useStore((s) => s.toggleInterestedPersonCompleted);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState<InterestedPerson | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -137,13 +138,14 @@ export default function InterestedPeoplePage() {
           <div className="space-y-2">
             {filteredPeople.map((person) => {
               const statusInfo = getStatusInfo(person.status);
+              const completed = isInterestedPersonCompleted(person);
               return (
                 <button
                   key={person.id}
                   onClick={() => handleOpenEdit(person)}
                   className={cn(
                     "w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors relative overflow-hidden",
-                    person.completed && "opacity-60"
+                    completed && "opacity-60"
                   )}
                   style={{
                     borderLeft: `4px solid ${statusInfo.color}`,
@@ -168,7 +170,7 @@ export default function InterestedPeoplePage() {
                       >
                         {person.gender === "male" ? "♂" : person.gender === "female" ? "♀" : "⚬"}
                       </span>
-                      <p className={cn("font-semibold text-sm truncate", person.completed && "line-through")}>
+                      <p className={cn("font-semibold text-sm truncate", completed && "line-through")}>
                         {person.name} {person.last_name}
                       </p>
                     </div>
@@ -184,20 +186,20 @@ export default function InterestedPeoplePage() {
                     <span
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); updateInterestedPerson(person.id, { completed: !person.completed }); } }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleInterestedPersonCompleted(person.id); } }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        updateInterestedPerson(person.id, { completed: !person.completed });
+                        toggleInterestedPersonCompleted(person.id);
                       }}
                       className={cn(
                         "inline-flex items-center justify-center size-7 rounded-full transition-colors cursor-pointer",
-                        person.completed
+                        completed
                           ? "bg-green-500 text-white"
                           : "text-slate-300 dark:text-slate-600 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
                       )}
-                      title={person.completed ? t("interested.markActive") : t("interested.markCompleted")}
+                      title={completed ? t("interested.markActive") : t("interested.markCompleted")}
                     >
-                      <span className="material-symbols-outlined text-base">{person.completed ? "check_circle" : "radio_button_unchecked"}</span>
+                      <span className="material-symbols-outlined text-base">{completed ? "check_circle" : "radio_button_unchecked"}</span>
                     </span>
                     {person.latitude != null && person.longitude != null && (
                       <a

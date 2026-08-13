@@ -18,6 +18,7 @@ import {
   subWeeks,
 } from "date-fns";
 import { useStore } from "@/lib/store";
+import { isoWeekKey, isInterestedPersonCompleted } from "@/lib/isoWeek";
 import { calendarDateKey, computeDurationSeconds, durationDisplay, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import type { TimeEntry, ServiceType, CalendarDay, InterestedPerson } from "@/types/data";
 import { cn } from "@/lib/utils";
@@ -475,10 +476,10 @@ export default function CalendarPage() {
     const rangeEnd = viewMode === "weekly" ? weekEnd : calendarEnd;
 
     for (const person of interestedPeople) {
-      // Specific next visit date
+      // Specific next visit date — one-time visits hide when completed
       if (person.next_visit_date) {
         const visitDate = new Date(person.next_visit_date);
-        if (visitDate >= today && visitDate >= rangeStart && visitDate <= rangeEnd) {
+        if (!isInterestedPersonCompleted(person, today) && visitDate >= today && visitDate >= rangeStart && visitDate <= rangeEnd) {
           const key = format(visitDate, "yyyy-MM-dd");
           if (!map.has(key)) map.set(key, []);
           map.get(key)!.push(person);
@@ -498,8 +499,11 @@ export default function CalendarPage() {
           const key = format(cursor, "yyyy-MM-dd");
           // Skip if this date already appears as a specific visit
           if (key !== skipDate) {
-            if (!map.has(key)) map.set(key, []);
-            map.get(key)!.push(person);
+            // Hide only the occurrence of the week this person was marked completed
+            if (!(person.completed && person.completedWeekKey === isoWeekKey(cursor))) {
+              if (!map.has(key)) map.set(key, []);
+              map.get(key)!.push(person);
+            }
           }
           cursor.setDate(cursor.getDate() + 7);
         }

@@ -130,6 +130,7 @@ export interface InterestedPerson {
   next_visit_weekly_day: number | null;  // 0=Sun…6=Sat — when set, next visit repeats weekly on this day
   status: InterestedPersonStatus;
   completed: boolean;
+  completedWeekKey?: string | null;  // ISO week key "YYYY-Www" of the week this person was last marked completed
   created_at: string;
   updated_at: string;
 }

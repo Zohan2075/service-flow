@@ -14,6 +14,8 @@ type Preferences = {
   showPreview: boolean;
 };
 
+type Language = "en" | "es";
+
 type Person = {
   id: string;
   name: string;
@@ -21,6 +23,15 @@ type Person = {
   next_visit_date: string | null;
   next_visit_weekly_day: number | null;
   completed: boolean;
+  completed_week_key: string | null;
+  status: string;
+};
+
+type StatusInfo = {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
 };
 
 function json(body: unknown, status = 200) {
@@ -63,8 +74,38 @@ function nextWeeklyDate(day: number | null, today: Date): Date | null {
   return result;
 }
 
+// ISO 8601 week key ("YYYY-Www") computed in UTC. Keep in sync with
+// web/src/lib/isoWeek.ts (client uses local date; this uses the UTC `today`).
+function isoWeekKey(date: Date): string {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+// A weekly-recurring person counts as completed only when completed during the
+// current week; a one-time person counts as completed forever.
+function isCompletedForWeek(person: Person, today: Date): boolean {
+  if (!person.completed) return false;
+  if (person.next_visit_weekly_day == null) return true;
+  return person.completed_week_key != null && person.completed_week_key === isoWeekKey(today);
+}
+
+const CATEGORY_ICONS: Record<string, string> = {
+  bible_student: "📖",
+  return_visit: "🔄",
+  interested_person: "👤",
+  shepherding: "🐑",
+};
+
+function categoryIconFor(status: string): string {
+  return CATEGORY_ICONS[status] ?? "🔔";
+}
+
 function visitDateFor(person: Person, today: Date): Date | null {
-  if (person.completed) return null;
+  if (isCompletedForWeek(person, today)) return null;
   const candidates = [
     parseDate(person.next_visit_date),
     nextWeeklyDate(person.next_visit_weekly_day, today),
@@ -76,6 +117,7 @@ async function processUser(
   admin: ReturnType<typeof createClient>,
   userId: string,
   preferences: Preferences,
+  language: Language,
   now: Date,
   vapidPublicKey: string,
   vapidPrivateKey: string,
@@ -98,11 +140,17 @@ async function processUser(
     return { checked: false, sent: 0 };
   }
 
+  const { data: statusRows, error: statusError } = await admin
+    .from("interested_statuses")
+    .select("id, name, color, icon")
+    .eq("user_id", userId);
+  if (statusError) throw statusError;
+  const statusMap = new Map<string, StatusInfo>((statusRows ?? []).map((s) => [s.id, s]));
+
   const { data: people, error: peopleError } = await admin
     .from("interested_people")
-    .select("id, name, last_name, next_visit_date, next_visit_weekly_day, completed")
-    .eq("user_id", userId)
-    .eq("completed", false);
+    .select("id, name, last_name, next_visit_date, next_visit_weekly_day, completed, completed_week_key, status")
+    .eq("user_id", userId);
   if (peopleError) throw peopleError;
 
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -132,11 +180,30 @@ async function processUser(
     if (!delivery) continue;
 
     const fullName = [person.name, person.last_name].filter(Boolean).join(" ") || "Interested person";
+    const categoryName = statusMap.get(person.status)?.name ?? person.status;
+    const isSpanish = language === "es";
     const payload = {
-      title: `Upcoming visit: ${fullName}`,
-      body: preferences.showPreview ? `${fullName} has a visit scheduled for ${visitKey}.` : "You have an upcoming Interested People visit.",
+      title: isSpanish ? `Visita próxima: ${fullName}` : `Upcoming visit: ${fullName}`,
+      body: preferences.showPreview
+        ? isSpanish
+          ? `${fullName} tiene una visita programada para el ${visitKey}.`
+          : `${fullName} has a visit scheduled for ${visitKey}.`
+        : isSpanish
+          ? "Tienes una visita próxima de Personas Interesadas."
+          : "You have an upcoming Interested People visit.",
       tag: notificationKey,
-      data: { url: `/interested?personId=${encodeURIComponent(person.id)}`, personId: person.id, visitDate: visitKey, notificationKey },
+      icon: "/android-chrome-192x192.png",
+      badge: "/android-chrome-192x192.png",
+      data: {
+        url: `/interested?personId=${encodeURIComponent(person.id)}`,
+        personId: person.id,
+        visitDate: visitKey,
+        notificationKey,
+        categoryId: person.status,
+        categoryName,
+        categoryIcon: categoryIconFor(person.status),
+        language,
+      },
     };
 
     let delivered = false;
@@ -188,7 +255,7 @@ Deno.serve(async (request) => {
   const results = [];
   for (const row of settingsRows ?? []) {
     try {
-      results.push({ userId: row.user_id, ...(await processUser(admin, row.user_id, preferencesFrom(row.data?.notifications), now, vapidPublicKey, vapidPrivateKey, vapidSubject)) });
+      results.push({ userId: row.user_id, ...(await processUser(admin, row.user_id, preferencesFrom(row.data?.notifications), row.data?.language === "es" ? "es" : "en", now, vapidPublicKey, vapidPrivateKey, vapidSubject)) });
     } catch (error) {
       console.error("Notification user processing failed", { userId: row.user_id, error });
       results.push({ userId: row.user_id, checked: false, sent: 0, error: "processing failed" });

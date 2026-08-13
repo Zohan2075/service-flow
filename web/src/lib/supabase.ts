@@ -341,6 +341,7 @@ export async function pushInterestedPeople(
     next_visit_weekly_day: p.next_visit_weekly_day ?? null,
     status: p.status,
     completed: p.completed ?? false,
+    completed_week_key: p.completedWeekKey ?? null,
     created_at: p.created_at,
     updated_at: p.updated_at,
   }));
@@ -380,6 +381,7 @@ export async function pullInterestedPeople(
       next_visit_weekly_day: r.next_visit_weekly_day ?? null,
       status: r.status,
       completed: r.completed ?? false,
+      completedWeekKey: r.completed_week_key ?? null,
       created_at: r.created_at,
       updated_at: r.updated_at,
     }),

@@ -1,4 +1,5 @@
-import type { InterestedPerson, NotificationPreferences, NotificationSound } from "@/types/data";
+import type { InterestedPerson, Language, NotificationPreferences, NotificationSound } from "@/types/data";
+import { isInterestedPersonCompleted } from "@/lib/isoWeek";
 
 export interface InterestedNotification {
   key: string;
@@ -7,6 +8,17 @@ export interface InterestedNotification {
   url: string;
   personId: string;
   visitDate: string;
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string;
+  language: Language;
+}
+
+export interface InterestedStatusInfo {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
 }
 
 export interface NotificationSupport {
@@ -20,6 +32,17 @@ const SOUND_CONFIG: Record<Exclude<NotificationSound, "off">, { frequency: numbe
   chime: { frequency: 740, duration: 0.18 },
   alert: { frequency: 880, duration: 0.28 },
 };
+
+const CATEGORY_ICONS: Record<string, string> = {
+  bible_student: "📖",
+  return_visit: "🔄",
+  interested_person: "👤",
+  shepherding: "🐑",
+};
+
+function categoryIconFor(status: string): string {
+  return CATEGORY_ICONS[status] ?? "🔔";
+}
 
 let audioContext: AudioContext | null = null;
 let audioUnlocked = false;
@@ -99,7 +122,7 @@ function nextWeeklyDate(day: number, from: Date): Date | null {
 }
 
 export function getNextVisitDate(person: InterestedPerson, now = new Date()): Date | null {
-  if (person.completed) return null;
+  if (isInterestedPersonCompleted(person, now)) return null;
   const today = localDate(now);
   const specific = parseDate(person.next_visit_date);
   const weekly = person.next_visit_weekly_day == null ? null : nextWeeklyDate(person.next_visit_weekly_day, today);
@@ -111,9 +134,12 @@ export function getNextVisitDate(person: InterestedPerson, now = new Date()): Da
 export function findDueInterestedNotifications(
   people: InterestedPerson[],
   preferences: NotificationPreferences,
+  language: Language,
+  statuses: InterestedStatusInfo[],
   now = new Date(),
 ): InterestedNotification[] {
   if (!preferences.enabled) return [];
+  const statusMap = new Map<string, InterestedStatusInfo>(statuses.map((s) => [s.id, s]));
   const today = localDate(now);
   const latest = new Date(today);
   latest.setDate(latest.getDate() + preferences.advanceDays);
@@ -123,16 +149,28 @@ export function findDueInterestedNotifications(
     if (!visitDate || visitDate > latest) return [];
     const visitDateKey = dateKey(visitDate);
     const fullName = [person.name, person.last_name].filter(Boolean).join(" ") || "Interested person";
+    const categoryName = statusMap.get(person.status)?.name ?? person.status;
+    const categoryId = person.status;
+    const categoryIcon = categoryIconFor(person.status);
+    const isSpanish = language === "es";
     const body = preferences.showPreview
-      ? `${fullName} has a visit scheduled for ${visitDateKey}.`
-      : "You have an upcoming Interested People visit.";
+      ? isSpanish
+        ? `${fullName} tiene una visita programada para el ${visitDateKey}.`
+        : `${fullName} has a visit scheduled for ${visitDateKey}.`
+      : isSpanish
+        ? "Tienes una visita próxima de Personas Interesadas."
+        : "You have an upcoming Interested People visit.";
     return [{
       key: `${person.id}:${visitDateKey}`,
-      title: `Upcoming visit: ${fullName}`,
+      title: isSpanish ? `Visita próxima: ${fullName}` : `Upcoming visit: ${fullName}`,
       body,
       url: `/interested?personId=${encodeURIComponent(person.id)}`,
       personId: person.id,
       visitDate: visitDateKey,
+      categoryId,
+      categoryName,
+      categoryIcon,
+      language,
     }];
   });
 }
@@ -178,6 +216,8 @@ export async function showBrowserNotification(notification: InterestedNotificati
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const options: NotificationOptions = {
     body: notification.body,
+    icon: "/android-chrome-192x192.png",
+    badge: "/android-chrome-192x192.png",
     tag: `serviceflow-${notification.key}`,
     data: { url: notification.url, personId: notification.personId, notificationKey: notification.key },
   };
