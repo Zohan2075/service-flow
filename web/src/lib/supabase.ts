@@ -573,17 +573,24 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
     if (error) throw new Error(`pushProgram sessions: ${error.message}`);
   }
   const sessionIds = new Map(sessions.map((session) => [session.session_date + session.week_id, session.id]));
+  const seenLogIds = new Set<string>();
   const logs = program.sessions.flatMap((session) => session.log.map((entry, logIndex) => {
     const weekId = session.weekId ?? program.config.activeWeekId ?? "default";
     const sessionId = sessionIds.get(session.date + weekId);
     return {
-    id: entry.id ?? `${sessionId ?? session.date}-${logIndex}`, user_id: userId,
+    id: entry.id ?? crypto.randomUUID(), user_id: userId,
     week_id: weekId, session_id: sessionId,
     section_id: entry.sectionId, title_en: entry.titleEn, title_es: entry.titleEs, role: entry.role ?? null,
     scheduled_duration_min: entry.scheduledDurationMin, actual_start: entry.actualStartISO, actual_end: entry.actualEndISO,
     actual_duration_sec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60), was_overtime: entry.wasOvertime,
     updated_at: entry.updatedAt ?? new Date(0).toISOString(),
-  }; })).filter((entry) => Boolean(entry.session_id) && isCurrent("log", entry.id, entry.updated_at));
+  }; })).filter((entry) => {
+    if (!Boolean(entry.session_id)) return false;
+    if (!isCurrent("log", entry.id, entry.updated_at)) return false;
+    if (seenLogIds.has(entry.id)) return false;
+    seenLogIds.add(entry.id);
+    return true;
+  });
   if (logs.length > 0) {
     const { error } = await client.from("program_timer_logs").upsert(logs, { onConflict: "user_id,week_id,session_id,section_id,role" });
     if (error) throw new Error(`pushProgram logs: ${error.message}`);
