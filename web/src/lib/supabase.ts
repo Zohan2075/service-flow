@@ -575,10 +575,27 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
       updated_at: session.updatedAt ?? new Date(0).toISOString(),
     };
   }).filter((session) => isCurrent("session", session.id, session.updated_at));
+
+  // Reconcile sessions BEFORE upsert: remove rows that collide on the
+  // (user_id, week_id, session_date) unique key but carry a different id,
+  // otherwise the upsert-by-id would fail with a duplicate-key error.
   if (sessions.length > 0) {
+    const { data: existingSessions } = await client
+      .from("program_sessions").select("id, week_id, session_date").eq("user_id", userId);
+    const sessionKeyToId = new Map(sessions.map((s) => [`${s.week_id}|${s.session_date}`, s.id]));
+    const staleSessionIds = (existingSessions ?? [])
+      .filter((row) => {
+        const key = `${row.week_id}|${row.session_date}`;
+        return sessionKeyToId.has(key) && sessionKeyToId.get(key) !== row.id;
+      })
+      .map((row) => row.id);
+    for (const staleId of staleSessionIds) {
+      await client.from("program_sessions").delete().eq("user_id", userId).eq("id", staleId);
+    }
     const { error } = await client.from("program_sessions").upsert(sessions, { onConflict: "id" });
     if (error) throw new Error(`pushProgram sessions: ${error.message}`);
   }
+
   const seenLogIds = new Set<string>();
   const logs = sessions.flatMap((session) => (session.log_json as TimerLogEntry[]).map((entry) => ({
     id: entry.id ?? `legacy-${userId}-${session.id}-${entry.sectionId}-${entry.role ?? "single"}-${entry.actualStartISO}`,
@@ -595,8 +612,41 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
     seenLogIds.add(entry.id);
     return true;
   });
-  if (logs.length > 0) {
-    const { error } = await client.from("program_timer_logs").upsert(logs, { onConflict: "user_id,week_id,session_id,section_id,role" });
+
+  // Dedupe by composite key: only one log per (week, session, section, role).
+  const seenComposite = new Set<string>();
+  const compositeDedupedLogs = logs.filter((entry) => {
+    const key = `${entry.week_id}|${entry.session_id}|${entry.section_id}|${entry.role ?? ""}`;
+    if (seenComposite.has(key)) return false;
+    seenComposite.add(key);
+    return true;
+  });
+
+  if (compositeDedupedLogs.length > 0) {
+    // Reconcile BEFORE upsert: remove existing rows whose composite key matches a
+    // payload row but whose id differs. Otherwise Postgres raises either a pkey
+    // conflict (same id, different composite) or a composite conflict (same
+    // composite, different id) depending on the on_conflict target.
+    const { data: existingLogs } = await client
+      .from("program_timer_logs")
+      .select("id, week_id, session_id, section_id, role")
+      .eq("user_id", userId);
+    const compositeToPayloadId = new Map<string, string>();
+    for (const entry of compositeDedupedLogs) {
+      compositeToPayloadId.set(`${entry.week_id}|${entry.session_id}|${entry.section_id}|${entry.role ?? ""}`, entry.id);
+    }
+    const staleLogIds = (existingLogs ?? [])
+      .filter((row) => {
+        const key = `${row.week_id}|${row.session_id}|${row.section_id}|${row.role ?? ""}`;
+        return compositeToPayloadId.has(key) && compositeToPayloadId.get(key) !== row.id;
+      })
+      .map((row) => row.id);
+    for (const staleId of staleLogIds) {
+      await client.from("program_timer_logs").delete().eq("user_id", userId).eq("id", staleId);
+    }
+    // Upsert by primary key: after reconciliation there are no composite
+    // collisions, and ids are stable/deduped so pkey conflicts cannot occur.
+    const { error } = await client.from("program_timer_logs").upsert(compositeDedupedLogs, { onConflict: "id" });
     if (error) throw new Error(`pushProgram logs: ${error.message}`);
   }
 
