@@ -836,6 +836,7 @@ export default function CalendarPage() {
 
           {(() => {
             const dayPeople = interestedPeople.filter((p) => {
+              if (isInterestedPersonCompleted(p, selectedDate)) return false;
               if (p.next_visit_date) {
                 const visitDate = new Date(p.next_visit_date);
                 if (
