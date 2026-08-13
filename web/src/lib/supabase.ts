@@ -563,28 +563,32 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
     if (error) throw new Error(`pushProgram interventions: ${error.message}`);
   }
 
-  const sessions = program.sessions.map((session) => ({
-    id: session.id ?? crypto.randomUUID(), user_id: userId, week_id: session.weekId ?? program.config.activeWeekId ?? "default",
-    session_date: session.date, started_at: session.startedAt, log_json: session.log,
-    updated_at: session.updatedAt ?? new Date(0).toISOString(),
-  })).filter((session) => isCurrent("session", session.id, session.updated_at));
+  // Deterministic ids for legacy sessions/logs so repeated pushes reuse the
+  // same primary keys instead of regenerating random ids each time (which would
+  // change session_id mappings and cause pkey conflicts on the next push).
+  const sessions = program.sessions.map((session) => {
+    const weekId = session.weekId ?? program.config.activeWeekId ?? "default";
+    const id = session.id ?? `legacy-${userId}-${session.date}-${weekId}`;
+    return {
+      id, user_id: userId, week_id: weekId,
+      session_date: session.date, started_at: session.startedAt, log_json: session.log,
+      updated_at: session.updatedAt ?? new Date(0).toISOString(),
+    };
+  }).filter((session) => isCurrent("session", session.id, session.updated_at));
   if (sessions.length > 0) {
     const { error } = await client.from("program_sessions").upsert(sessions, { onConflict: "id" });
     if (error) throw new Error(`pushProgram sessions: ${error.message}`);
   }
-  const sessionIds = new Map(sessions.map((session) => [session.session_date + session.week_id, session.id]));
   const seenLogIds = new Set<string>();
-  const logs = program.sessions.flatMap((session) => session.log.map((entry, logIndex) => {
-    const weekId = session.weekId ?? program.config.activeWeekId ?? "default";
-    const sessionId = sessionIds.get(session.date + weekId);
-    return {
-    id: entry.id ?? crypto.randomUUID(), user_id: userId,
-    week_id: weekId, session_id: sessionId,
+  const logs = sessions.flatMap((session) => (session.log_json as TimerLogEntry[]).map((entry) => ({
+    id: entry.id ?? `legacy-${userId}-${session.id}-${entry.sectionId}-${entry.role ?? "single"}-${entry.actualStartISO}`,
+    user_id: userId,
+    week_id: session.week_id, session_id: session.id,
     section_id: entry.sectionId, title_en: entry.titleEn, title_es: entry.titleEs, role: entry.role ?? null,
     scheduled_duration_min: entry.scheduledDurationMin, actual_start: entry.actualStartISO, actual_end: entry.actualEndISO,
     actual_duration_sec: entry.actualDurationSec ?? Math.max(0, entry.actualDurationMin * 60), was_overtime: entry.wasOvertime,
     updated_at: entry.updatedAt ?? new Date(0).toISOString(),
-  }; })).filter((entry) => {
+  }))).filter((entry) => {
     if (!Boolean(entry.session_id)) return false;
     if (!isCurrent("log", entry.id, entry.updated_at)) return false;
     if (seenLogIds.has(entry.id)) return false;
