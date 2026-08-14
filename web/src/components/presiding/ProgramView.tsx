@@ -968,7 +968,7 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
     return entry.role === "assignee" ? lbl.assignee : lbl.presiding;
   };
   return (
-    <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/95 pb-safe-mobile md:pb-0">
+    <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/95 pb-[calc(env(safe-area-inset-bottom,0px)+3.5rem)] md:pb-0">
       {show && (
          <div id="session-review-log" className="min-h-0 max-h-[min(16rem,45vh)] sm:max-h-[min(28rem,55vh)] overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 pt-3 pb-2 space-y-2">
           {reviewEntries.length === 0 ? (
