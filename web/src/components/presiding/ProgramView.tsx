@@ -956,7 +956,7 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
   onDeleteLog?: (logId: string) => void;
   onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void;
 }) {
-  const [show, setShow] = useState(true);
+  const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const reviewEntries = sessionHistory.length > 0
     ? sessionHistory.flatMap((session) => session.log.map((entry) => ({ entry, date: session.date })))
@@ -969,14 +969,8 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
   };
   return (
     <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-surface/95 pb-safe-mobile md:pb-0">
-      <button type="button" onClick={() => setShow((current) => !current)} aria-expanded={show}
-        aria-controls="session-review-log"
-        className="w-full flex items-center justify-between px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 active:bg-slate-50 dark:active:bg-slate-800/50 sticky bottom-0 z-10 bg-surface/95">
-        <span>⏱ {lbl.sessionLog} {reviewEntries.length > 0 && `(${reviewEntries.length})`}</span>
-        <span className="text-slate-400 text-lg leading-none">{show ? "▲" : "▼"}</span>
-      </button>
       {show && (
-         <div id="session-review-log" className="min-h-0 max-h-[min(28rem,55vh)] overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 pb-5 space-y-2">
+         <div id="session-review-log" className="min-h-0 max-h-[min(16rem,45vh)] sm:max-h-[min(28rem,55vh)] overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 pt-3 pb-2 space-y-2">
           {reviewEntries.length === 0 ? (
             <p className="text-xs text-slate-400 py-2">{lbl.logEmpty}</p>
           ) : (
@@ -1005,15 +999,21 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
                        <span className="col-span-2 font-mono text-[11px] text-slate-400">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
                         <span className={cn("justify-self-end font-mono font-semibold", isOvertime ? "text-red-500" : "text-emerald-600")}>
                       {fmtTime(durSec)}{isOvertime ? ` (+${overage > 0 ? fmtTime(overage) : "0:00"})` : ""}
-                       </span>
+                        </span>
                      </div>
                    )}
                  </div>
               );
             })
           )}
-        </div>
+         </div>
       )}
+      <button type="button" onClick={() => setShow((current) => !current)} aria-expanded={show}
+        aria-controls="session-review-log"
+        className="w-full flex items-center justify-between px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 active:bg-slate-50 dark:active:bg-slate-800/50 sticky bottom-0 z-10 bg-surface/95">
+        <span>⏱ {lbl.sessionLog} {reviewEntries.length > 0 && `(${reviewEntries.length})`}</span>
+        <span className="text-slate-400 text-lg leading-none">{show ? "▲" : "▼"}</span>
+      </button>
     </div>
   );
 }
