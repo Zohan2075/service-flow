@@ -418,10 +418,13 @@ export default function CommentsView({
                 ) : (
                   <button
                     onClick={() => startEditCategory(cat)}
-                    className="text-lg font-extrabold hover:opacity-80 transition-opacity"
+                    className="inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity"
                     title={t("edit")}
                   >
-                    {cat.name || t("categoryName")}
+                    <span>{cat.name || t("categoryName")}</span>
+                    <span className={cn("material-symbols-outlined text-base", anyRunning ? "text-primary" : "text-slate-400")}>
+                      edit
+                    </span>
                   </button>
                 )}
                 <span className="text-xs font-bold text-slate-400 tabular-nums ml-auto">
@@ -483,12 +486,17 @@ export default function CommentsView({
                         <button
                           onClick={() => startEditBox(box)}
                           className={cn(
-                            "w-full text-center text-sm font-bold truncate px-1",
-                            isRunning ? "text-white/90 hover:text-white" : "text-slate-700 dark:text-slate-300 hover:text-primary",
+                            "inline-flex items-center justify-center gap-1 w-full text-sm font-bold px-2 py-1 rounded-lg transition-colors",
+                            isRunning
+                              ? "bg-white/20 text-white hover:bg-white/30 shadow-sm"
+                              : "text-slate-700 dark:text-slate-300 hover:bg-primary/10 hover:text-primary",
                           )}
                           title={t("edit")}
                         >
-                          {box.name || t("boxName")}
+                          <span className="truncate">{box.name || t("boxName")}</span>
+                          <span className={cn("material-symbols-outlined text-sm shrink-0", isRunning ? "text-white/80" : "text-slate-400")}>
+                            edit
+                          </span>
                         </button>
                       )}
 
