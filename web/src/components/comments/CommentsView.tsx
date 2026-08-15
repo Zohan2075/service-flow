@@ -8,6 +8,7 @@ import type {
   CommentCategory,
   CommentTiming,
 } from "@/types/comments";
+import { createCommentBox, createCommentCategory } from "@/types/comments";
 
 /* ---------- helpers ---------- */
 
@@ -163,7 +164,7 @@ export default function CommentsView({
     (box: CommentBox): number => {
       const base = box.accumulatedSec;
       if (!box.runningSinceISO) return base;
-      return base + Math.max(0, Math.round((now - Date.parse(box.runningSinceISO)) / 1000));
+      return base + Math.max(0, Math.floor((now - Date.parse(box.runningSinceISO)) / 1000));
     },
     [now],
   );
@@ -189,6 +190,26 @@ export default function CommentsView({
     [config, onConfigChange],
   );
 
+  // Finalize a running box: log the completed run and accumulate its duration.
+  const stopBoxAt = useCallback(
+    (target: CommentBox, timestamp: number): CommentBox => {
+      const startMs = Date.parse(target.runningSinceISO ?? "");
+      const duration = Number.isFinite(startMs) ? Math.max(0, Math.round((timestamp - startMs) / 1000)) : 0;
+      if (duration > 0) {
+        onLogEntry({
+          boxId: target.id,
+          boxName: target.name,
+          categoryId: target.categoryId,
+          actualStartISO: target.runningSinceISO ?? new Date(timestamp).toISOString(),
+          actualEndISO: new Date(timestamp).toISOString(),
+          actualDurationSec: duration,
+        });
+      }
+      return { ...target, accumulatedSec: target.accumulatedSec + duration, runningSinceISO: undefined };
+    },
+    [onLogEntry],
+  );
+
   // Toggle a box's timer: stop the currently-running box (logging it), then
   // either start or stop the tapped box.
   const handleToggle = useCallback(
@@ -196,29 +217,13 @@ export default function CommentsView({
       const timestamp = Date.now();
       const running = config.boxes.find((b) => Boolean(b.runningSinceISO));
 
-      const stopBox = (target: CommentBox): CommentBox => {
-        const startMs = Date.parse(target.runningSinceISO ?? "");
-        const duration = Number.isFinite(startMs) ? Math.max(0, Math.round((timestamp - startMs) / 1000)) : 0;
-        if (duration > 0) {
-          onLogEntry({
-            boxId: target.id,
-            boxName: target.name,
-            categoryId: target.categoryId,
-            actualStartISO: target.runningSinceISO ?? new Date(timestamp).toISOString(),
-            actualEndISO: new Date(timestamp).toISOString(),
-            actualDurationSec: duration,
-          });
-        }
-        return { ...target, accumulatedSec: target.accumulatedSec + duration, runningSinceISO: undefined };
-      };
-
       let nextBoxes = config.boxes.map((b) => (b.id === box.id ? box : b));
       if (running && running.id !== box.id) {
-        nextBoxes = nextBoxes.map((b) => (b.id === running.id ? stopBox(running) : b));
+        nextBoxes = nextBoxes.map((b) => (b.id === running.id ? stopBoxAt(running, timestamp) : b));
       }
 
       if (box.runningSinceISO) {
-        nextBoxes = nextBoxes.map((b) => (b.id === box.id ? stopBox(box) : b));
+        nextBoxes = nextBoxes.map((b) => (b.id === box.id ? stopBoxAt(box, timestamp) : b));
       } else {
         nextBoxes = nextBoxes.map((b) =>
           b.id === box.id
@@ -229,7 +234,7 @@ export default function CommentsView({
 
       onConfigChange({ ...config, boxes: nextBoxes });
     },
-    [config, onConfigChange, onLogEntry],
+    [config, onConfigChange, stopBoxAt],
   );
 
   const handleReset = useCallback(
@@ -272,16 +277,13 @@ export default function CommentsView({
   };
 
   const addCategory = () => {
-    const timestamp = new Date().toISOString();
     const sortOrder = Math.max(0, ...config.categories.map((c) => c.sortOrder)) + 1;
-    const cat: CommentCategory = {
-      id: `cat_${Date.now()}`,
-      name: t("categoryHint"),
-      color: CATEGORY_COLORS[config.categories.length % CATEGORY_COLORS.length],
-      icon: CATEGORY_ICONS[config.categories.length % CATEGORY_ICONS.length],
+    const cat = createCommentCategory(
+      t("categoryHint"),
+      CATEGORY_COLORS[config.categories.length % CATEGORY_COLORS.length],
+      CATEGORY_ICONS[config.categories.length % CATEGORY_ICONS.length],
       sortOrder,
-      updatedAt: timestamp,
-    };
+    );
     onConfigChange({ ...config, categories: [...config.categories, cat] });
     setEditingCategoryId(cat.id);
     setDraft("");
@@ -289,6 +291,12 @@ export default function CommentsView({
 
   const removeCategory = (cat: CommentCategory) => {
     if (!window.confirm(t("removeCategoryConfirm"))) return;
+    const timestamp = Date.now();
+    // Finalize any running timer inside the category before dropping the boxes,
+    // mirroring the stop logic in handleToggle (prevents lost run time).
+    config.boxes.forEach((b) => {
+      if (b.categoryId === cat.id && b.runningSinceISO) stopBoxAt(b, timestamp);
+    });
     onConfigChange({
       ...config,
       categories: config.categories.filter((c) => c.id !== cat.id),
@@ -297,14 +305,7 @@ export default function CommentsView({
   };
 
   const addBox = (categoryId: string) => {
-    const timestamp = new Date().toISOString();
-    const box: CommentBox = {
-      id: `box_${Date.now()}`,
-      categoryId,
-      name: t("boxHint"),
-      accumulatedSec: 0,
-      updatedAt: timestamp,
-    };
+    const box = createCommentBox(categoryId, t("boxHint"));
     onConfigChange({ ...config, boxes: [...config.boxes, box] });
     setEditingBoxId(box.id);
     setDraft("");
@@ -312,6 +313,9 @@ export default function CommentsView({
 
   const removeBox = (box: CommentBox) => {
     if (!window.confirm(t("removeBoxConfirm"))) return;
+    const timestamp = Date.now();
+    // Finalize the run before removing the box (prevents lost run time).
+    if (box.runningSinceISO) stopBoxAt(box, timestamp);
     onConfigChange({
       ...config,
       boxes: config.boxes.filter((b) => b.id !== box.id),
@@ -383,7 +387,7 @@ export default function CommentsView({
                     onChange={(e) => setDraft(e.target.value)}
                     onBlur={commitEdit}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") commitEdit();
+                      if (e.key === "Enter") e.currentTarget.blur();
                       if (e.key === "Escape") cancelEdit();
                     }}
                     placeholder={t("categoryName")}
@@ -410,8 +414,9 @@ export default function CommentsView({
                 </button>
                 <button
                   onClick={() => removeCategory(cat)}
-                  className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   title={t("removeCategory")}
+                  aria-label={t("removeCategory")}
                 >
                   <span className="material-symbols-outlined text-base">delete</span>
                 </button>
@@ -437,31 +442,33 @@ export default function CommentsView({
                         <span className="absolute top-2 right-2 material-symbols-outlined text-sm animate-pulse">timelapse</span>
                       )}
 
-                      <button
-                        onClick={() => (editingBoxId === box.id ? commitEdit() : startEditBox(box))}
-                        className={cn(
-                          "w-full text-center text-sm font-bold truncate px-1",
-                          isRunning ? "text-white/90 hover:text-white" : "text-slate-700 dark:text-slate-300 hover:text-primary",
-                        )}
-                        title={t("edit")}
-                      >
-                        {editingBoxId === box.id ? (
+                      {editingBoxId === box.id ? (
+                        <div className="w-full px-1">
                           <input
                             ref={editingRef}
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
                             onBlur={commitEdit}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Enter") e.currentTarget.blur();
                               if (e.key === "Escape") cancelEdit();
                             }}
                             placeholder={t("boxHint")}
                             className="w-full text-center rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-1 py-0.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary"
                           />
-                        ) : (
-                          box.name || t("boxName")
-                        )}
-                      </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startEditBox(box)}
+                          className={cn(
+                            "w-full text-center text-sm font-bold truncate px-1",
+                            isRunning ? "text-white/90 hover:text-white" : "text-slate-700 dark:text-slate-300 hover:text-primary",
+                          )}
+                          title={t("edit")}
+                        >
+                          {box.name || t("boxName")}
+                        </button>
+                      )}
 
                       <span className="text-3xl font-extrabold tabular-nums tracking-tight">
                         {fmtDuration(liveSec)}
@@ -471,11 +478,12 @@ export default function CommentsView({
                         <button
                           onClick={() => handleToggle(box)}
                           className={cn(
-                            "flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors",
+                            "flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                             isRunning
                               ? "bg-white/20 text-white hover:bg-white/30"
                               : "bg-primary text-white hover:bg-primary/90"
                           )}
+                          aria-label={isRunning ? t("stop") : t("start")}
                         >
                           <span className="material-symbols-outlined text-sm">
                             {isRunning ? "pause" : "play_arrow"}
@@ -484,15 +492,17 @@ export default function CommentsView({
                         </button>
                         <button
                           onClick={() => handleReset(box)}
-                          className="flex items-center justify-center p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          className="flex items-center justify-center p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                           title={t("reset")}
+                          aria-label={t("reset")}
                         >
                           <span className="material-symbols-outlined text-sm">restart_alt</span>
                         </button>
                         <button
                           onClick={() => removeBox(box)}
-                          className="flex items-center justify-center p-1.5 rounded-xl text-slate-300 hover:text-red-500 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          className="flex items-center justify-center p-1.5 rounded-xl text-slate-300 hover:text-red-500 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                           title={t("removeBox")}
+                          aria-label={t("removeBox")}
                         >
                           <span className="material-symbols-outlined text-sm">delete</span>
                         </button>
@@ -540,19 +550,22 @@ export default function CommentsView({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{entry.boxName}</p>
                     <p className="text-xs text-slate-400 tabular-nums">
-                      {new Date(entry.actualStartISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(entry.actualStartISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       {" – "}
-                      {new Date(entry.actualEndISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(entry.actualEndISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                     </p>
                   </div>
                   <span className="text-sm font-bold tabular-nums">{fmtDuration(entry.actualDurationSec)}</span>
-                  <button
-                    onClick={() => onDeleteLog(entry.id!)}
-                    className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                    title={t("removeBox")}
-                  >
-                    <span className="material-symbols-outlined text-sm">delete</span>
-                  </button>
+                  {entry.id && (
+                    <button
+                      onClick={() => onDeleteLog(entry.id!)}
+                      className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      title={t("removeBox")}
+                      aria-label={t("removeBox")}
+                    >
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                  )}
                 </li>
               );
             })}
