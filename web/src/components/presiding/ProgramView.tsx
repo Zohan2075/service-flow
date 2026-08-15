@@ -451,6 +451,43 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog, onDeleteLog, prefs.chairmanExpectedCount, prefs.chairmanExpectedSeconds);
   const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timer;
 
+  // Keep the active timer visible while minimized: document.title + App Badge (installed PWA only).
+  const activeKey = activeTimer?.key ?? null;
+  const activeElapsedSec = activeTimer?.elapsedSec ?? 0;
+  const activeSectionTitle = activeTimer
+    ? (isEs ? (activeTimer.titleEs || activeTimer.titleEn) : (activeTimer.titleEn || activeTimer.titleEs))
+    : "";
+  const originalTitleR = useRef<string | null>(null);
+
+  // Lifecycle: save/restore the original title and clear the badge on stop/unmount.
+  useEffect(() => {
+    const nav = navigator as unknown as {
+      setAppBadge?: (n: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    const clearTitleAndBadge = () => {
+      if (originalTitleR.current !== null) {
+        document.title = originalTitleR.current;
+        originalTitleR.current = null;
+      }
+      if (nav.clearAppBadge) nav.clearAppBadge().catch(() => undefined);
+    };
+    if (activeKey === null) {
+      clearTitleAndBadge();
+      return;
+    }
+    if (originalTitleR.current === null) originalTitleR.current = document.title;
+    return clearTitleAndBadge;
+  }, [activeKey]);
+
+  // Per tick: refresh title + badge (elapsed derives from timestamps, so it stays correct when throttled).
+  useEffect(() => {
+    if (activeKey === null) return;
+    document.title = `⏱ ${fmtTime(activeElapsedSec)} · ${activeSectionTitle} — ServiceFlow`;
+    const nav = navigator as unknown as { setAppBadge?: (n: number) => Promise<void> };
+    if (nav.setAppBadge) nav.setAppBadge(Math.max(0, Math.floor(activeElapsedSec / 60))).catch(() => undefined);
+  }, [activeKey, activeElapsedSec, activeSectionTitle]);
+
   if (sections.length === 0) {
     return <div className="flex items-center justify-center h-full"><p className="text-sm text-slate-500">{lbl.noSections}</p></div>;
   }
@@ -513,23 +550,40 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
       {/* ===== ACTIVE TIMER BAR ===== */}
       {activeTimer && (
-        <div className="shrink-0 sticky top-0 z-40 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-surface/95 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-500 animate-pulse" />
-            <div className="text-center shrink-0 min-w-[3.5rem]">
-              <p className="text-[8px] uppercase tracking-wider text-slate-400 font-bold">{lbl.master}</p>
-              <p className="font-mono text-sm font-bold tabular-nums">{fmtTime(activeTimer.elapsedSec)}</p>
+        <div className="shrink-0 sticky top-0 z-40 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-surface via-surface to-surface/95 backdrop-blur shadow-lg shadow-slate-200/50 dark:shadow-black/25">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="relative flex size-3 shrink-0" aria-hidden="true">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
+              </span>
+              <div className="text-center shrink-0 min-w-[4.5rem]">
+                <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">{lbl.master}</p>
+                <p className="font-mono text-2xl font-black leading-none tabular-nums">{fmtTime(activeTimer.elapsedSec)}</p>
+              </div>
             </div>
             <div className="flex-1 min-w-0 text-center">
-              <p className="text-[8px] uppercase tracking-wider font-bold truncate text-emerald-600">{lbl.current}</p>
-              <p className="font-mono text-xs font-bold tabular-nums truncate text-slate-700 dark:text-slate-200">
+              <p className="text-[9px] uppercase tracking-wider font-bold truncate text-emerald-600">{lbl.current}</p>
+              <p className="text-sm font-bold tabular-nums truncate text-slate-700 dark:text-slate-100">
                 {isEs ? (activeTimer.titleEs || activeTimer.titleEn) : (activeTimer.titleEn || activeTimer.titleEs)}
               </p>
             </div>
-            <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-500">
+            <span
+              className={cn(
+                "rounded-full px-3 py-1 text-[11px] font-bold",
+                activeTimer.role === "presiding"
+                  ? "text-white"
+                  : activeTimer.role === "assignee"
+                    ? "bg-primary text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
+              )}
+              style={activeTimer.role === "presiding" ? { backgroundColor: accentColor } : undefined}>
               {activeTimer.role ? (activeTimer.role === "assignee" ? lbl.assignee : lbl.presiding) : lbl.timer}
             </span>
-            <button onClick={stopActive} className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-black active:scale-95">{lbl.stop}</button>
+            <button onClick={stopActive}
+              className="min-h-11 shrink-0 rounded-xl bg-amber-500 px-4 text-sm font-black text-black shadow-md active:scale-95">
+              {lbl.stop}
+            </button>
           </div>
         </div>
       )}
