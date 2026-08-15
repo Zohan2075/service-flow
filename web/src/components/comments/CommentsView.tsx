@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "@/lib/store";
+import { useSync } from "@/lib/sync";
 import type {
   CommentsConfig,
   CommentsSession,
@@ -62,6 +64,11 @@ const L = {
     minutes: "min",
     seconds: "s",
     today: "Today",
+    saving: "Saving",
+    saved: "Saved",
+    offline: "Offline — saved locally",
+    saveError: "Save error",
+    retry: "Retry",
   },
   es: {
     title: "Comentarios",
@@ -90,6 +97,11 @@ const L = {
     minutes: "min",
     seconds: "s",
     today: "Hoy",
+    saving: "Guardando",
+    saved: "Guardado",
+    offline: "Sin conexión — guardado localmente",
+    saveError: "Error al guardar",
+    retry: "Reintentar",
   },
 } as const;
 
@@ -334,29 +346,39 @@ export default function CommentsView({
           <h2 className="text-2xl font-extrabold tracking-tight">{t("title")}</h2>
           <p className="text-sm text-slate-400 mt-1">{t("subtitle")}</p>
         </div>
-        {totalCount > 0 && (
-          <div className="flex items-center gap-3 text-sm">
-            <span className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-full">
-              {totalCount} {t("count")}
-            </span>
-            <span className="bg-surface border border-slate-200 dark:border-slate-800 font-bold px-3 py-1.5 rounded-full">
-              {t("total")} {fmtDuration(totalSec)}
-            </span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <SaveStatus t={t} />
+          {totalCount > 0 && (
+            <>
+              <span className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-full">
+                {totalCount} {t("count")}
+              </span>
+              <span className="bg-surface border border-slate-200 dark:border-slate-800 font-bold px-3 py-1.5 rounded-full">
+                {t("total")} {fmtDuration(totalSec)}
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Active timer strip */}
       {runningBox && (
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-primary text-white shadow-lg">
+        <div className="shrink-0 sticky top-0 z-10 px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-gradient-to-r from-surface via-surface to-surface/95 backdrop-blur shadow-lg shadow-slate-200/50 dark:shadow-black/25">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="material-symbols-outlined animate-pulse">timelapse</span>
-            <div className="min-w-0">
-              <p className="text-xs opacity-80 font-medium">{t("active")}</p>
-              <p className="font-bold truncate">{runningBox.name || t("boxName")}</p>
+            <span className="relative flex size-3 shrink-0" aria-hidden="true">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex size-3 rounded-full bg-primary" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] uppercase tracking-wider font-bold text-primary">{t("active")}</p>
+              <p className="text-sm font-bold truncate text-slate-700 dark:text-slate-100">
+                {runningBox.name || t("boxName")}
+              </p>
             </div>
+            <span className="shrink-0 font-mono text-2xl font-black leading-none tabular-nums text-slate-800 dark:text-slate-100">
+              {fmtDuration(liveSecFor(runningBox))}
+            </span>
           </div>
-          <span className="text-2xl font-extrabold tabular-nums">{fmtDuration(liveSecFor(runningBox))}</span>
         </div>
       )}
 
@@ -434,7 +456,7 @@ export default function CommentsView({
                         "relative flex flex-col items-center justify-center gap-2 rounded-2xl border p-3 aspect-square transition-all",
                         isRunning
                           ? "bg-primary text-white border-transparent shadow-lg"
-                          : "bg-surface border-slate-200 dark:border-slate-800 hover:border-primary/40"
+                          : "bg-surface border-slate-200 dark:border-slate-700 shadow-sm hover:border-primary/40"
                       )}
                       style={isRunning ? undefined : { borderTopColor: cat.color, borderTopWidth: 3 }}
                     >
@@ -478,7 +500,7 @@ export default function CommentsView({
                         <button
                           onClick={() => handleToggle(box)}
                           className={cn(
-                            "flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                            "flex items-center justify-center gap-1 px-3 py-2 min-h-11 rounded-xl text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                             isRunning
                               ? "bg-white/20 text-white hover:bg-white/30"
                               : "bg-primary text-white hover:bg-primary/90"
@@ -492,7 +514,7 @@ export default function CommentsView({
                         </button>
                         <button
                           onClick={() => handleReset(box)}
-                          className="flex items-center justify-center p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                          className="flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                           title={t("reset")}
                           aria-label={t("reset")}
                         >
@@ -500,7 +522,7 @@ export default function CommentsView({
                         </button>
                         <button
                           onClick={() => removeBox(box)}
-                          className="flex items-center justify-center p-1.5 rounded-xl text-slate-300 hover:text-red-500 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                          className="flex items-center justify-center p-2 rounded-xl text-slate-300 hover:text-red-500 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                           title={t("removeBox")}
                           aria-label={t("removeBox")}
                         >
@@ -572,6 +594,48 @@ export default function CommentsView({
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ---------- save status indicator ---------- */
+
+function SaveStatus({ t }: { t: (key: keyof typeof L.en) => string }) {
+  const { status, error, isOnline, syncNow } = useSync();
+  const hasPendingChanges = useStore((state) => state.syncMetadata.hasPendingChanges);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const isError = mounted && status === "error";
+  const isSaving = mounted && !isError && isOnline && (status === "syncing" || hasPendingChanges);
+  const isOffline = mounted && !isOnline;
+  const icon = isError ? "error" : isSaving ? "sync" : isOffline ? "cloud_off" : "cloud_done";
+  const text = isError ? t("saveError") : isSaving ? t("saving") : isOffline ? t("offline") : t("saved");
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      title={isError ? (error ?? t("saveError")) : text}
+      className={cn(
+        "inline-flex items-center gap-1.5 text-[10px] font-semibold",
+        isError ? "text-red-500" : isOffline ? "text-amber-600" : isSaving ? "text-primary" : "text-emerald-600",
+      )}
+    >
+      <span className={cn("material-symbols-outlined text-sm", isSaving && "animate-spin")}>{icon}</span>
+      <span>{text}</span>
+      {isError && (
+        <button
+          type="button"
+          onClick={() => {
+            void syncNow().catch(() => undefined);
+          }}
+          className="font-bold underline underline-offset-2 hover:text-red-700"
+        >
+          {t("retry")}
+        </button>
+      )}
     </div>
   );
 }

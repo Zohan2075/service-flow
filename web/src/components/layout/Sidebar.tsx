@@ -31,7 +31,6 @@ export default function Sidebar() {
       { href: "/calendar", icon: "calendar_month", labelKey: "nav.calendar" as const },
       { href: "/reports", icon: "analytics", labelKey: "nav.reports" as const },
       ...(programEnabled ? [{ href: "/presiding", icon: "menu_book", labelKey: "nav.program" as const }] : []),
-      ...(programEnabled ? [{ href: "/presiding/comments", icon: "forum", labelKey: "nav.comments" as const }] : []),
       { href: "/interested", icon: "people", labelKey: "nav.interested" as const },
       { href: "/settings", icon: "settings", labelKey: "nav.settings" as const },
     ];
