@@ -172,9 +172,13 @@ export interface BackupFile {
   goals?: GoalDefinition[];
   interested_people?: InterestedPerson[];
   interested_statuses?: InterestedStatusConfig[];
-  program?: {
+program?: {
     config: unknown;
     prefs: unknown;
+    sessions: unknown[];
+  } | null;
+  comments?: {
+    config: unknown;
     sessions: unknown[];
   } | null;
 }

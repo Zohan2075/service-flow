@@ -159,6 +159,7 @@ export default function SettingsPage() {
   const programPrefs = useStore((s) => s.presidingPrefs);
   const setPresidingPrefs = useStore((s) => s.setPresidingPrefs);
   const resetPresidingConfig = useStore((s) => s.resetPresidingConfig);
+  const resetCommentsConfig = useStore((s) => s.resetCommentsConfig);
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -1553,6 +1554,21 @@ export default function SettingsPage() {
               <div>
                 <p className="text-sm font-semibold text-red-600 dark:text-red-400">Reset Program</p>
                 <p className="text-xs text-slate-400 mt-0.5">Restore default S-38 meeting structure</p>
+              </div>
+            </button>
+
+            {/* Reset Comments */}
+            <button
+              onClick={() => {
+                if (window.confirm("Reset all comment timers and history?")) {
+                  resetCommentsConfig();
+                }
+              }}
+              className="w-full flex items-center justify-between px-4 py-4 bg-surface rounded-xl border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-red-600 dark:text-red-400">Reset Comments</p>
+                <p className="text-xs text-slate-400 mt-0.5">Clear comment timers, categories, and history</p>
               </div>
             </button>
           </div>

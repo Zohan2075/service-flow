@@ -21,6 +21,8 @@ import type {
   ProgramTombstoneType,
 } from "@/types/presiding";
 import { getDefaultPresidingConfig, getDefaultPresidingPrefs, getTimerRoles } from "@/types/presiding";
+import type { CommentsConfig, CommentsSession, CommentTiming } from "@/types/comments";
+import { getDefaultCommentsConfig } from "@/types/comments";
 
 // ─── Client Singleton ────────────────────────────────────────────────────────
 
@@ -722,8 +724,87 @@ export async function pullProgram(userId: string): Promise<ProgramSyncState | nu
     log: logsBySession.get(String(row.id)) ?? (Array.isArray(row.log_json) ? row.log_json as TimerLogEntry[] : []),
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
   }));
-  const config = weeks.length > 0 ? { weeks, activeWeekId: prefsResult.data?.active_week_id ?? weeks[0].weekId } : getDefaultPresidingConfig();
+const config = weeks.length > 0 ? { weeks, activeWeekId: prefsResult.data?.active_week_id ?? weeks[0].weekId } : getDefaultPresidingConfig();
   return { config, prefs, sessions, tombstones };
+}
+
+// ─── Comments (Comentarios) ───────────────────────────────────────────────────
+
+export interface CommentsSyncState {
+  config: CommentsConfig;
+  sessions: CommentsSession[];
+}
+
+export async function pushComments(comments: CommentsSyncState, userId: string): Promise<void> {
+  const client = getSupabase();
+
+  await client.from("comments_config").upsert({
+    user_id: userId,
+    config_json: comments.config,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" }).throwOnError();
+
+  // Deterministic id for legacy/missing session ids so repeated pushes reuse
+  // the same primary key instead of generating a new random id each time.
+  const sessions = comments.sessions.map((session) => {
+    const id = session.id ?? `legacy-${userId}-${session.date}`;
+    return {
+      id,
+      user_id: userId,
+      session_date: session.date,
+      started_at: session.startedAt,
+      log_json: session.log,
+      updated_at: session.updatedAt ?? new Date().toISOString(),
+    };
+  });
+
+  // Reconcile sessions BEFORE upsert: remove rows that collide on the
+  // (user_id, session_date) unique key but carry a different id.
+  if (sessions.length > 0) {
+    const { data: existingSessions } = await client
+      .from("comments_sessions").select("id, session_date").eq("user_id", userId);
+    const dateToId = new Map(sessions.map((s) => [s.session_date, s.id]));
+    const staleIds = (existingSessions ?? [])
+      .filter((row) => {
+        const key = String(row.session_date);
+        return dateToId.has(key) && dateToId.get(key) !== row.id;
+      })
+      .map((row) => row.id);
+    for (const staleId of staleIds) {
+      await client.from("comments_sessions").delete().eq("user_id", userId).eq("id", staleId);
+    }
+    const { error } = await client.from("comments_sessions").upsert(sessions, { onConflict: "id" });
+    if (error) throw new Error(`pushComments sessions: ${error.message}`);
+  }
+}
+
+export async function pullComments(userId: string): Promise<CommentsSyncState | null> {
+  const client = getSupabase();
+  const [configResult, sessionsResult] = await Promise.all([
+    client.from("comments_config").select("*").eq("user_id", userId).maybeSingle(),
+    client.from("comments_sessions").select("*").eq("user_id", userId).order("session_date", { ascending: false }),
+  ]);
+  const error = [configResult, sessionsResult].find((result) => result.error)?.error;
+  if (error) throw new Error(`pullComments: ${error.message}`);
+
+  if (!configResult.data && (sessionsResult.data ?? []).length === 0) return null;
+
+  const rawConfig = configResult.data?.config_json as unknown;
+  const config: CommentsConfig =
+    rawConfig && typeof rawConfig === "object" && Array.isArray((rawConfig as CommentsConfig).categories)
+      ? rawConfig as CommentsConfig
+      : getDefaultCommentsConfig();
+
+  const sessions: CommentsSession[] = ((sessionsResult.data ?? []) as Record<string, unknown>[])
+    .map((row) => ({
+      id: String(row.id),
+      date: String(row.session_date),
+      startedAt: String(row.started_at),
+      log: Array.isArray(row.log_json) ? (row.log_json as CommentTiming[]) : [],
+      updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
+    }));
+
+  return { config, sessions };
 }
 
 // ─── Bulk Push (full sync upload) ────────────────────────────────────────────
@@ -737,6 +818,7 @@ export interface SyncState {
   interestedPeople: InterestedPerson[];
   interestedStatuses: InterestedStatusConfig[];
   program: ProgramSyncState | null;
+  comments: CommentsSyncState | null;
 }
 
 export async function pushAll(state: SyncState, userId: string): Promise<void> {
@@ -762,6 +844,7 @@ export async function pushAll(state: SyncState, userId: string): Promise<void> {
   tasks.push({ label: "interestedPeople", fn: () => pushInterestedPeople(state.interestedPeople, userId) });
   tasks.push({ label: "interestedStatuses", fn: () => pushInterestedStatuses(state.interestedStatuses, userId) });
   if (state.program) tasks.push({ label: "program", fn: () => pushProgram(state.program!, userId) });
+  if (state.comments) tasks.push({ label: "comments", fn: () => pushComments(state.comments!, userId) });
 
   const results = await Promise.allSettled(tasks.map((t) => t.fn()));
   results.forEach((r, i) => {
@@ -790,7 +873,8 @@ export async function pullAll(
     pullGoals(userId),
     pullInterestedPeople(userId),
     pullInterestedStatuses(userId),
-    pullProgram(userId),
+pullProgram(userId),
+    pullComments(userId),
   ]);
 
   // Program schema failures must not be treated as an empty remote program.
@@ -800,6 +884,14 @@ export async function pullAll(
     throw programResult.reason instanceof Error
       ? programResult.reason
       : new Error(String(programResult.reason));
+  }
+
+  // Comments schema failures must not be treated as an empty remote.
+  const commentsResult = results[8];
+  if (commentsResult.status === "rejected") {
+    throw commentsResult.reason instanceof Error
+      ? commentsResult.reason
+      : new Error(String(commentsResult.reason));
   }
 
   const get = <T>(index: number, fallback: T): T => {
@@ -814,10 +906,11 @@ export async function pullAll(
   const goals = get<GoalDefinition[]>(4, []);
   const interestedPeople = get<InterestedPerson[]>(5, []);
   const interestedStatuses = get<InterestedStatusConfig[]>(6, []);
-  const program = get<ProgramSyncState | null>(7, null);
+const program = get<ProgramSyncState | null>(7, null);
+  const comments = get<CommentsSyncState | null>(8, null);
 
   // Log per-table failures
-  const labels = ["profile", "settings", "serviceTypes", "timeEntries", "goals", "interestedPeople", "interestedStatuses", "program"];
+  const labels = ["profile", "settings", "serviceTypes", "timeEntries", "goals", "interestedPeople", "interestedStatuses", "program", "comments"];
   results.forEach((r, i) => {
     if (r.status === "rejected") {
       console.error(`[ServiceFlow] pullAll ${labels[i]}:`, r.reason instanceof Error ? r.reason.message : r.reason);
@@ -854,7 +947,8 @@ export async function pullAll(
     timeEntries,
     goals,
     interestedPeople,
-    interestedStatuses: interestedStatuses.length > 0 ? interestedStatuses : [],
+interestedStatuses: interestedStatuses.length > 0 ? interestedStatuses : [],
     program,
+    comments,
   };
 }

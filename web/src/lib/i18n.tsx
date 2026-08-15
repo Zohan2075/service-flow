@@ -12,6 +12,7 @@ const translations = {
     "nav.calendar": "Calendar",
     "nav.reports": "Reports",
     "nav.program": "Program",
+    "nav.comments": "Comments",
     "nav.settings": "Settings",
     "nav.interested": "Interested People",
 
@@ -366,6 +367,7 @@ const translations = {
     "nav.calendar": "Calendario",
     "nav.reports": "Reportes",
     "nav.program": "Programa",
+    "nav.comments": "Comentarios",
     "nav.settings": "Ajustes",
     "nav.interested": "Estudios y Revisitas",
 

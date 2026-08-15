@@ -47,6 +47,7 @@ function isRemoteEmpty(state: {
   goals: unknown[];
   interestedPeople: unknown[];
   program?: { config?: { weeks?: unknown[] }; sessions?: unknown[]; tombstones?: unknown[] } | null;
+  comments?: { config?: { categories?: unknown[]; boxes?: unknown[] }; sessions?: unknown[] } | null;
 }) {
   const hasProgramData = Boolean(
     state.program && (
@@ -55,12 +56,20 @@ function isRemoteEmpty(state: {
       (state.program.tombstones ?? []).length > 0
     ),
   );
+  const hasCommentsData = Boolean(
+    state.comments && (
+      (state.comments.config?.categories ?? []).length > 0 ||
+      (state.comments.config?.boxes ?? []).length > 0 ||
+      (state.comments.sessions ?? []).length > 0
+    ),
+  );
   return (
     state.serviceTypes.length === 0 &&
     state.timeEntries.length === 0 &&
     state.goals.length === 0 &&
     state.interestedPeople.length === 0
     && !hasProgramData
+    && !hasCommentsData
   );
 }
 
@@ -112,7 +121,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       store.goals.length > 0 ||
       store.interestedPeople.length > 0 ||
       store.presidingConfig.weeks.length > 0 ||
-      store.presidingSessions.length > 0;
+      store.presidingSessions.length > 0 ||
+      store.commentsConfig.categories.length > 0 ||
+      store.commentsConfig.boxes.length > 0 ||
+      store.commentsSessions.length > 0;
 
     // SAFETY: Never push empty data — always pull first to check if remote
     // has data. Last line of defense against overwriting Supabase with an
@@ -126,7 +138,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           remote.timeEntries.length > 0 ||
           remote.goals.length > 0 ||
           remote.interestedPeople.length > 0 ||
-           Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0));
+           Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0)) ||
+           Boolean(remote.comments && (remote.comments.config.categories.length > 0 || remote.comments.config.boxes.length > 0 || remote.comments.sessions.length > 0));
 
         if (remoteHasData) {
           importData(
@@ -141,6 +154,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
               interested_people: remote.interestedPeople,
               interested_statuses: remote.interestedStatuses,
               program: remote.program,
+              comments: remote.comments,
             },
             { source: "remote" },
           );
@@ -167,6 +181,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         interestedPeople: store.interestedPeople,
         interestedStatuses: store.interestedStatuses,
        program: { config: store.presidingConfig, prefs: store.presidingPrefs, sessions: store.presidingSessions, tombstones: store.presidingTombstones },
+       comments: { config: store.commentsConfig, sessions: store.commentsSessions },
       },
       userId,
     );
@@ -247,14 +262,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             store.goals.length > 0 ||
             store.interestedPeople.length > 0 ||
             store.presidingConfig.weeks.length > 0 ||
-            store.presidingSessions.length > 0;
+            store.presidingSessions.length > 0 ||
+            store.commentsConfig.categories.length > 0 ||
+            store.commentsConfig.boxes.length > 0 ||
+            store.commentsSessions.length > 0;
 
           const remoteHasData =
             remote.serviceTypes.length > 0 ||
             remote.timeEntries.length > 0 ||
             remote.goals.length > 0 ||
             remote.interestedPeople.length > 0 ||
-             Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0));
+             Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0)) ||
+             Boolean(remote.comments && (remote.comments.config.categories.length > 0 || remote.comments.config.boxes.length > 0 || remote.comments.sessions.length > 0));
 
           if (remoteHasData) {
             // Remote has data — import it (this is the primary source of truth)
@@ -270,6 +289,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
                 interested_people: remote.interestedPeople,
                 interested_statuses: remote.interestedStatuses,
                 program: remote.program,
+                comments: remote.comments,
               },
               { source: "remote" },
             );
@@ -306,7 +326,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
               store.goals.length > 0 ||
               store.interestedPeople.length > 0 ||
               store.presidingConfig.weeks.length > 0 ||
-              store.presidingSessions.length > 0;
+              store.presidingSessions.length > 0 ||
+              store.commentsConfig.categories.length > 0 ||
+              store.commentsConfig.boxes.length > 0 ||
+              store.commentsSessions.length > 0;
 
           if (isRemoteEmpty(remote) && hasLocalData) {
             await performSync();
@@ -333,6 +356,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
                   interested_people: remote.interestedPeople,
                   interested_statuses: remote.interestedStatuses,
                   program: remote.program,
+                  comments: remote.comments,
                 },
                 { source: "remote" },
               );
