@@ -522,7 +522,12 @@ export default function CommentsView({
                         </button>
                         <button
                           onClick={() => handleReset(box)}
-                          className="flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                          className={cn(
+                            "flex items-center justify-center p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                            isRunning
+                              ? "text-white/90 hover:text-white hover:bg-white/20"
+                              : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800",
+                          )}
                           title={t("reset")}
                           aria-label={t("reset")}
                         >
@@ -530,7 +535,12 @@ export default function CommentsView({
                         </button>
                         <button
                           onClick={() => removeBox(box)}
-                          className="flex items-center justify-center p-2 rounded-xl text-slate-300 hover:text-red-500 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                          className={cn(
+                            "flex items-center justify-center p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                            isRunning
+                              ? "text-white/90 hover:text-white hover:bg-white/20"
+                              : "text-slate-300 hover:text-red-500 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/20",
+                          )}
                           title={t("removeBox")}
                           aria-label={t("removeBox")}
                         >
