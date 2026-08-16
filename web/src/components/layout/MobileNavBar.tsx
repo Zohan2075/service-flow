@@ -45,20 +45,22 @@ export default function MobileNavBar() {
   if (!showNav) {
     return (
       <nav
-        className="md:hidden fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+        className="md:hidden fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 dark:border-slate-700 bg-surface/95 backdrop-blur-md"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="flex items-stretch h-14">
+        <div className="flex items-stretch h-16">
           <Link
             href="/login"
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors",
+              "flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
               pathname === "/login"
                 ? "text-primary"
                 : "text-slate-400 dark:text-slate-500"
             )}
           >
-            <span className="material-symbols-outlined text-[22px] leading-none">login</span>
+            <span className="flex items-center justify-center rounded-2xl px-3 py-1">
+              <span className="material-symbols-outlined text-2xl leading-none">login</span>
+            </span>
             <span className={cn("text-[10px] font-medium leading-none", pathname === "/login" && "font-bold")}>
               {t("login.continueGoogle")}
             </span>
@@ -70,10 +72,10 @@ export default function MobileNavBar() {
 
   return (
     <nav
-      className="md:hidden fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+      className="md:hidden fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 dark:border-slate-700 bg-surface/95 backdrop-blur-md"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <div className="flex items-stretch h-14">
+      <div className="flex items-stretch h-16">
         {navItems.map(({ href, icon, labelKey }) => {
           const active = pathname.startsWith(href);
           return (
@@ -81,16 +83,23 @@ export default function MobileNavBar() {
               key={href}
               href={href}
               className={cn(
-                "flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 transition-colors px-0.5",
+                "flex flex-1 min-w-0 flex-col items-center justify-center gap-1 px-0.5 transition-colors",
                 active
                   ? "text-primary"
-                  : "text-slate-400 dark:text-slate-500"
+                  : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
               )}
             >
-              <span className="material-symbols-outlined text-[22px] leading-none shrink-0">{icon}</span>
               <span
                 className={cn(
-                  "text-[9px] leading-tight text-center max-w-full line-clamp-2",
+                  "flex items-center justify-center rounded-2xl px-3 py-1 transition-colors",
+                  active && "bg-primary/10"
+                )}
+              >
+                <span className="material-symbols-outlined text-2xl leading-none shrink-0">{icon}</span>
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] leading-none text-center max-w-full truncate px-0.5",
                   active ? "font-bold" : "font-medium"
                 )}
               >
@@ -102,18 +111,24 @@ export default function MobileNavBar() {
         {user ? (
           <button
             onClick={handleSignOut}
-            className="flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500 px-0.5"
+            className="flex flex-1 min-w-0 flex-col items-center justify-center gap-1 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500 px-0.5"
           >
-            <span className="material-symbols-outlined text-[22px] leading-none shrink-0">logout</span>
-            <span className="text-[9px] font-medium leading-tight text-center max-w-full line-clamp-2">Sign Out</span>
+            <span className="flex items-center justify-center rounded-2xl px-3 py-1">
+              <span className="material-symbols-outlined text-2xl leading-none shrink-0">logout</span>
+            </span>
+            <span className="text-[10px] font-medium leading-none text-center max-w-full truncate px-0.5">
+              {t("sidebar.signOut")}
+            </span>
           </button>
         ) : (
           <Link
             href="/login"
-            className="flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 transition-colors text-slate-400 dark:text-slate-500 px-0.5"
+            className="flex flex-1 min-w-0 flex-col items-center justify-center gap-1 transition-colors text-slate-400 dark:text-slate-500 px-0.5"
           >
-            <span className="material-symbols-outlined text-[22px] leading-none shrink-0">login</span>
-            <span className="text-[9px] font-medium leading-tight text-center max-w-full line-clamp-2">{t("login.continueGoogle")}</span>
+            <span className="flex items-center justify-center rounded-2xl px-3 py-1">
+              <span className="material-symbols-outlined text-2xl leading-none shrink-0">login</span>
+            </span>
+            <span className="text-[10px] font-medium leading-none text-center max-w-full truncate px-0.5">{t("login.continueGoogle")}</span>
           </Link>
         )}
       </div>
