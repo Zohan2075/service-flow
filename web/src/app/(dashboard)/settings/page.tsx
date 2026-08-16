@@ -178,7 +178,7 @@ export default function SettingsPage() {
   const [newIcon, setNewIcon] = useState(ICONS[0]);
   const [newEntryType, setNewEntryType] = useState<ServiceType["entry_type"]>("time");
   const [combinedGoalDrafts, setCombinedGoalDrafts] = useState<CombinedGoalDraft[]>([]);
-  const [activeCategory, setActiveCategory] = useState<SettingsCategory>("account");
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory | null>(null);
   const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
 
   const [driveLoading, setDriveLoading] = useState(false);
@@ -479,35 +479,48 @@ export default function SettingsPage() {
   return (
     <>
       <header className="px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-        <h2 className="text-lg md:text-xl font-bold">{t("settings.title")}</h2>
+        {activeCategory !== null ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveCategory(null)}
+              className="flex items-center gap-1.5 min-h-11 min-w-11 -ml-2 rounded-xl px-2 text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <span className="material-symbols-outlined text-2xl">arrow_back</span>
+            </button>
+            <h2 className="text-lg md:text-xl font-bold">{settingsCategories.find((c) => c.id === activeCategory)?.label}</h2>
+          </div>
+        ) : (
+          <h2 className="text-lg md:text-xl font-bold">{t("settings.title")}</h2>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-24 md:pb-6 space-y-4 md:space-y-6 bg-canvas">
-        <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("settings.title")}</p>
-            <h3 className="text-lg font-bold">{t("settings.organizedSettingsTitle")}</h3>
-            <p className="text-sm text-slate-500">{t("settings.organizedSettingsDesc")}</p>
+        {activeCategory === null ? (
+          <div className="bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("settings.title")}</p>
+              <h3 className="text-lg font-bold">{t("settings.organizedSettingsTitle")}</h3>
+              <p className="text-sm text-slate-500">{t("settings.organizedSettingsDesc")}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {settingsCategories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setActiveCategory(category.id)}
+                  className="flex min-h-16 items-center gap-3 rounded-2xl border border-slate-200 px-4 py-4 text-left transition-all hover:border-primary/40 hover:bg-slate-50 active:scale-[0.99] dark:border-slate-800 dark:hover:border-primary/40 dark:hover:bg-slate-900/40"
+                >
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <span className="material-symbols-outlined text-2xl">{category.icon}</span>
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{category.label}</span>
+                  <span className="material-symbols-outlined text-slate-300 dark:text-slate-600">chevron_right</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {settingsCategories.map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => setActiveCategory(category.id)}
-                className={cn(
-                  "flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
-                  activeCategory === category.id
-                    ? "border-primary bg-primary/10 text-primary shadow-sm"
-                    : "border-slate-200 text-slate-600 hover:border-primary/30 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:border-primary/30 dark:hover:bg-slate-900/40"
-                )}
-              >
-                <span className="material-symbols-outlined text-xl">{category.icon}</span>
-                <span className="text-sm font-semibold">{category.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        ) : null}
 
         {/* ── Profile ──────────────────────────────────────────────────────── */}
         {profile && (
