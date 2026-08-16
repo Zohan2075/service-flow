@@ -34,13 +34,10 @@ import {
 } from "@/types/presiding";
 import type {
   CommentsConfig,
-  CommentsSession,
-  CommentTiming,
+  CommentBox,
 } from "@/types/comments";
 import {
   getDefaultCommentsConfig,
-  createCommentCategory,
-  createCommentBox,
   newCommentId,
 } from "@/types/comments";
 
@@ -118,8 +115,6 @@ interface AppState {
 
   // comments
   commentsConfig: CommentsConfig;
-  commentsSession: CommentsSession | null;
-  commentsSessions: CommentsSession[];
 
   // auth actions
   setProfile: (p: UserProfile | null) => void;
@@ -182,15 +177,7 @@ resetPresidingConfig: () => void;
 
   // comments actions
   setCommentsConfig: (cfg: CommentsConfig) => void;
-  addCommentCategory: () => string;
-  updateCommentCategory: (id: string, patch: Partial<CommentsConfig["categories"][number]>) => void;
-  deleteCommentCategory: (id: string) => void;
-  addCommentBox: (categoryId: string) => void;
-  updateCommentBox: (id: string, patch: Partial<CommentsConfig["boxes"][number]>) => void;
-  deleteCommentBox: (id: string) => void;
-  startCommentsSession: () => void;
-  addCommentTiming: (entry: Omit<CommentTiming, "id" | "updatedAt">) => void;
-  deleteCommentTiming: (logId: string) => void;
+  updateCommentBox: (weekId: string, boxId: string, patch: Partial<CommentsConfig["boxesByWeek"][string][number]>) => void;
   resetCommentsConfig: () => void;
 }
 
@@ -215,7 +202,6 @@ interface RemoteProgramPayload {
 
 interface RemoteCommentsPayload {
   config?: unknown;
-  sessions?: unknown[];
 }
 
 function migrateProgramTombstones(raw: unknown): ProgramTombstone[] {
@@ -537,10 +523,23 @@ function migratePresidingSessions(raw: unknown, current: MeetingSession | null):
   return sessions;
 }
 
+function normalizeCommentBox(item: Partial<CommentsConfig["boxesByWeek"][string][number]>): CommentBox {
+  return {
+    id: item.id ?? newCommentId(),
+    categoryId: item.categoryId ?? "",
+    name: typeof item.name === "string" ? item.name : "",
+    accumulatedSec: typeof item.accumulatedSec === "number" && Number.isFinite(item.accumulatedSec)
+      ? Math.max(0, Math.round(item.accumulatedSec))
+      : 0,
+    runningSinceISO: typeof item.runningSinceISO === "string" ? item.runningSinceISO : undefined,
+    updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "1970-01-01T00:00:00.000Z",
+  };
+}
+
 function migrateCommentsConfig(raw: unknown): CommentsConfig {
   const defaults = getDefaultCommentsConfig();
   if (!raw || typeof raw !== "object") return defaults;
-  const cfg = raw as Partial<CommentsConfig>;
+  const cfg = raw as Partial<CommentsConfig> & { boxes?: unknown[] };
   const categories = Array.isArray(cfg.categories)
     ? cfg.categories.map((category, index) => {
         const item = category as Partial<CommentsConfig["categories"][number]>;
@@ -554,59 +553,26 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
         };
       })
     : [];
-  const boxes = Array.isArray(cfg.boxes)
-    ? cfg.boxes.map((box) => {
-        const item = box as Partial<CommentsConfig["boxes"][number]>;
-        return {
-          id: item.id ?? newCommentId(),
-          categoryId: item.categoryId ?? "",
-          name: typeof item.name === "string" ? item.name : "",
-          accumulatedSec: typeof item.accumulatedSec === "number" && Number.isFinite(item.accumulatedSec)
-            ? Math.max(0, Math.round(item.accumulatedSec))
-            : 0,
-          runningSinceISO: typeof item.runningSinceISO === "string" ? item.runningSinceISO : undefined,
-          updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "1970-01-01T00:00:00.000Z",
-        };
-      })
-    : [];
-  return { categories, boxes };
-}
-
-function migrateCommentsSession(raw: unknown): CommentsSession | null {
-  if (!raw || typeof raw !== "object") return null;
-  const session = raw as Partial<CommentsSession>;
-  if (!Array.isArray(session.log)) return null;
-  const log: CommentTiming[] = session.log.map((entry) => {
-    const item = entry as Partial<CommentTiming>;
+  // New shape: per-week boxes keyed by program weekId.
+  if (cfg.boxesByWeek && typeof cfg.boxesByWeek === "object") {
+    const boxesByWeek: Record<string, CommentBox[]> = {};
+    for (const [weekId, list] of Object.entries(cfg.boxesByWeek)) {
+      boxesByWeek[weekId] = Array.isArray(list)
+        ? list.map((box) => normalizeCommentBox(box as Partial<CommentBox>))
+        : [];
+    }
+    return { categories, boxesByWeek };
+  }
+  // Legacy shape: { categories, boxes } → current program week bucket.
+  if (Array.isArray(cfg.boxes)) {
     return {
-      id: item.id ?? uuid(),
-      boxId: item.boxId ?? "",
-      boxName: item.boxName ?? "",
-      categoryId: item.categoryId ?? "",
-      actualStartISO: item.actualStartISO ?? new Date().toISOString(),
-      actualEndISO: item.actualEndISO ?? new Date().toISOString(),
-      actualDurationSec: typeof item.actualDurationSec === "number" && Number.isFinite(item.actualDurationSec)
-        ? Math.max(0, Math.round(item.actualDurationSec))
-        : 0,
-      updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "1970-01-01T00:00:00.000Z",
+      categories,
+      boxesByWeek: {
+        [getProgramWeekId()]: cfg.boxes.map((box) => normalizeCommentBox(box as Partial<CommentBox>)),
+      },
     };
-  });
-  return {
-    id: session.id ?? uuid(),
-    date: session.date ?? new Date().toISOString().slice(0, 10),
-    startedAt: session.startedAt ?? new Date().toISOString(),
-    log,
-    updatedAt: typeof session.updatedAt === "string" ? session.updatedAt : (session.startedAt ?? "1970-01-01T00:00:00.000Z"),
-  };
-}
-
-function migrateCommentsSessions(raw: unknown, current: CommentsSession | null): CommentsSession[] {
-  const values = Array.isArray(raw) ? raw : [];
-  const sessions = values
-    .map((value) => migrateCommentsSession(value))
-    .filter((value): value is CommentsSession => Boolean(value));
-  if (current && !sessions.some((session) => session.id === current.id)) sessions.push(current);
-  return sessions;
+  }
+  return { categories, boxesByWeek: {} };
 }
 
 function preserveLocalAssigneeNames(local: PresidingConfig, remote: PresidingConfig): PresidingConfig {
@@ -878,8 +844,6 @@ presidingConfig: getDefaultPresidingConfig(),
       presidingSessions: [],
       presidingTombstones: [],
       commentsConfig: getDefaultCommentsConfig(),
-      commentsSession: null,
-      commentsSessions: [],
 
       // ── Auth ────────────────────────────────────────────────────────────
       setProfile: (p) =>
@@ -909,8 +873,6 @@ presidingConfig: getDefaultPresidingConfig(),
                 presidingSessions: [],
                 presidingTombstones: [],
                 commentsConfig: getDefaultCommentsConfig(),
-                commentsSession: null,
-                commentsSessions: [],
             };
           }
 
@@ -933,8 +895,6 @@ presidingConfig: getDefaultPresidingConfig(),
             presidingSessions: [],
             presidingTombstones: [],
             commentsConfig: getDefaultCommentsConfig(),
-            commentsSession: null,
-            commentsSessions: [],
         }),
 
       // ── Settings / Profile ──────────────────────────────────────────────
@@ -1375,9 +1335,6 @@ presidingConfig: getDefaultPresidingConfig(),
 const nextTombstones = remoteProgram?.tombstones
              ? migrateProgramTombstones(remoteProgram.tombstones)
              : s.presidingTombstones;
-           const nextCommentsSessions = remoteComments?.sessions
-             ? migrateCommentsSessions(remoteComments.sessions, null)
-             : s.commentsSessions;
           return {
             settings,
             profile: mergeImportedProfile(s.profile, file.profile),
@@ -1394,8 +1351,6 @@ const nextTombstones = remoteProgram?.tombstones
              presidingSessions: nextSessions,
              presidingTombstones: nextTombstones,
             commentsConfig: remoteComments?.config ? migrateCommentsConfig(remoteComments.config) : s.commentsConfig,
-            commentsSession: nextCommentsSessions[nextCommentsSessions.length - 1] ?? null,
-            commentsSessions: nextCommentsSessions,
             syncMetadata:
               options?.source === "remote"
                 ? INITIAL_SYNC_METADATA
@@ -1573,155 +1528,21 @@ resetPresidingConfig: () =>
         set(withPendingSync({
           commentsConfig: migrateCommentsConfig(cfg),
         })),
-      addCommentCategory: () => {
-        let id = "";
-        set((s) => {
-          const timestamp = now();
-          const category = createCommentCategory();
-          id = category.id;
-          return withPendingSync({
-            commentsConfig: {
-              ...s.commentsConfig,
-              categories: [
-                ...s.commentsConfig.categories.map((cat) => ({ ...cat, updatedAt: timestamp })),
-                { ...category, updatedAt: timestamp },
-              ],
-            },
-          });
-        });
-        return id;
-      },
-      updateCommentCategory: (id, patch) =>
+      updateCommentBox: (weekId, boxId, patch) =>
         set((s) => withPendingSync({
           commentsConfig: {
             ...s.commentsConfig,
-            categories: s.commentsConfig.categories.map((cat) =>
-              cat.id === id ? { ...cat, ...patch, updatedAt: now() } : cat
-            ),
-          },
-        })),
-      deleteCommentCategory: (id) =>
-        set((s) => {
-          const timestamp = now();
-          const boxes = s.commentsConfig.boxes
-            .filter((box) => box.categoryId !== id)
-            .map((box) => ({ ...box, updatedAt: timestamp }));
-          return withPendingSync({
-            commentsConfig: {
-              ...s.commentsConfig,
-              categories: s.commentsConfig.categories.filter((cat) => cat.id !== id),
-              boxes,
+            boxesByWeek: {
+              ...s.commentsConfig.boxesByWeek,
+              [weekId]: (s.commentsConfig.boxesByWeek[weekId] ?? []).map((box) =>
+                box.id === boxId ? { ...box, ...patch, updatedAt: now() } : box
+              ),
             },
-            commentsSession: s.commentsSession ? {
-              ...s.commentsSession,
-              log: s.commentsSession.log.filter((entry) => entry.categoryId !== id),
-              updatedAt: timestamp,
-            } : null,
-            commentsSessions: s.commentsSessions.map((session) => ({
-              ...session,
-              log: session.log.filter((entry) => entry.categoryId !== id),
-              updatedAt: timestamp,
-            })),
-          });
-        }),
-      addCommentBox: (categoryId) =>
-        set((s) => withPendingSync({
-          commentsConfig: {
-            ...s.commentsConfig,
-            boxes: [...s.commentsConfig.boxes, createCommentBox(categoryId)],
           },
         })),
-      updateCommentBox: (id, patch) =>
-        set((s) => withPendingSync({
-          commentsConfig: {
-            ...s.commentsConfig,
-            boxes: s.commentsConfig.boxes.map((box) =>
-              box.id === id ? { ...box, ...patch, updatedAt: now() } : box
-            ),
-          },
-        })),
-      deleteCommentBox: (id) =>
-        set((s) => {
-          const timestamp = now();
-          return withPendingSync({
-            commentsConfig: {
-              ...s.commentsConfig,
-              boxes: s.commentsConfig.boxes.filter((box) => box.id !== id),
-            },
-            commentsSession: s.commentsSession ? {
-              ...s.commentsSession,
-              log: s.commentsSession.log.filter((entry) => entry.boxId !== id),
-              updatedAt: timestamp,
-            } : null,
-            commentsSessions: s.commentsSessions.map((session) => ({
-              ...session,
-              log: session.log.filter((entry) => entry.boxId !== id),
-              updatedAt: timestamp,
-            })),
-          });
-        }),
-      startCommentsSession: () =>
-        set((s) => {
-          const session: CommentsSession = {
-            id: uuid(),
-            date: new Date().toISOString().slice(0, 10),
-            startedAt: new Date().toISOString(),
-            log: [],
-            updatedAt: now(),
-          };
-          return withPendingSync({
-            commentsSession: session,
-            commentsSessions: [...s.commentsSessions, session],
-          });
-        }),
-      addCommentTiming: (entry) =>
-        set((s) => {
-          const current = s.commentsSession ?? {
-            id: uuid(),
-            date: new Date().toISOString().slice(0, 10),
-            startedAt: new Date().toISOString(),
-            log: [],
-            updatedAt: now(),
-          };
-          const timestamp = now();
-          const nextSession = {
-            ...current,
-            updatedAt: timestamp,
-            log: [...current.log, {
-              ...entry,
-              id: uuid(),
-              updatedAt: timestamp,
-              actualDurationSec: Math.max(0, Math.round(entry.actualDurationSec)),
-            }],
-          };
-          const sessions = s.commentsSessions.some((session) => session.id === nextSession.id)
-            ? s.commentsSessions.map((session) => session.id === nextSession.id ? nextSession : session)
-            : [...s.commentsSessions, nextSession];
-          return withPendingSync({
-            commentsSession: nextSession,
-            commentsSessions: sessions,
-          });
-        }),
-      deleteCommentTiming: (logId) =>
-        set((s) => {
-          const timestamp = now();
-          const nextSession = s.commentsSession
-            ? { ...s.commentsSession, log: s.commentsSession.log.filter((entry) => entry.id !== logId), updatedAt: timestamp }
-            : null;
-          const nextSessions = s.commentsSessions.map((session) => ({
-            ...session,
-            log: session.log.filter((entry) => entry.id !== logId),
-          })).filter((session) => session.log.length > 0 || session.id === nextSession?.id);
-          return withPendingSync({
-            commentsSession: nextSession,
-            commentsSessions: nextSessions,
-          });
-        }),
       resetCommentsConfig: () =>
         set(withPendingSync({
           commentsConfig: getDefaultCommentsConfig(),
-          commentsSession: null,
-          commentsSessions: [],
         })),
 
       resetData: () =>
@@ -1741,8 +1562,6 @@ presidingConfig: getDefaultPresidingConfig(),
              presidingSessions: [],
              presidingTombstones: collectProgramTombstones(get()),
              commentsConfig: getDefaultCommentsConfig(),
-             commentsSession: null,
-             commentsSessions: [],
            })
         ),
     }),
@@ -1765,8 +1584,6 @@ presidingConfig: state.presidingConfig,
           presidingSessions: state.presidingSessions,
           presidingTombstones: state.presidingTombstones,
           commentsConfig: state.commentsConfig,
-          commentsSession: state.commentsSession,
-          commentsSessions: state.commentsSessions,
       }) as unknown as AppState,
       // CRITICAL: Prevent stale IndexedDB data from overwriting freshly-synced
       // Supabase data. If current state has real data (sync already imported),
@@ -1814,8 +1631,6 @@ presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingCo
              presidingSessions: migratePresidingSessions(p.presidingSessions, migratePresidingSession(p.presidingSession ?? current.presidingSession)),
              presidingTombstones: migrateProgramTombstones(p.presidingTombstones ?? current.presidingTombstones),
              commentsConfig: migrateCommentsConfig(p.commentsConfig ?? current.commentsConfig),
-             commentsSession: migrateCommentsSession(p.commentsSession ?? current.commentsSession),
-             commentsSessions: migrateCommentsSessions(p.commentsSessions, migrateCommentsSession(p.commentsSession ?? current.commentsSession)),
         };
       },
     }

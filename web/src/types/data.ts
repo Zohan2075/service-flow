@@ -179,7 +179,6 @@ program?: {
   } | null;
   comments?: {
     config: unknown;
-    sessions: unknown[];
   } | null;
 }
 

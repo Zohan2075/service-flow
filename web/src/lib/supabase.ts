@@ -21,7 +21,7 @@ import type {
   ProgramTombstoneType,
 } from "@/types/presiding";
 import { getDefaultPresidingConfig, getDefaultPresidingPrefs, getTimerRoles } from "@/types/presiding";
-import type { CommentsConfig, CommentsSession, CommentTiming } from "@/types/comments";
+import type { CommentsConfig } from "@/types/comments";
 import { getDefaultCommentsConfig } from "@/types/comments";
 
 // ─── Client Singleton ────────────────────────────────────────────────────────
@@ -732,7 +732,6 @@ const config = weeks.length > 0 ? { weeks, activeWeekId: prefsResult.data?.activ
 
 export interface CommentsSyncState {
   config: CommentsConfig;
-  sessions: CommentsSession[];
 }
 
 export async function pushComments(comments: CommentsSyncState, userId: string): Promise<void> {
@@ -743,51 +742,14 @@ export async function pushComments(comments: CommentsSyncState, userId: string):
     config_json: comments.config,
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id" }).throwOnError();
-
-  // Deterministic id for legacy/missing session ids so repeated pushes reuse
-  // the same primary key instead of generating a new random id each time.
-  const sessions = comments.sessions.map((session) => {
-    const id = session.id ?? `legacy-${userId}-${session.date}`;
-    return {
-      id,
-      user_id: userId,
-      session_date: session.date,
-      started_at: session.startedAt,
-      log_json: session.log,
-      updated_at: session.updatedAt ?? new Date().toISOString(),
-    };
-  });
-
-  // Reconcile sessions BEFORE upsert: remove rows that collide on the
-  // (user_id, session_date) unique key but carry a different id.
-  if (sessions.length > 0) {
-    const { data: existingSessions } = await client
-      .from("comments_sessions").select("id, session_date").eq("user_id", userId);
-    const dateToId = new Map(sessions.map((s) => [s.session_date, s.id]));
-    const staleIds = (existingSessions ?? [])
-      .filter((row) => {
-        const key = String(row.session_date);
-        return dateToId.has(key) && dateToId.get(key) !== row.id;
-      })
-      .map((row) => row.id);
-    for (const staleId of staleIds) {
-      await client.from("comments_sessions").delete().eq("user_id", userId).eq("id", staleId);
-    }
-    const { error } = await client.from("comments_sessions").upsert(sessions, { onConflict: "id" });
-    if (error) throw new Error(`pushComments sessions: ${error.message}`);
-  }
 }
 
 export async function pullComments(userId: string): Promise<CommentsSyncState | null> {
   const client = getSupabase();
-  const [configResult, sessionsResult] = await Promise.all([
-    client.from("comments_config").select("*").eq("user_id", userId).maybeSingle(),
-    client.from("comments_sessions").select("*").eq("user_id", userId).order("session_date", { ascending: false }),
-  ]);
-  const error = [configResult, sessionsResult].find((result) => result.error)?.error;
-  if (error) throw new Error(`pullComments: ${error.message}`);
+  const configResult = await client.from("comments_config").select("*").eq("user_id", userId).maybeSingle();
+  if (configResult.error) throw new Error(`pullComments: ${configResult.error.message}`);
 
-  if (!configResult.data && (sessionsResult.data ?? []).length === 0) return null;
+  if (!configResult.data) return null;
 
   const rawConfig = configResult.data?.config_json as unknown;
   const config: CommentsConfig =
@@ -795,16 +757,7 @@ export async function pullComments(userId: string): Promise<CommentsSyncState | 
       ? rawConfig as CommentsConfig
       : getDefaultCommentsConfig();
 
-  const sessions: CommentsSession[] = ((sessionsResult.data ?? []) as Record<string, unknown>[])
-    .map((row) => ({
-      id: String(row.id),
-      date: String(row.session_date),
-      startedAt: String(row.started_at),
-      log: Array.isArray(row.log_json) ? (row.log_json as CommentTiming[]) : [],
-      updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
-    }));
-
-  return { config, sessions };
+  return { config };
 }
 
 // ─── Bulk Push (full sync upload) ────────────────────────────────────────────

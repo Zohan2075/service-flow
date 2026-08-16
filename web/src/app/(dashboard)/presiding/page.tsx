@@ -35,11 +35,7 @@ function PresidingDashboard() {
 
   // Comments wiring (moved from the standalone /presiding/comments route)
   const commentsConfig = useStore((s) => s.commentsConfig);
-  const commentsSession = useStore((s) => s.commentsSession);
   const setCommentsConfig = useStore((s) => s.setCommentsConfig);
-  const addCommentTiming = useStore((s) => s.addCommentTiming);
-  const deleteCommentTiming = useStore((s) => s.deleteCommentTiming);
-  const startCommentsSession = useStore((s) => s.startCommentsSession);
 
   // Tab state, synced with the ?tab= URL search param so deep links work.
   const searchParams = useSearchParams();
@@ -79,18 +75,6 @@ function PresidingDashboard() {
     if (!session) startSessionRef.current();
     addLogEntryRef.current(entry);
   }, [session]);
-
-  // Stable refs for the comments auto-start pattern
-  const startCommentsSessionRef = useRef(startCommentsSession);
-  startCommentsSessionRef.current = startCommentsSession;
-  const addCommentTimingRef = useRef(addCommentTiming);
-  addCommentTimingRef.current = addCommentTiming;
-
-  // Auto-start comments session on first timed entry
-  const handleCommentLogEntry = useCallback((entry: Parameters<typeof addCommentTiming>[0]) => {
-    if (!commentsSession) startCommentsSessionRef.current();
-    addCommentTimingRef.current(entry);
-  }, [commentsSession]);
 
   // Safety: if config isn't ready yet during hydration
   const activeWeek = useMemo(() =>
@@ -148,11 +132,9 @@ function PresidingDashboard() {
       ) : (
         <CommentsView
           lang={lang === "es" ? "es" : "en"}
+          weekId={activeWeek?.weekId ?? "default"}
           config={commentsConfig}
-          session={commentsSession}
           onConfigChange={setCommentsConfig}
-          onLogEntry={handleCommentLogEntry}
-          onDeleteLog={deleteCommentTiming}
         />
       )}
     </div>

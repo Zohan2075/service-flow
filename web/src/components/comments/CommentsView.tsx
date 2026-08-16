@@ -5,10 +5,8 @@ import { useStore } from "@/lib/store";
 import { useSync } from "@/lib/sync";
 import type {
   CommentsConfig,
-  CommentsSession,
   CommentBox,
   CommentCategory,
-  CommentTiming,
 } from "@/types/comments";
 import { createCommentBox, createCommentCategory } from "@/types/comments";
 
@@ -55,15 +53,13 @@ const L = {
     reset: "Reset",
     edit: "Edit",
     done: "Done",
-    total: "Total",
-    count: "count",
     active: "Running",
+    idle: "No timer running",
     noCategories: "No categories yet. Add one to start timing comments.",
-    sessionLog: "Session Log",
-    logEmpty: "No comments timed yet.",
     minutes: "min",
     seconds: "s",
-    today: "Today",
+    quickAdd: "Add comment",
+    editTime: "Edit time",
     saving: "Saving",
     saved: "Saved",
     offline: "Offline — saved locally",
@@ -88,15 +84,13 @@ const L = {
     reset: "Reiniciar",
     edit: "Editar",
     done: "Listo",
-    total: "Total",
-    count: "cant.",
     active: "En curso",
+    idle: "Ningún temporizador en curso",
     noCategories: "Aún no hay categorías. Agrega una para empezar a medir comentarios.",
-    sessionLog: "Registro",
-    logEmpty: "Aún no se ha medido ningún comentario.",
     minutes: "min",
     seconds: "s",
-    today: "Hoy",
+    quickAdd: "Agregar comentario",
+    editTime: "Editar tiempo",
     saving: "Guardando",
     saved: "Guardado",
     offline: "Sin conexión — guardado localmente",
@@ -114,35 +108,37 @@ function pick<T>(lang: Lang, en: T, es: T): T {
 
 interface Props {
   lang: Lang;
+  weekId: string;
   config: CommentsConfig;
-  session: CommentsSession | null;
   onConfigChange: (cfg: CommentsConfig) => void;
-  onLogEntry: (entry: Omit<CommentTiming, "id" | "updatedAt">) => void;
-  onDeleteLog: (logId: string) => void;
 }
 
 /* ---------- main component ---------- */
 
 export default function CommentsView({
   lang,
+  weekId,
   config,
-  session,
   onConfigChange,
-  onLogEntry,
-  onDeleteLog,
 }: Props) {
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingBoxId, setEditingBoxId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [editingTimeBoxId, setEditingTimeBoxId] = useState<string | null>(null);
+  const [timeMinutes, setTimeMinutes] = useState("0");
+  const [timeSeconds, setTimeSeconds] = useState("0");
   const [now, setNow] = useState(() => Date.now());
   const editingRef = useRef<HTMLInputElement | null>(null);
+  const updateCommentBox = useStore((s) => s.updateCommentBox);
 
   const t = (key: keyof typeof L.en) => pick(lang, L.en[key], L.es[key]);
 
+  const boxes = useMemo(() => config.boxesByWeek[weekId] ?? [], [config.boxesByWeek, weekId]);
+
   // Tick once per second while any box is running so live durations update.
   const anyRunning = useMemo(
-    () => config.boxes.some((box) => Boolean(box.runningSinceISO)),
-    [config.boxes],
+    () => boxes.some((box) => Boolean(box.runningSinceISO)),
+    [boxes],
   );
   useEffect(() => {
     if (!anyRunning) return;
@@ -165,12 +161,12 @@ export default function CommentsView({
   const boxesByCategory = useMemo(() => {
     const map = new Map<string, CommentBox[]>();
     sortedCategories.forEach((cat) => map.set(cat.id, []));
-    config.boxes.forEach((box) => {
+    boxes.forEach((box) => {
       const list = map.get(box.categoryId);
       if (list) list.push(box);
     });
     return map;
-  }, [config.boxes, sortedCategories]);
+  }, [boxes, sortedCategories]);
 
   const liveSecFor = useCallback(
     (box: CommentBox): number => {
@@ -188,54 +184,66 @@ export default function CommentsView({
   );
 
   const runningBox = useMemo(
-    () => config.boxes.find((box) => Boolean(box.runningSinceISO)) ?? null,
-    [config.boxes],
+    () => boxes.find((box) => Boolean(box.runningSinceISO)) ?? null,
+    [boxes],
   );
 
-  const setBox = useCallback(
-    (boxId: string, patch: Partial<CommentBox>) => {
+  const setWeekBoxes = useCallback(
+    (nextBoxes: CommentBox[]) => {
       onConfigChange({
         ...config,
-        boxes: config.boxes.map((box) => (box.id === boxId ? { ...box, ...patch } : box)),
+        boxesByWeek: { ...config.boxesByWeek, [weekId]: nextBoxes },
       });
     },
-    [config, onConfigChange],
+    [config, onConfigChange, weekId],
   );
 
-  // Finalize a running box: log the completed run and accumulate its duration.
+  const runDurationSec = useCallback((target: CommentBox, timestamp: number): number => {
+    const startMs = Date.parse(target.runningSinceISO ?? "");
+    return Number.isFinite(startMs) ? Math.max(0, Math.round((timestamp - startMs) / 1000)) : 0;
+  }, []);
+
+  // Finalize a running box: accumulate its duration (no log entry — per-week
+  // accumulated times replace the session log).
   const stopBoxAt = useCallback(
-    (target: CommentBox, timestamp: number): CommentBox => {
-      const startMs = Date.parse(target.runningSinceISO ?? "");
-      const duration = Number.isFinite(startMs) ? Math.max(0, Math.round((timestamp - startMs) / 1000)) : 0;
-      if (duration > 0) {
-        onLogEntry({
-          boxId: target.id,
-          boxName: target.name,
-          categoryId: target.categoryId,
-          actualStartISO: target.runningSinceISO ?? new Date(timestamp).toISOString(),
-          actualEndISO: new Date(timestamp).toISOString(),
-          actualDurationSec: duration,
-        });
-      }
-      return { ...target, accumulatedSec: target.accumulatedSec + duration, runningSinceISO: undefined };
-    },
-    [onLogEntry],
+    (target: CommentBox, timestamp: number): CommentBox => ({
+      ...target,
+      accumulatedSec: target.accumulatedSec + runDurationSec(target, timestamp),
+      runningSinceISO: undefined,
+    }),
+    [runDurationSec],
   );
 
-  // Toggle a box's timer: stop the currently-running box (logging it), then
-  // either start or stop the tapped box.
+  // AUTO-ADD: when a stopped box accumulated time (>0s), append a fresh empty
+  // box right after it in the same category, ready for the next comment.
+  const insertAutoAddBox = useCallback(
+    (list: CommentBox[], stoppedId: string, stoppedDuration: number): CommentBox[] => {
+      if (stoppedDuration <= 0) return list;
+      const index = list.findIndex((b) => b.id === stoppedId);
+      if (index === -1) return list;
+      const next = [...list];
+      next.splice(index + 1, 0, createCommentBox(next[index].categoryId, t("boxHint")));
+      return next;
+    },
+    [t],
+  );
+
+  // Toggle a box's timer: stop the currently-running box (auto-adding a fresh
+  // box after it when it accumulated time), then start or stop the tapped box.
   const handleToggle = useCallback(
     (box: CommentBox) => {
       const timestamp = Date.now();
-      const running = config.boxes.find((b) => Boolean(b.runningSinceISO));
+      let nextBoxes = [...boxes];
+      const running = boxes.find((b) => Boolean(b.runningSinceISO));
 
-      let nextBoxes = config.boxes.map((b) => (b.id === box.id ? box : b));
       if (running && running.id !== box.id) {
         nextBoxes = nextBoxes.map((b) => (b.id === running.id ? stopBoxAt(running, timestamp) : b));
+        nextBoxes = insertAutoAddBox(nextBoxes, running.id, runDurationSec(running, timestamp));
       }
 
       if (box.runningSinceISO) {
         nextBoxes = nextBoxes.map((b) => (b.id === box.id ? stopBoxAt(box, timestamp) : b));
+        nextBoxes = insertAutoAddBox(nextBoxes, box.id, runDurationSec(box, timestamp));
       } else {
         nextBoxes = nextBoxes.map((b) =>
           b.id === box.id
@@ -244,21 +252,16 @@ export default function CommentsView({
         );
       }
 
-      onConfigChange({ ...config, boxes: nextBoxes });
+      setWeekBoxes(nextBoxes);
     },
-    [config, onConfigChange, stopBoxAt],
+    [boxes, setWeekBoxes, stopBoxAt, insertAutoAddBox, runDurationSec],
   );
 
   const handleReset = useCallback(
     (box: CommentBox) => {
-      onConfigChange({
-        ...config,
-        boxes: config.boxes.map((b) =>
-          b.id === box.id ? { ...b, accumulatedSec: 0, runningSinceISO: undefined } : b,
-        ),
-      });
+      updateCommentBox(weekId, box.id, { accumulatedSec: 0, runningSinceISO: undefined });
     },
-    [config, onConfigChange],
+    [updateCommentBox, weekId],
   );
 
   const startEditCategory = (cat: CommentCategory) => {
@@ -275,8 +278,8 @@ export default function CommentsView({
       const cat = config.categories.find((c) => c.id === editingCategoryId);
       if (cat && name) onConfigChange({ ...config, categories: config.categories.map((c) => (c.id === editingCategoryId ? { ...c, name } : c)) });
     } else if (editingBoxId) {
-      const box = config.boxes.find((b) => b.id === editingBoxId);
-      if (box && name) setBox(editingBoxId, { name });
+      const box = boxes.find((b) => b.id === editingBoxId);
+      if (box && name) updateCommentBox(weekId, editingBoxId, { name });
     }
     setEditingCategoryId(null);
     setEditingBoxId(null);
@@ -306,19 +309,23 @@ export default function CommentsView({
     const timestamp = Date.now();
     // Finalize any running timer inside the category before dropping the boxes,
     // mirroring the stop logic in handleToggle (prevents lost run time).
-    config.boxes.forEach((b) => {
-      if (b.categoryId === cat.id && b.runningSinceISO) stopBoxAt(b, timestamp);
-    });
+    const boxesByWeek: Record<string, CommentBox[]> = {};
+    for (const [wk, list] of Object.entries(config.boxesByWeek)) {
+      const finalized = list.map((b) =>
+        b.categoryId === cat.id && b.runningSinceISO ? stopBoxAt(b, timestamp) : b
+      );
+      boxesByWeek[wk] = finalized.filter((b) => b.categoryId !== cat.id);
+    }
     onConfigChange({
       ...config,
       categories: config.categories.filter((c) => c.id !== cat.id),
-      boxes: config.boxes.filter((b) => b.categoryId !== cat.id),
+      boxesByWeek,
     });
   };
 
   const addBox = (categoryId: string) => {
     const box = createCommentBox(categoryId, t("boxHint"));
-    onConfigChange({ ...config, boxes: [...config.boxes, box] });
+    setWeekBoxes([...boxes, box]);
     setEditingBoxId(box.id);
     setDraft("");
   };
@@ -328,15 +335,34 @@ export default function CommentsView({
     const timestamp = Date.now();
     // Finalize the run before removing the box (prevents lost run time).
     if (box.runningSinceISO) stopBoxAt(box, timestamp);
-    onConfigChange({
-      ...config,
-      boxes: config.boxes.filter((b) => b.id !== box.id),
-    });
+    setWeekBoxes(boxes.filter((b) => b.id !== box.id));
   };
 
-  const sessionLog = session?.log ?? [];
-  const totalCount = sessionLog.length;
-  const totalSec = sessionLog.reduce((sum, entry) => sum + (entry.actualDurationSec ?? 0), 0);
+  // Quick "+" in the active strip: add a box to the running box's category,
+  // or to the first category when nothing is running.
+  const quickAdd = () => {
+    const categoryId = runningBox?.categoryId ?? sortedCategories[0]?.id;
+    if (!categoryId) return;
+    addBox(categoryId);
+  };
+
+  // ── mm:ss time editor (only when the box is NOT running) ────────────────
+  const startEditTime = (box: CommentBox) => {
+    if (box.runningSinceISO) return;
+    setEditingTimeBoxId(box.id);
+    setTimeMinutes(String(Math.floor(box.accumulatedSec / 60)));
+    setTimeSeconds(String(box.accumulatedSec % 60));
+  };
+  const commitTimeEdit = () => {
+    if (!editingTimeBoxId) return;
+    const minutes = Math.min(9999, Math.max(0, Math.floor(Number(timeMinutes) || 0)));
+    const seconds = Math.min(59, Math.max(0, Math.floor(Number(timeSeconds) || 0)));
+    updateCommentBox(weekId, editingTimeBoxId, { accumulatedSec: minutes * 60 + seconds });
+    setEditingTimeBoxId(null);
+  };
+  const cancelTimeEdit = () => {
+    setEditingTimeBoxId(null);
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-4 p-4 md:p-6 overflow-y-auto">
@@ -348,36 +374,45 @@ export default function CommentsView({
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <SaveStatus t={t} />
-          {totalCount > 0 && (
-            <>
-              <span className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-full">
-                {totalCount} {t("count")}
-              </span>
-              <span className="bg-surface border border-slate-200 dark:border-slate-800 font-bold px-3 py-1.5 rounded-full">
-                {t("total")} {fmtDuration(totalSec)}
-              </span>
-            </>
-          )}
         </div>
       </div>
 
       {/* Active timer strip */}
-      {runningBox && (
+      {(runningBox || sortedCategories.length > 0) && (
         <div className="shrink-0 sticky top-0 z-10 px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-gradient-to-r from-surface via-surface to-surface/95 backdrop-blur shadow-lg shadow-slate-200/50 dark:shadow-black/25">
           <div className="flex items-center gap-3 min-w-0">
             <span className="relative flex size-3 shrink-0" aria-hidden="true">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex size-3 rounded-full bg-primary" />
+              {runningBox ? (
+                <>
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex size-3 rounded-full bg-primary" />
+                </>
+              ) : (
+                <span className="inline-flex size-3 rounded-full bg-slate-300 dark:bg-slate-600" />
+              )}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-[9px] uppercase tracking-wider font-bold text-primary">{t("active")}</p>
+              <p className="text-[9px] uppercase tracking-wider font-bold text-primary">
+                {runningBox ? t("active") : t("title")}
+              </p>
               <p className="text-sm font-bold truncate text-slate-700 dark:text-slate-100">
-                {runningBox.name || t("boxName")}
+                {runningBox ? (runningBox.name || t("boxName")) : t("idle")}
               </p>
             </div>
-            <span className="shrink-0 font-mono text-2xl font-black leading-none tabular-nums text-slate-800 dark:text-slate-100">
-              {fmtDuration(liveSecFor(runningBox))}
-            </span>
+            {runningBox && (
+              <span className="shrink-0 font-mono text-2xl font-black leading-none tabular-nums text-slate-800 dark:text-slate-100">
+                {fmtDuration(liveSecFor(runningBox))}
+              </span>
+            )}
+            <button
+              onClick={quickAdd}
+              disabled={sortedCategories.length === 0}
+              className="shrink-0 flex items-center justify-center size-11 rounded-xl bg-primary text-white shadow-lg hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              title={t("quickAdd")}
+              aria-label={t("quickAdd")}
+            >
+              <span className="material-symbols-outlined">add</span>
+            </button>
           </div>
         </div>
       )}
@@ -392,7 +427,7 @@ export default function CommentsView({
         )}
 
         {sortedCategories.map((cat) => {
-          const boxes = boxesByCategory.get(cat.id) ?? [];
+          const catBoxes = boxesByCategory.get(cat.id) ?? [];
           const catTotal = categoryTotalSec(cat.id);
           return (
             <section key={cat.id} className="space-y-3">
@@ -428,7 +463,7 @@ export default function CommentsView({
                   </button>
                 )}
                 <span className="text-xs font-bold text-slate-400 tabular-nums ml-auto">
-                  {boxes.length} · {fmtDuration(catTotal)}
+                  {catBoxes.length} · {fmtDuration(catTotal)}
                 </span>
                 <button
                   onClick={() => addBox(cat.id)}
@@ -449,7 +484,7 @@ export default function CommentsView({
 
               {/* Box grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {boxes.map((box) => {
+                {catBoxes.map((box) => {
                   const isRunning = Boolean(box.runningSinceISO);
                   const liveSec = liveSecFor(box);
                   return (
@@ -500,9 +535,45 @@ export default function CommentsView({
                         </button>
                       )}
 
-                      <span className="text-3xl font-extrabold tabular-nums tracking-tight">
-                        {fmtDuration(liveSec)}
-                      </span>
+                      {editingTimeBoxId === box.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={9999}
+                            value={timeMinutes}
+                            onChange={(e) => setTimeMinutes(e.target.value)}
+                            onBlur={commitTimeEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur();
+                              if (e.key === "Escape") cancelTimeEdit();
+                            }}
+                            aria-label={t("minutes")}
+                            className="w-14 text-center rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-1 py-0.5 text-lg font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                          <span className="text-xs font-bold text-slate-400">{t("minutes")}</span>
+                          <span className="text-lg font-black text-slate-400">:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={59}
+                            value={timeSeconds}
+                            onChange={(e) => setTimeSeconds(e.target.value)}
+                            onBlur={commitTimeEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur();
+                              if (e.key === "Escape") cancelTimeEdit();
+                            }}
+                            aria-label={t("seconds")}
+                            className="w-12 text-center rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-1 py-0.5 text-lg font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                          <span className="text-xs font-bold text-slate-400">{t("seconds")}</span>
+                        </div>
+                      ) : (
+                        <span className="text-3xl font-extrabold tabular-nums tracking-tight">
+                          {fmtDuration(liveSec)}
+                        </span>
+                      )}
 
                       <div className="flex items-center gap-1">
                         <button
@@ -519,6 +590,20 @@ export default function CommentsView({
                             {isRunning ? "pause" : "play_arrow"}
                           </span>
                           {isRunning ? t("stop") : t("start")}
+                        </button>
+                        <button
+                          onClick={() => startEditTime(box)}
+                          disabled={isRunning}
+                          className={cn(
+                            "flex items-center justify-center p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                            isRunning
+                              ? "text-white/30 cursor-not-allowed"
+                              : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800",
+                          )}
+                          title={t("editTime")}
+                          aria-label={t("editTime")}
+                        >
+                          <span className="material-symbols-outlined text-sm">schedule</span>
                         </button>
                         <button
                           onClick={() => handleReset(box)}
@@ -564,54 +649,6 @@ export default function CommentsView({
         <span className="material-symbols-outlined">add</span>
         {t("addCategory")}
       </button>
-
-      {/* Session log */}
-      <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold">{t("sessionLog")}</h3>
-          {totalCount > 0 && (
-            <span className="text-xs font-bold text-slate-400">
-              {t("total")} {fmtDuration(totalSec)}
-            </span>
-          )}
-        </div>
-        {sessionLog.length === 0 ? (
-          <p className="text-sm text-slate-400">{t("logEmpty")}</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {[...sessionLog].reverse().map((entry) => {
-              const cat = config.categories.find((c) => c.id === entry.categoryId);
-              return (
-                <li
-                  key={entry.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded-xl bg-surface border border-slate-200 dark:border-slate-800"
-                >
-                  <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: cat?.color ?? "#94a3b8" }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{entry.boxName}</p>
-                    <p className="text-xs text-slate-400 tabular-nums">
-                      {new Date(entry.actualStartISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                      {" – "}
-                      {new Date(entry.actualEndISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                    </p>
-                  </div>
-                  <span className="text-sm font-bold tabular-nums">{fmtDuration(entry.actualDurationSec)}</span>
-                  {entry.id && (
-                    <button
-                      onClick={() => onDeleteLog(entry.id!)}
-                      className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                      title={t("removeBox")}
-                      aria-label={t("removeBox")}
-                    >
-                      <span className="material-symbols-outlined text-sm">delete</span>
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }

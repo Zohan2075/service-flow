@@ -1,7 +1,8 @@
 // ─── Comments (Comentarios) Timer Book Types ──────────────────────────────────
 // A simple square-timer book for tracking meeting comments by category.
 // Each box is an unlimited stopwatch with an editable name; boxes are grouped
-// into user-defined categories. Completed runs are logged to a session.
+// into user-defined categories. Categories are shared across program weeks;
+// boxes and their accumulated times are per week (each week starts fresh).
 
 export interface CommentCategory {
   id: string;
@@ -23,28 +24,10 @@ export interface CommentBox {
   updatedAt?: string;
 }
 
-export interface CommentTiming {
-  id?: string;
-  boxId: string;
-  boxName: string;
-  categoryId: string;
-  actualStartISO: string;
-  actualEndISO: string;
-  actualDurationSec: number;
-  updatedAt?: string;
-}
-
-export interface CommentsSession {
-  id?: string;
-  date: string;        // "yyyy-MM-dd"
-  startedAt: string;   // ISO datetime
-  log: CommentTiming[];
-  updatedAt?: string;
-}
-
 export interface CommentsConfig {
   categories: CommentCategory[];
-  boxes: CommentBox[];
+  /** Per-week comment boxes; key is the program weekId (e.g. "2026-W33"). */
+  boxesByWeek: Record<string, CommentBox[]>;
 }
 
 // ─── Default config ───────────────────────────────────────────────────────────
@@ -55,12 +38,9 @@ export function newCommentId(): string {
 }
 
 export function getDefaultCommentsConfig(): CommentsConfig {
-  const now = new Date().toISOString();
   return {
-    categories: [
-      { id: "cat_audience", name: "Audience", color: "#2B579A", icon: "record_voice_over", sortOrder: 0, updatedAt: now },
-    ],
-    boxes: [],
+    categories: [],
+    boxesByWeek: {},
   };
 }
 

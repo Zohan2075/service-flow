@@ -47,7 +47,7 @@ function isRemoteEmpty(state: {
   goals: unknown[];
   interestedPeople: unknown[];
   program?: { config?: { weeks?: unknown[] }; sessions?: unknown[]; tombstones?: unknown[] } | null;
-  comments?: { config?: { categories?: unknown[]; boxes?: unknown[] }; sessions?: unknown[] } | null;
+  comments?: { config?: { categories?: unknown[]; boxesByWeek?: Record<string, unknown[]> } } | null;
 }) {
   const hasProgramData = Boolean(
     state.program && (
@@ -59,8 +59,7 @@ function isRemoteEmpty(state: {
   const hasCommentsData = Boolean(
     state.comments && (
       (state.comments.config?.categories ?? []).length > 0 ||
-      (state.comments.config?.boxes ?? []).length > 0 ||
-      (state.comments.sessions ?? []).length > 0
+      Object.values(state.comments.config?.boxesByWeek ?? {}).some((boxes) => (boxes ?? []).length > 0)
     ),
   );
   return (
@@ -123,8 +122,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       store.presidingConfig.weeks.length > 0 ||
       store.presidingSessions.length > 0 ||
       store.commentsConfig.categories.length > 0 ||
-      store.commentsConfig.boxes.length > 0 ||
-      store.commentsSessions.length > 0;
+      Object.values(store.commentsConfig.boxesByWeek).some((boxes) => boxes.length > 0);
 
     // SAFETY: Never push empty data — always pull first to check if remote
     // has data. Last line of defense against overwriting Supabase with an
@@ -139,7 +137,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           remote.goals.length > 0 ||
           remote.interestedPeople.length > 0 ||
            Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0)) ||
-           Boolean(remote.comments && (remote.comments.config.categories.length > 0 || remote.comments.config.boxes.length > 0 || remote.comments.sessions.length > 0));
+           Boolean(remote.comments && (remote.comments.config.categories.length > 0 || Object.values(remote.comments.config.boxesByWeek ?? {}).some((boxes) => (boxes ?? []).length > 0)));
 
         if (remoteHasData) {
           importData(
@@ -181,7 +179,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         interestedPeople: store.interestedPeople,
         interestedStatuses: store.interestedStatuses,
        program: { config: store.presidingConfig, prefs: store.presidingPrefs, sessions: store.presidingSessions, tombstones: store.presidingTombstones },
-       comments: { config: store.commentsConfig, sessions: store.commentsSessions },
+       comments: { config: store.commentsConfig },
       },
       userId,
     );
@@ -264,8 +262,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             store.presidingConfig.weeks.length > 0 ||
             store.presidingSessions.length > 0 ||
             store.commentsConfig.categories.length > 0 ||
-            store.commentsConfig.boxes.length > 0 ||
-            store.commentsSessions.length > 0;
+            Object.values(store.commentsConfig.boxesByWeek).some((boxes) => boxes.length > 0);
 
           const remoteHasData =
             remote.serviceTypes.length > 0 ||
@@ -273,7 +270,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             remote.goals.length > 0 ||
             remote.interestedPeople.length > 0 ||
              Boolean(remote.program && (remote.program.config.weeks.length > 0 || remote.program.sessions.length > 0 || remote.program.tombstones.length > 0)) ||
-             Boolean(remote.comments && (remote.comments.config.categories.length > 0 || remote.comments.config.boxes.length > 0 || remote.comments.sessions.length > 0));
+             Boolean(remote.comments && (remote.comments.config.categories.length > 0 || Object.values(remote.comments.config.boxesByWeek ?? {}).some((boxes) => (boxes ?? []).length > 0)));
 
           if (remoteHasData) {
             // Remote has data — import it (this is the primary source of truth)
@@ -328,8 +325,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
               store.presidingConfig.weeks.length > 0 ||
               store.presidingSessions.length > 0 ||
               store.commentsConfig.categories.length > 0 ||
-              store.commentsConfig.boxes.length > 0 ||
-              store.commentsSessions.length > 0;
+              Object.values(store.commentsConfig.boxesByWeek).some((boxes) => boxes.length > 0);
 
           if (isRemoteEmpty(remote) && hasLocalData) {
             await performSync();
