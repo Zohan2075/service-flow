@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
 import { isInterestedPersonCompleted } from "@/lib/isoWeek";
 import { cn } from "@/lib/utils";
 import { useT, dateTimeString } from "@/lib/i18n";
+import toast from "react-hot-toast";
 
 const InterestedPersonModal = dynamic(
   () => import("@/components/interested/InterestedPersonModal"),
@@ -21,15 +23,53 @@ const GENDER_COLORS: Record<"male" | "female" | "other", string> = {
 
 type StatusFilter = "all" | InterestedPersonStatus;
 
+// A one-time person counts as finished forever once completed; weekly people
+// stay in Active (their per-week completion is handled by the weekly reset).
+function isFinished(person: InterestedPerson): boolean {
+  return person.completed === true && person.next_visit_weekly_day == null;
+}
+
 export default function InterestedPeoplePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-full text-sm text-slate-400">Loading...</div>
+      }
+    >
+      <InterestedDashboard />
+    </Suspense>
+  );
+}
+
+function InterestedDashboard() {
   const { t } = useT();
   const settings = useStore((s) => s.settings);
   const interestedPeople = useStore((s) => s.interestedPeople);
   const interestedStatuses = useStore((s) => s.interestedStatuses);
   const toggleInterestedPersonCompleted = useStore((s) => s.toggleInterestedPersonCompleted);
+  const deleteInterestedPerson = useStore((s) => s.deleteInterestedPerson);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState<InterestedPerson | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  // Tab state, synced with the ?tab= URL search param so deep links work.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [tab, setTab] = useState<"active" | "finished">(() =>
+    searchParams.get("tab") === "finished" ? "finished" : "active",
+  );
+
+  useEffect(() => {
+    setTab(searchParams.get("tab") === "finished" ? "finished" : "active");
+  }, [searchParams]);
+
+  const selectTab = useCallback(
+    (next: "active" | "finished") => {
+      setTab(next);
+      router.replace(next === "finished" ? "/interested?tab=finished" : "/interested", { scroll: false });
+    },
+    [router],
+  );
 
   // Localized short weekday names (0=Sun…6=Sat)
   const WEEKDAYS = useMemo(
@@ -60,10 +100,13 @@ export default function InterestedPeoplePage() {
       .map((s) => ({ id: s.id as StatusFilter, label: s.name, color: s.color })),
   ];
 
+  const activePeople = interestedPeople.filter((person) => !isFinished(person));
+  const finishedPeople = interestedPeople.filter(isFinished);
+  const tabPeople = tab === "active" ? activePeople : finishedPeople;
   const filteredPeople =
     statusFilter === "all"
-      ? interestedPeople
-      : interestedPeople.filter((p) => p.status === statusFilter);
+      ? tabPeople
+      : tabPeople.filter((p) => p.status === statusFilter);
 
   const handleOpenAddModal = () => {
     setShowAddModal(true);
@@ -71,6 +114,12 @@ export default function InterestedPeoplePage() {
 
   const handleOpenEdit = (person: InterestedPerson) => {
     setEditingPerson(person);
+  };
+
+  const handleDelete = (person: InterestedPerson) => {
+    if (!window.confirm(t("interested.deleteConfirm"))) return;
+    deleteInterestedPerson(person.id);
+    toast.success(t("interested.deleted"));
   };
 
   return (
@@ -86,6 +135,38 @@ export default function InterestedPeoplePage() {
             <span className="material-symbols-outlined text-xl">add</span>
             <span className="whitespace-nowrap">{t("interested.addNew")}</span>
           </button>
+        </div>
+
+        {/* Segmented tabs: Active / Finished */}
+        <div className="mt-3">
+          <div className="flex w-full rounded-xl bg-slate-100 dark:bg-slate-800 p-1 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => selectTab("active")}
+              className={
+                "flex-1 whitespace-nowrap min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2.5 sm:py-2 text-sm font-semibold transition-colors min-h-11 " +
+                (tab === "active"
+                  ? "bg-surface dark:bg-slate-700 shadow-sm text-primary"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300")
+              }
+            >
+              <span className="material-symbols-outlined text-base shrink-0">person_search</span>
+              <span className="truncate">{t("interested.tabActive")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTab("finished")}
+              className={
+                "flex-1 whitespace-nowrap min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2.5 sm:py-2 text-sm font-semibold transition-colors min-h-11 " +
+                (tab === "finished"
+                  ? "bg-surface dark:bg-slate-700 shadow-sm text-primary"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300")
+              }
+            >
+              <span className="material-symbols-outlined text-base shrink-0">task_alt</span>
+              <span className="truncate">{t("interested.tabFinished")}</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter tabs — horizontally scrollable on mobile */}
@@ -113,7 +194,7 @@ export default function InterestedPeoplePage() {
                 {option.color && (
                   <span
                     className="size-2.5 rounded-full shrink-0"
-                    style={{ 
+                    style={{
                       backgroundColor: option.color,
                       boxShadow: statusFilter === option.id ? `0 0 0 2px ${option.color}40` : "none"
                     }}
@@ -131,14 +212,87 @@ export default function InterestedPeoplePage() {
       <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas">
         {filteredPeople.length === 0 ? (
           <div className="text-center py-10 md:py-12 text-slate-400">
-            <span className="material-symbols-outlined text-4xl mb-2 block">people</span>
-            <p className="font-medium">{t("interested.empty")}</p>
+            <span className="material-symbols-outlined text-4xl mb-2 block">
+              {tab === "active" ? "people" : "history"}
+            </span>
+            <p className="font-medium">
+              {tab === "active" ? t("interested.empty") : t("interested.finishedEmpty")}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
             {filteredPeople.map((person) => {
               const statusInfo = getStatusInfo(person.status);
               const completed = isInterestedPersonCompleted(person);
+              if (tab === "finished") {
+                const lastVisitDate = person.next_visit_date ?? person.initial_conversation_date;
+                return (
+                  <div
+                    key={person.id}
+                    className="w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 relative overflow-hidden"
+                    style={{
+                      borderLeft: `4px solid ${statusInfo.color}`,
+                      background: person.gender === "female"
+                        ? "linear-gradient(90deg, transparent 70%, rgba(236, 72, 153, 0.15) 100%)"
+                        : "linear-gradient(90deg, transparent 85%, rgba(59, 130, 246, 0.08) 100%)",
+                    }}
+                  >
+                    <span
+                      className="size-3 rounded-full shrink-0"
+                      style={{ backgroundColor: statusInfo.color }}
+                      suppressHydrationWarning
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "font-bold leading-none",
+                            person.gender === "female" ? "text-lg" : person.gender === "other" ? "text-sm" : "text-base"
+                          )}
+                          style={{ color: GENDER_COLORS[person.gender] }}
+                        >
+                          {person.gender === "male" ? "♂" : person.gender === "female" ? "♀" : "⚬"}
+                        </span>
+                        <p className="font-semibold text-sm truncate">{person.name} {person.last_name}</p>
+                      </div>
+                      <p className="text-xs truncate flex items-center gap-1" style={{ color: statusInfo.color }}>
+                        <span className="material-symbols-outlined text-xs" suppressHydrationWarning>
+                          {statusInfo.icon}
+                        </span>
+                        {statusInfo.name}
+                      </p>
+                      {lastVisitDate && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {dateTimeString(new Date(lastVisitDate), settings.language)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleOpenEdit(person)}
+                        title={t("interested.edit")}
+                        className="inline-flex items-center justify-center size-8 rounded-lg text-slate-500 hover:bg-primary/10 hover:text-primary transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">edit</span>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(person)}
+                        title={t("interested.delete")}
+                        className="inline-flex items-center justify-center size-8 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">delete</span>
+                      </button>
+                      <button
+                        onClick={() => toggleInterestedPersonCompleted(person.id)}
+                        title={t("interested.reactivate")}
+                        className="inline-flex items-center justify-center size-8 rounded-lg text-slate-500 hover:bg-green-50 hover:text-green-600 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">undo</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <button
                   key={person.id}

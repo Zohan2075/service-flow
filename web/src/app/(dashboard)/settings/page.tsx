@@ -476,6 +476,17 @@ export default function SettingsPage() {
     setProfileCustomImage(profile?.customImage ?? null);
   }, [editingProfile, profile]);
 
+  // Notification lead time (minutes) decomposed into number + unit for the UI.
+  const leadTimeMinutes = settings.notifications.leadTimeMinutes;
+  const leadTimeAtTime = leadTimeMinutes === 0;
+  const leadTimeUnit = leadTimeMinutes % 1440 === 0 ? "days" : leadTimeMinutes % 60 === 0 ? "hours" : "minutes";
+  const leadTimeMult = leadTimeUnit === "days" ? 1440 : leadTimeUnit === "hours" ? 60 : 1;
+  const leadTimeValue = leadTimeAtTime ? 1 : Math.max(1, Math.floor(leadTimeMinutes / leadTimeMult));
+  const updateLeadTime = (value: number, unit: "minutes" | "hours" | "days") => {
+    const mult = unit === "days" ? 1440 : unit === "hours" ? 60 : 1;
+    updateSettings({ notifications: { ...settings.notifications, leadTimeMinutes: Math.min(20160, Math.max(0, Math.floor(value * mult))) } });
+  };
+
   return (
     <>
       <header className="px-4 md:px-6 py-3 md:py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
@@ -843,12 +854,20 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+<div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.notificationAdvance")}</label>
                 <div className="flex items-center gap-2">
-                  <input type="number" min={0} max={30} value={settings.notifications.advanceDays} onChange={(event) => updateSettings({ notifications: { ...settings.notifications, advanceDays: Math.min(30, Math.max(0, Number(event.target.value) || 0)) } })} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800" />
-                  <span className="shrink-0 text-xs text-slate-400">{t("settings.days")}</span>
+                  <input type="number" min={1} max={999} value={leadTimeValue} onChange={(event) => updateLeadTime(Number(event.target.value) || 0, leadTimeUnit)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800" />
+                  <select value={leadTimeUnit} onChange={(event) => updateLeadTime(leadTimeValue, event.target.value as "minutes" | "hours" | "days")} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
+                    <option value="minutes">{t("settings.unitMinutes")}</option>
+                    <option value="hours">{t("settings.unitHours")}</option>
+                    <option value="days">{t("settings.days")}</option>
+                  </select>
+                  <span className="shrink-0 text-xs text-slate-400">{t("settings.before")}</span>
                 </div>
+                <button type="button" onClick={() => updateLeadTime(0, "minutes")} className={cn("mt-2 rounded-full px-3 py-1 text-xs font-semibold transition-colors", leadTimeAtTime ? "bg-primary text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700")}>
+                  {t("settings.atTime")}
+                </button>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">{t("settings.notificationFrequency")}</label>

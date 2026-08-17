@@ -20,7 +20,7 @@ export type NotificationSound = "off" | "soft" | "chime" | "alert";
 
 export interface NotificationPreferences {
   enabled: boolean;
-  advanceDays: number;
+  leadTimeMinutes: number;  // 0 = notify at time of visit; clamp 0..20160 (14 days)
   frequencyMinutes: number;
   sound: NotificationSound;
   showPreview: boolean;

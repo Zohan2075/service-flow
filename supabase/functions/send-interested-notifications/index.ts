@@ -9,7 +9,7 @@ const corsHeaders = {
 
 type Preferences = {
   enabled: boolean;
-  advanceDays: number;
+  leadTimeMinutes: number;
   frequencyMinutes: number;
   showPreview: boolean;
 };
@@ -45,9 +45,11 @@ function preferencesFrom(value: unknown): Preferences {
   const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
     enabled: raw.enabled === true,
-    advanceDays: typeof raw.advanceDays === "number" && Number.isFinite(raw.advanceDays)
-      ? Math.min(30, Math.max(0, Math.floor(raw.advanceDays)))
-      : 1,
+    leadTimeMinutes: typeof raw.leadTimeMinutes === "number" && Number.isFinite(raw.leadTimeMinutes)
+      ? Math.min(20160, Math.max(0, Math.floor(raw.leadTimeMinutes)))
+      : typeof raw.advanceDays === "number" && Number.isFinite(raw.advanceDays)
+        ? Math.min(7 * 24 * 60, Math.max(0, Math.floor(raw.advanceDays * 24 * 60)))
+        : 24 * 60,
     frequencyMinutes: typeof raw.frequencyMinutes === "number" && Number.isFinite(raw.frequencyMinutes)
       ? Math.min(1440, Math.max(5, Math.floor(raw.frequencyMinutes)))
       : 30,
@@ -65,6 +67,16 @@ function parseDate(value: string | null): Date | null {
   if (!match) return null;
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseDateTime(value: string | null): Date | null {
+  if (!value) return null;
+  const base = parseDate(value);
+  if (!base) return null;
+  const timeMatch = value.match(/T(\d{1,2}):(\d{2})/);
+  if (timeMatch) base.setUTCHours(Number(timeMatch[1]), Number(timeMatch[2]), 0, 0);
+  else base.setUTCHours(0, 0, 0, 0);
+  return base;
 }
 
 function nextWeeklyDate(day: number | null, today: Date): Date | null {
@@ -104,13 +116,29 @@ function categoryIconFor(status: string): string {
   return CATEGORY_ICONS[status] ?? "🔔";
 }
 
-function visitDateFor(person: Person, today: Date): Date | null {
-  if (isCompletedForWeek(person, today)) return null;
-  const candidates = [
-    parseDate(person.next_visit_date),
-    nextWeeklyDate(person.next_visit_weekly_day, today),
-  ].filter((date): date is Date => Boolean(date && date >= today));
-  return candidates.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+// Full next-visit datetime in UTC: weekly occurrences use the person's
+// next_visit_date time-of-day when present, else UTC midnight. A weekly
+// occurrence whose time already passed rolls to the following week.
+function visitDateTimeFor(person: Person, now: Date): Date | null {
+  if (isCompletedForWeek(person, now)) return null;
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const candidates: Date[] = [];
+
+  const specific = parseDateTime(person.next_visit_date);
+  if (specific && specific.getTime() >= today.getTime()) candidates.push(specific);
+
+  if (person.next_visit_weekly_day != null) {
+    const occurrence = nextWeeklyDate(person.next_visit_weekly_day, today);
+    if (occurrence) {
+      const timeOfDay = specific ? { hours: specific.getUTCHours(), minutes: specific.getUTCMinutes() } : null;
+      occurrence.setUTCHours(timeOfDay?.hours ?? 0, timeOfDay?.minutes ?? 0, 0, 0);
+      if (occurrence.getTime() < now.getTime()) occurrence.setUTCDate(occurrence.getUTCDate() + 7);
+      candidates.push(occurrence);
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  return candidates.sort((a, b) => a.getTime() - b.getTime())[0];
 }
 
 async function processUser(
@@ -153,15 +181,14 @@ async function processUser(
     .eq("user_id", userId);
   if (peopleError) throw peopleError;
 
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const latest = new Date(today);
-  latest.setUTCDate(latest.getUTCDate() + preferences.advanceDays);
+  const leadMs = preferences.leadTimeMinutes * 60_000;
   let sent = 0;
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
   for (const person of (people ?? []) as Person[]) {
-    const visitDate = visitDateFor(person, today);
-    if (!visitDate || visitDate > latest) continue;
+    const visitDate = visitDateTimeFor(person, now);
+    // Fire when the next visit is within the lead window and not yet past.
+    if (!visitDate || now.getTime() < visitDate.getTime() - leadMs || now.getTime() > visitDate.getTime()) continue;
     const visitKey = utcDateKey(visitDate);
     const notificationKey = `interested:${person.id}:${visitKey}`;
     const { data: delivery, error: deliveryError } = await admin

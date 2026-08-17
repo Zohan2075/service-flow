@@ -495,14 +495,14 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   return (
     <div className="flex flex-col min-h-0 h-full bg-canvas overflow-hidden">
       {/* ===== HEADER: Week selector + info ===== */}
-      <div className="shrink-0 px-4 pt-4 pb-2 space-y-3">
+      <div className="shrink-0 px-4 md:px-5 pt-4 pb-2 space-y-3">
         {/* Week selector */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <button onClick={() => setShowWeekMenu(!showWeekMenu)}
               className="w-full flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-surface px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
               <span className="truncate">{lbl.weekLabel}: {weekDisplay || activeWeek?.weekId}</span>
-              <span className="material-symbols-outlined text-base text-slate-400">{showWeekMenu ? "expand_less" : "expand_more"}</span>
+              <span className="material-symbols-outlined text-base text-slate-500 dark:text-slate-400">{showWeekMenu ? "expand_less" : "expand_more"}</span>
             </button>
             {showWeekMenu && (
               <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-surface rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg py-1 max-h-48 overflow-y-auto">
@@ -542,28 +542,28 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
         {/* Week info is catalog-driven; only the selector above changes weeks. */}
         <div className="text-center">
           <div className="space-y-0.5">
-            <h2 className="text-lg font-black tracking-wide text-slate-800 dark:text-slate-100">{weekDisplay}</h2>
-            {bibleReading && <p className="text-[11px] font-semibold tracking-wider text-slate-400">{bibleReading}</p>}
+            <h2 className="text-lg md:text-xl font-black tracking-wide text-slate-800 dark:text-slate-100">{weekDisplay}</h2>
+            {bibleReading && <p className="text-xs font-semibold tracking-wider text-slate-500 dark:text-slate-400">{bibleReading}</p>}
           </div>
         </div>
       </div>
 
       {/* ===== ACTIVE TIMER BAR ===== */}
       {activeTimer && (
-        <div className="shrink-0 sticky top-0 z-40 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-surface via-surface to-surface/95 backdrop-blur shadow-lg shadow-slate-200/50 dark:shadow-black/25">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="shrink-0 sticky top-0 z-40 px-4 md:px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-surface via-surface to-surface/95 backdrop-blur shadow-lg shadow-slate-200/50 dark:shadow-black/25">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2.5 shrink-0">
               <span className="relative flex size-3 shrink-0" aria-hidden="true">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
               </span>
               <div className="text-center shrink-0 min-w-[4.5rem]">
-                <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">{lbl.master}</p>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">{lbl.master}</p>
                 <p className="font-mono text-2xl font-black leading-none tabular-nums">{fmtTime(activeTimer.elapsedSec)}</p>
               </div>
             </div>
             <div className="flex-1 min-w-0 text-center">
-              <p className="text-[9px] uppercase tracking-wider font-bold truncate text-emerald-600">{lbl.current}</p>
+              <p className="text-[10px] uppercase tracking-wider font-bold truncate text-emerald-600">{lbl.current}</p>
               <p className="text-sm font-bold tabular-nums truncate text-slate-700 dark:text-slate-100">
                 {isEs ? (activeTimer.titleEs || activeTimer.titleEn) : (activeTimer.titleEn || activeTimer.titleEs)}
               </p>
@@ -589,14 +589,14 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
       )}
 
       {/* ===== PROGRAM BODY ===== */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-6 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-5 pt-3 pb-6 space-y-4">
         <TimerLegend isEs={isEs} lbl={lbl} accentColor={accentColor} />
 
         {/* Opening section */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface p-4 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex-1">
-               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2" style={{ color: accentColor }}>{lbl.chairman} ({prefs.chairmanExpectedCount} {lbl.expected}):</p>
+               <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2" style={{ color: accentColor }}>{lbl.chairman} ({prefs.chairmanExpectedCount} {lbl.expected}):</p>
               <input value={sections[0]?.assigneeName || ""}
                 onChange={e => updateSection(sections[0]?.id ?? "", s => ({ ...s, assigneeName: e.target.value }))}
                 placeholder="————" className="w-full bg-transparent text-sm italic text-slate-500 dark:text-slate-400 focus:outline-none border-b border-dashed border-slate-200 dark:border-slate-700 pb-0.5" />
@@ -607,7 +607,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                onReset={() => resetTimer(sections[0]?.id ?? "", null)}
                actionLabels={lbl} />
           </div>
-          <div className="flex justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800">
             <span>{lbl.song}</span>
             <span>{lbl.openingCmt} ({sections[0]?.duration ?? 1} {lbl.min})</span>
           </div>
@@ -631,10 +631,10 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                 <div key={sec.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface p-4 shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      <p className="text-base font-bold text-slate-700 dark:text-slate-200">
                         {isEs ? (sec.titleEs || sec.titleEn) : (sec.titleEn || sec.titleEs)}
                       </p>
-                      <p className="text-xs text-slate-400 mt-0.5">{sec.duration} {lbl.min} · ♫ {lbl.song}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{sec.duration} {lbl.min} · ♫ {lbl.song}</p>
                     </div>
                      <TimerButton role={null} label={lbl.timer}
                        {...getTimerState(sec.id, null)}
@@ -652,22 +652,22 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
               cards.push(
                 <div key={sec.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface shadow-sm overflow-hidden">
                   {/* Group header */}
-                  <div className="px-4 py-3 flex items-center gap-3 border-b" style={{ borderColor: col + "40" }}>
+                  <div className="px-4 md:px-5 py-3 flex items-center gap-3 border-b bg-slate-50 dark:bg-slate-800/40" style={{ borderColor: col + "40" }}>
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: col }}>
                       <SectionIcon icon={icon} className="text-sm" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-black uppercase tracking-wide" style={{ color: col }}>
+                      <h3 className="text-base font-black uppercase tracking-wide" style={{ color: col }}>
                         {isEs ? (sec.titleEs || sec.titleEn) : (sec.titleEn || sec.titleEs)}
                       </h3>
                     </div>
                     <button onClick={() => removeSection(sec.id)}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors shrink-0">
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors shrink-0">
                       <span className="material-symbols-outlined text-sm">close</span>
                     </button>
                   </div>
                   {/* Subsections */}
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="divide-y divide-slate-200 dark:divide-slate-800">
                     {sec.subsections.map(sub => {
                       const flatIdx = intIdx++; const num = partNum++;
                       const timerRoles = getTimerRoles(sub, grp);
@@ -686,7 +686,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                   </div>
                   {/* Add part */}
                   <button onClick={() => addSubsection(sec.id, grp)}
-                    className="w-full py-2 text-center text-xs font-medium text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors border-t border-slate-100 dark:border-slate-800">
+                    className="w-full py-2 text-center text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors border-t border-slate-200 dark:border-slate-800">
                     + {lbl.addPart}
                   </button>
                 </div>
@@ -716,12 +716,12 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
         {/* Add section */}
         <button onClick={addTopSection}
-          className="w-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 py-3 text-sm font-medium text-slate-400 hover:border-primary hover:text-primary transition-colors text-center">
+          className="w-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-primary hover:text-primary transition-colors text-center">
           + {isEs ? "Agregar Sección" : "Add Section"}
         </button>
 
         {/* Totals */}
-        <p className="text-center text-xs text-slate-400 pt-1">
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400 pt-1">
           {lbl.totalTime}: {totalMin} {lbl.min} · {clock(startMinTotal)} → {clock(startMinTotal + totalMin)}
         </p>
       </div>
@@ -802,7 +802,7 @@ function TimerButton({ role, label, elapsedSec, running, onClick, onReset, actio
 
 function TimerLegend({ isEs, lbl, accentColor }: { isEs: boolean; lbl: typeof L.en; accentColor: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[9px] font-semibold text-slate-400">
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
       <span className="uppercase tracking-wider">{lbl.legend}</span>
       <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-primary" />{isEs ? lbl.assigneeRole : lbl.assigneeRole}</span>
       <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full" style={{ backgroundColor: accentColor }} />{isEs ? lbl.presidingRole : lbl.presidingRole}</span>
@@ -849,9 +849,9 @@ function InterventionRow({
     <div className={cn("group relative", wrapperClass)}>
       {isThisInline ? (
         /* INLINE EDIT MODE */
-        <div className={cn("p-4 space-y-3", standalone ? "" : "px-4 py-3")}>
+        <div className={cn("p-4 md:p-5 space-y-3", standalone ? "" : "px-4 md:px-5 py-3")}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wide text-slate-400">{lbl.edit}</span>
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{lbl.edit}</span>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
               <span className="material-symbols-outlined text-base">close</span>
             </button>
@@ -915,16 +915,16 @@ function InterventionRow({
         </div>
       ) : (
         /* DISPLAY MODE */
-        <div className={cn("flex items-center gap-3", standalone ? "p-4" : "px-4 py-3")}
+        <div className={cn("flex items-center gap-3", standalone ? "p-4 md:p-5" : "px-4 md:px-5 py-3")}
           onDoubleClick={onTap}>
           <span className="font-bold text-sm shrink-0 w-6" style={{ color }}>{num}.</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1.5 flex-wrap">
               <span className="font-bold text-sm truncate" style={{ color }}>{title}</span>
-                <span className="text-xs text-slate-400 font-mono font-semibold shrink-0 whitespace-nowrap">{startTime} → {endTime}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-semibold tabular-nums shrink-0 whitespace-nowrap">{startTime} → {endTime}</span>
             </div>
             <div className="mt-0.5 flex items-center gap-2">
-              <span className="text-xs text-slate-400">{section.duration} {lbl.min}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{section.duration} {lbl.min}</span>
               {section.assigneeName && (
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full text-slate-500 dark:text-slate-400"
                   style={{ backgroundColor: color + "15" }}>
@@ -935,7 +935,7 @@ function InterventionRow({
           </div>
           {/* Edit button — always visible */}
           <button onClick={(e) => { e.stopPropagation(); onTap(); }}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors shrink-0"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors shrink-0"
             title={lbl.edit}>
             <span className="material-symbols-outlined text-sm">edit</span>
           </button>
@@ -1026,7 +1026,7 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
       {show && (
          <div id="session-review-log" className="min-h-0 max-h-[min(16rem,45vh)] sm:max-h-[min(28rem,55vh)] overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 pt-3 pb-2 space-y-2">
           {reviewEntries.length === 0 ? (
-            <p className="text-xs text-slate-400 py-2">{lbl.logEmpty}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 py-2">{lbl.logEmpty}</p>
           ) : (
              reviewEntries.map(({ entry, date }, i) => {
                const cf = (iso: string) => { const d = new Date(iso); return fmtClock(d.getHours() * 60 + d.getMinutes(), prefs.timeFormat === "24h"); };
@@ -1043,14 +1043,14 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
                      <LogEditor entry={entry} lbl={lbl} chairmanExpectedCount={prefs.chairmanExpectedCount} chairmanExpectedSeconds={prefs.chairmanExpectedSeconds} onCancel={() => setEditingId(null)} onSave={(patch) => { onUpdateLog(entry.id!, patch); setEditingId(null); }} />
                    ) : (
                      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
-                       <span className="text-slate-400 text-[10px]">{i + 1}.</span>
-                       <div className="min-w-0 break-words">{date && <span className="mr-2 text-[10px] text-slate-400">{date}</span>}<span>{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span></div>
+                       <span className="text-slate-500 dark:text-slate-400 text-[10px]">{i + 1}.</span>
+                       <div className="min-w-0 break-words">{date && <span className="mr-2 text-[10px] text-slate-500 dark:text-slate-400">{date}</span>}<span>{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span></div>
                        <div className="flex flex-wrap justify-end gap-1">
                          <span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ color: chipColor, backgroundColor: chipColor + "15" }}>{roleName(entry)}</span>
                          {entry.id && onUpdateLog && <button type="button" onClick={() => setEditingId(entry.id!)} aria-label={`${lbl.editLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-primary/10 hover:text-primary"><span className="material-symbols-outlined text-base">edit</span></button>}
                          {onDeleteLog && entry.id && <button type="button" onClick={() => onDeleteLog(entry.id!)} aria-label={`${lbl.deleteLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"><span className="material-symbols-outlined text-base">delete</span></button>}
                        </div>
-                       <span className="col-span-2 font-mono text-[11px] text-slate-400">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
+                       <span className="col-span-2 font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
                         <span className={cn("justify-self-end font-mono font-semibold", isOvertime ? "text-red-500" : "text-emerald-600")}>
                       {fmtTime(durSec)}{isOvertime ? ` (+${overage > 0 ? fmtTime(overage) : "0:00"})` : ""}
                         </span>

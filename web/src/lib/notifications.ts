@@ -121,6 +121,41 @@ function nextWeeklyDate(day: number, from: Date): Date | null {
   return result;
 }
 
+function parseDateTime(value: string | null): Date | null {
+  if (!value) return null;
+  const base = parseDate(value);
+  if (!base) return null;
+  const timeMatch = value.match(/T(\d{1,2}):(\d{2})/);
+  if (timeMatch) base.setHours(Number(timeMatch[1]), Number(timeMatch[2]), 0, 0);
+  else base.setHours(0, 0, 0, 0);
+  return base;
+}
+
+// Full next-visit datetime: weekly occurrences use the person's
+// next_visit_date time-of-day when present, else midnight. A weekly
+// occurrence whose time already passed rolls to the following week.
+function nextVisitDateTime(person: InterestedPerson, now = new Date()): Date | null {
+  if (isInterestedPersonCompleted(person, now)) return null;
+  const today = localDate(now);
+  const candidates: Date[] = [];
+
+  const specific = parseDateTime(person.next_visit_date);
+  if (specific && specific.getTime() >= today.getTime()) candidates.push(specific);
+
+  if (person.next_visit_weekly_day != null) {
+    const occurrence = nextWeeklyDate(person.next_visit_weekly_day, today);
+    if (occurrence) {
+      const timeOfDay = specific ? { hours: specific.getHours(), minutes: specific.getMinutes() } : null;
+      occurrence.setHours(timeOfDay?.hours ?? 0, timeOfDay?.minutes ?? 0, 0, 0);
+      if (occurrence.getTime() < now.getTime()) occurrence.setDate(occurrence.getDate() + 7);
+      candidates.push(occurrence);
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  return candidates.sort((a, b) => a.getTime() - b.getTime())[0];
+}
+
 export function getNextVisitDate(person: InterestedPerson, now = new Date()): Date | null {
   if (isInterestedPersonCompleted(person, now)) return null;
   const today = localDate(now);
@@ -140,14 +175,14 @@ export function findDueInterestedNotifications(
 ): InterestedNotification[] {
   if (!preferences.enabled) return [];
   const statusMap = new Map<string, InterestedStatusInfo>(statuses.map((s) => [s.id, s]));
-  const today = localDate(now);
-  const latest = new Date(today);
-  latest.setDate(latest.getDate() + preferences.advanceDays);
+  const leadMs = preferences.leadTimeMinutes * 60_000;
 
   return people.flatMap((person) => {
-    const visitDate = getNextVisitDate(person, now);
-    if (!visitDate || visitDate > latest) return [];
-    const visitDateKey = dateKey(visitDate);
+    const visitDateTime = nextVisitDateTime(person, now);
+    if (!visitDateTime) return [];
+    // Fire when the next visit is within the lead window and not yet past.
+    if (now.getTime() < visitDateTime.getTime() - leadMs || now.getTime() > visitDateTime.getTime()) return [];
+    const visitDateKey = dateKey(visitDateTime);
     const fullName = [person.name, person.last_name].filter(Boolean).join(" ") || "Interested person";
     const categoryName = statusMap.get(person.status)?.name ?? person.status;
     const categoryId = person.status;

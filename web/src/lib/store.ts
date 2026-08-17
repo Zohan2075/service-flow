@@ -321,7 +321,7 @@ const INITIAL_SETTINGS: AppSettings = {
   showYearTotals: true,
   notifications: {
     enabled: false,
-    advanceDays: 1,
+    leadTimeMinutes: 24 * 60, // 1 day
     frequencyMinutes: 30,
     sound: "off",
     showPreview: false,
@@ -353,15 +353,19 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   delete rest.customSurface;
   delete rest.customBackground;
 
-  const rawNotifications = input.notifications as Partial<NotificationPreferences> | undefined;
+  const rawNotifications = input.notifications as (Partial<NotificationPreferences> & { advanceDays?: number }) | undefined;
   const notificationSounds = new Set(["off", "soft", "chime", "alert"]);
+  // Migrate legacy advanceDays (days) → leadTimeMinutes; clamp new value 0..20160.
+  const rawLeadTime = typeof rawNotifications?.leadTimeMinutes === "number" && Number.isFinite(rawNotifications.leadTimeMinutes)
+    ? Math.min(20160, Math.max(0, Math.floor(rawNotifications.leadTimeMinutes)))
+    : typeof rawNotifications?.advanceDays === "number" && Number.isFinite(rawNotifications.advanceDays)
+      ? Math.min(7 * 24 * 60, Math.max(0, Math.floor(rawNotifications.advanceDays * 24 * 60)))
+      : INITIAL_SETTINGS.notifications.leadTimeMinutes;
   const notifications = {
     ...INITIAL_SETTINGS.notifications,
     ...(rawNotifications ?? {}),
     enabled: rawNotifications?.enabled === true,
-    advanceDays: typeof rawNotifications?.advanceDays === "number" && Number.isFinite(rawNotifications.advanceDays)
-      ? Math.min(30, Math.max(0, Math.floor(rawNotifications.advanceDays)))
-      : INITIAL_SETTINGS.notifications.advanceDays,
+    leadTimeMinutes: rawLeadTime,
     frequencyMinutes: typeof rawNotifications?.frequencyMinutes === "number" && Number.isFinite(rawNotifications.frequencyMinutes)
       ? Math.min(1440, Math.max(5, Math.floor(rawNotifications.frequencyMinutes)))
       : INITIAL_SETTINGS.notifications.frequencyMinutes,

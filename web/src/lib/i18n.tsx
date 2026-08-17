@@ -294,6 +294,10 @@ const translations = {
     "settings.testNotification": "Test notification",
     "settings.testSound": "Test sound",
     "settings.days": "days",
+    "settings.atTime": "At time",
+    "settings.before": "before",
+    "settings.unitMinutes": "minutes",
+    "settings.unitHours": "hours",
 
     "settings.dangerZone": "Danger Zone",
     "settings.resetAll": "Reset All Data",
@@ -357,6 +361,10 @@ const translations = {
     "interested.completed": "Completed",
     "interested.markCompleted": "Mark as completed",
     "interested.markActive": "Mark as active",
+    "interested.tabActive": "Active",
+    "interested.tabFinished": "Finished",
+    "interested.finishedEmpty": "No finished visits yet",
+    "interested.reactivate": "Reactivate",
 
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
@@ -649,6 +657,10 @@ const translations = {
     "settings.testNotification": "Probar notificación",
     "settings.testSound": "Probar sonido",
     "settings.days": "días",
+    "settings.atTime": "Al momento",
+    "settings.before": "antes",
+    "settings.unitMinutes": "minutos",
+    "settings.unitHours": "horas",
 
     "settings.dangerZone": "Zona de Peligro",
     "settings.resetAll": "Restablecer Todos los Datos",
@@ -712,6 +724,10 @@ const translations = {
     "interested.completed": "Completado",
     "interested.markCompleted": "Marcar como completado",
     "interested.markActive": "Marcar como activo",
+    "interested.tabActive": "Activas",
+    "interested.tabFinished": "Finalizadas",
+    "interested.finishedEmpty": "Aún no hay visitas finalizadas",
+    "interested.reactivate": "Reactivar",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",
