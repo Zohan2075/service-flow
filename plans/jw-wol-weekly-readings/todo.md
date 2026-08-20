@@ -45,3 +45,4 @@ updated: "2026-08-20"
 
 - Plan created with 3 phases (API fetch/parse, data model+sync, UI display)
 - All 3 phases implemented, verified, and committed (`8eb904f`)
+- Post-release fix: display used `??` which did NOT fall through the empty-string readings returned by the generated catalog fallback for future weeks; switched to `||` so fetched week readings are shown. Also made the 60s interval refresh readings for newly seeded/created weeks.

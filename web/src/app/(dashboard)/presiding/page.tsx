@@ -74,7 +74,11 @@ function PresidingDashboard() {
   useEffect(() => {
     ensureActiveProgramWeek();
     if (navigator.onLine) void refreshProgramWeekReadings();
-    const interval = window.setInterval(() => ensureActiveProgramWeek(), 60_000);
+    const interval = window.setInterval(() => {
+      ensureActiveProgramWeek();
+      // Newly seeded/created weeks (e.g., week rollover) also need readings.
+      if (navigator.onLine) void refreshProgramWeekReadings();
+    }, 60_000);
     return () => window.clearInterval(interval);
   }, [ensureActiveProgramWeek, refreshProgramWeekReadings]);
 
