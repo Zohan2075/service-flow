@@ -26,7 +26,18 @@ function PresidingDashboard() {
   const prefs = useStore((s) => s.presidingPrefs);
   const session = useStore((s) => s.presidingSession);
   const sessions = useStore((s) => s.presidingSessions);
-  const sessionLog = useMemo(() => session?.log ?? [], [session]);
+  // Safety: if config isn't ready yet during hydration
+  const activeWeek = useMemo(() =>
+    config?.weeks?.find((w) => w.weekId === config.activeWeekId) ?? config?.weeks?.[0],
+    [config]
+  );
+  const sessionLog = useMemo(() => {
+    if (session?.weekId && session.weekId === activeWeek?.weekId) return session.log;
+    const latest = sessions
+      .filter((s) => s.weekId === activeWeek?.weekId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+    return latest?.log ?? [];
+  }, [session, sessions, activeWeek]);
   const setConfig = useStore((s) => s.setPresidingConfig);
   const addLogEntry = useStore((s) => s.addPresidingLogEntry);
   const updateLogEntry = useStore((s) => s.updatePresidingLogEntry);
@@ -77,11 +88,6 @@ function PresidingDashboard() {
     addLogEntryRef.current(entry);
   }, [session]);
 
-  // Safety: if config isn't ready yet during hydration
-  const activeWeek = useMemo(() =>
-    config?.weeks?.find((w) => w.weekId === config.activeWeekId) ?? config?.weeks?.[0],
-    [config]
-  );
   // Lift the Program timer controller here so timers/overlay survive tab switches (hooks rules: call unconditionally).
   const sections = activeWeek?.sections ?? [];
   const timer = useProgramTimers(

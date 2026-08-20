@@ -60,7 +60,11 @@ export const JW_WOL_WEEKLY_PROGRAM_CATALOG: Record<string, ProgramWeekCatalogEnt
 };
 
 export function getJwWolWeekCatalogEntry(weekId: string): ProgramWeekCatalogEntry | undefined {
-  return JW_WOL_WEEKLY_PROGRAM_CATALOG[weekId];
+  const staticEntry = JW_WOL_WEEKLY_PROGRAM_CATALOG[weekId];
+  if (staticEntry) return staticEntry;
+  const range = formatWeekRange(weekId);
+  if (!range) return undefined;
+  return { weekId, ...range, bibleReading: "" };
 }
 
 export interface PresidingConfig {
@@ -168,6 +172,55 @@ export function getProgramWeekId(date = new Date()): string {
   return `${local.getFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
+/** ISO week id ("2026-W34") → the Monday that starts that ISO week (local calendar), or null if unparseable. */
+export function getIsoWeekMonday(weekId: string): Date | null {
+  const match = /^(\d{4})-W(\d{2})$/.exec(weekId);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const week = Number(match[2]);
+  if (week < 1 || week > 53) return null;
+  // ISO Jan-4 rule: week 1 contains Jan 4; its Monday may fall in the prior year.
+  const jan4 = new Date(year, 0, 4);
+  const monday = new Date(year, 0, 4 - ((jan4.getDay() || 7) - 1));
+  monday.setDate(monday.getDate() + (week - 1) * 7);
+  return monday;
+}
+
+const MONTHS_EN = [
+  "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+  "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
+];
+const MONTHS_ES = [
+  "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
+];
+
+/** Monday–Sunday date range for an ISO week id in JW catalog style (uppercase, month names only), or null if unparseable. */
+export function formatWeekRange(weekId: string): { weekRangeEn: string; weekRangeEs: string } | null {
+  const monday = getIsoWeekMonday(weekId);
+  if (!monday) return null;
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
+  const sameMonth = monday.getMonth() === sunday.getMonth();
+  const weekRangeEn = sameMonth
+    ? `${MONTHS_EN[monday.getMonth()]} ${monday.getDate()}-${sunday.getDate()}`
+    : `${MONTHS_EN[monday.getMonth()]} ${monday.getDate()}-${MONTHS_EN[sunday.getMonth()]} ${sunday.getDate()}`;
+  const weekRangeEs = sameMonth
+    ? `${monday.getDate()}-${sunday.getDate()} DE ${MONTHS_ES[monday.getMonth()]}`
+    : `${monday.getDate()} DE ${MONTHS_ES[monday.getMonth()]}-${sunday.getDate()} DE ${MONTHS_ES[sunday.getMonth()]}`;
+  return { weekRangeEn, weekRangeEs };
+}
+
+/** ISO week id `weeksAhead` weeks from `date` (0 = the week containing `date`). */
+export function getProgramWeekIdOffset(weeksAhead: number, date = new Date()): string {
+  const clone = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  clone.setDate(clone.getDate() + weeksAhead * 7);
+  return getProgramWeekId(clone);
+}
+
+/** How many future weeks (beyond the current one) default configs seed. */
+export const PROGRAM_WEEKS_AHEAD = 4;
+
 // ─── Default config (S-38 meeting template) ───────────────────────────────────
 
 const DEFAULTS: { id: string; titleEn: string; titleEs: string; duration: number; group: SectionGroup }[] = [
@@ -197,22 +250,31 @@ function mk(d: typeof DEFAULTS[0], scheduledStartMinute?: number): PresidingSect
   };
 }
 
-export function getDefaultPresidingConfig(): PresidingConfig {
+/** Fresh S-38 template sections; call per week so no week shares section objects. */
+function buildS38Sections(): PresidingSection[] {
+  return [
+    mk(DEFAULTS[0]), // opening
+    { ...mk(DEFAULTS[1]), subsections: [mk(DEFAULTS[2]), mk(DEFAULTS[3]), mk(DEFAULTS[4]), mk(DEFAULTS[5])] }, // treasures
+    { ...mk(DEFAULTS[6]), subsections: [mk(DEFAULTS[7]), mk(DEFAULTS[8]), mk(DEFAULTS[9])] }, // field ministry
+    { ...mk(DEFAULTS[10]), subsections: [mk(DEFAULTS[11]), mk(DEFAULTS[12])] }, // living
+    mk(DEFAULTS[13]), // concluding
+  ];
+}
+
+export function getDefaultPresidingConfig(date = new Date()): PresidingConfig {
+  const weekIds = Array.from({ length: PROGRAM_WEEKS_AHEAD + 1 }, (_, i) => getProgramWeekIdOffset(i, date));
   return {
-    weeks: [{
-      weekId: "2026-W32",
-      weekRangeEn: "AUGUST 3-9",
-      weekRangeEs: "3-9 DE AGOSTO",
-      bibleReading: "JEREMIAH 22, 23",
-      sections: [
-        mk(DEFAULTS[0]), // opening
-        { ...mk(DEFAULTS[1]), subsections: [mk(DEFAULTS[2]), mk(DEFAULTS[3]), mk(DEFAULTS[4]), mk(DEFAULTS[5])] }, // treasures
-        { ...mk(DEFAULTS[6]), subsections: [mk(DEFAULTS[7]), mk(DEFAULTS[8]), mk(DEFAULTS[9])] }, // field ministry
-        { ...mk(DEFAULTS[10]), subsections: [mk(DEFAULTS[11]), mk(DEFAULTS[12])] }, // living
-        mk(DEFAULTS[13]), // concluding
-      ],
-    }],
-    activeWeekId: "2026-W32",
+    weeks: weekIds.map((weekId) => {
+      const entry = getJwWolWeekCatalogEntry(weekId);
+      return {
+        weekId,
+        weekRangeEn: entry?.weekRangeEn ?? "",
+        weekRangeEs: entry?.weekRangeEs ?? "",
+        bibleReading: entry?.bibleReading ?? "",
+        sections: buildS38Sections(),
+      };
+    }),
+    activeWeekId: weekIds[0],
   };
 }
 

@@ -30,6 +30,8 @@ import {
   getDefaultPresidingPrefs,
   getTimerRoles,
   getProgramWeekId,
+  getProgramWeekIdOffset,
+  PROGRAM_WEEKS_AHEAD,
   getJwWolWeekCatalogEntry,
 } from "@/types/presiding";
 import type {
@@ -41,7 +43,7 @@ import {
   newCommentId,
 } from "@/types/comments";
 
-// ─── IndexedDB storage adapter for Zustand ──────────────────────────────────
+// â”€â”€â”€ IndexedDB storage adapter for Zustand â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function createIDBStorage() {
   const DB_NAME = "serviceflow";
@@ -92,7 +94,7 @@ function createIDBStorage() {
   }));
 }
 
-// ─── State shape ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ State shape â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface AppState {
   // data
@@ -355,7 +357,7 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
 
   const rawNotifications = input.notifications as (Partial<NotificationPreferences> & { advanceDays?: number }) | undefined;
   const notificationSounds = new Set(["off", "soft", "chime", "alert"]);
-  // Migrate legacy advanceDays (days) → leadTimeMinutes; clamp new value 0..20160.
+  // Migrate legacy advanceDays (days) â†’ leadTimeMinutes; clamp new value 0..20160.
   const rawLeadTime = typeof rawNotifications?.leadTimeMinutes === "number" && Number.isFinite(rawNotifications.leadTimeMinutes)
     ? Math.min(20160, Math.max(0, Math.floor(rawNotifications.leadTimeMinutes)))
     : typeof rawNotifications?.advanceDays === "number" && Number.isFinite(rawNotifications.advanceDays)
@@ -458,7 +460,7 @@ function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): Presidi
     } as ProgramWeek;
   };
 
-  // Migrate old format: { sections, weekRangeEn, ... } → { weeks: [{ ... }], activeWeekId }
+  // Migrate old format: { sections, weekRangeEn, ... } â†’ { weeks: [{ ... }], activeWeekId }
   if (cfg && Array.isArray(cfg.sections) && !Array.isArray(cfg.weeks)) {
     const defaultConfig = getDefaultPresidingConfig();
     return migratePresidingConfig({
@@ -490,7 +492,18 @@ function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): Presidi
     const catalog = getJwWolWeekCatalogEntry(currentWeekId);
     weeks.push({ ...template, ...(catalog ?? {}), weekId: currentWeekId, sections: normalizeSections(template.sections) });
   }
-  return { weeks, activeWeekId: currentWeekId };
+  const existingById = new Map(weeks.map((week) => [week.weekId, week]));
+  const template = getDefaultPresidingConfig().weeks[0];
+  for (let i = 1; i <= PROGRAM_WEEKS_AHEAD; i++) {
+    const wid = getProgramWeekIdOffset(i);
+    if (existingById.has(wid)) continue;
+    const catalog = getJwWolWeekCatalogEntry(wid);
+    weeks.push({ ...template, ...(catalog ?? {}), weekId: wid, sections: normalizeSections(template.sections) });
+  }
+  const priorActive = typeof cfg.activeWeekId === "string" ? cfg.activeWeekId : null;
+  const isIsoWeek = (id: string | null): id is string => Boolean(id && /^\d{4}-W\d{2}$/.test(id));
+  const keepActive = isIsoWeek(priorActive) && priorActive >= currentWeekId && weeks.some((week) => week.weekId === priorActive);
+  return { weeks, activeWeekId: keepActive ? priorActive : currentWeekId };
 }
 
 function migratePresidingSession(raw: unknown): MeetingSession | null {
@@ -567,7 +580,7 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
     }
     return { categories, boxesByWeek };
   }
-  // Legacy shape: { categories, boxes } → current program week bucket.
+  // Legacy shape: { categories, boxes } â†’ current program week bucket.
   if (Array.isArray(cfg.boxes)) {
     return {
       categories,
@@ -849,7 +862,7 @@ presidingConfig: getDefaultPresidingConfig(),
       presidingTombstones: [],
       commentsConfig: getDefaultCommentsConfig(),
 
-      // ── Auth ────────────────────────────────────────────────────────────
+      // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       setProfile: (p) =>
         set((s) => {
           const isAccountSwitch =
@@ -901,7 +914,7 @@ presidingConfig: getDefaultPresidingConfig(),
             commentsConfig: getDefaultCommentsConfig(),
         }),
 
-      // ── Settings / Profile ──────────────────────────────────────────────
+      // â”€â”€ Settings / Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       updateSettings: (patch) =>
         set((s) => {
           const nextSettings = normalizeSettings({ ...s.settings, ...patch });
@@ -933,7 +946,7 @@ presidingConfig: getDefaultPresidingConfig(),
           return withPendingSync({ profile: nextProfile });
         }),
 
-      // ── Service Types ───────────────────────────────────────────────────
+      // â”€â”€ Service Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       addServiceType: (st) =>
         set((s) =>
           withPendingSync({
@@ -1045,7 +1058,7 @@ presidingConfig: getDefaultPresidingConfig(),
           });
         }),
 
-      // ── Time Entries ────────────────────────────────────────────────────
+      // â”€â”€ Time Entries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       addTimeEntry: (entry) =>
         set((s) => {
           const serviceTypes = ensureServiceTypesNotEmpty(s.serviceTypes, s.settings);
@@ -1105,7 +1118,7 @@ presidingConfig: getDefaultPresidingConfig(),
           })
         ),
 
-      // ── Goals ───────────────────────────────────────────────────────────
+      // â”€â”€ Goals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       addGoal: (goal) =>
         set((s) => {
           const serviceTypeMap = new Map(s.serviceTypes.map((serviceType) => [serviceType.id, serviceType]));
@@ -1165,7 +1178,7 @@ presidingConfig: getDefaultPresidingConfig(),
           })
         ),
 
-      // ── Interested People ──────────────────────────────────────────────
+      // â”€â”€ Interested People â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       addInterestedPerson: (person) =>
         set((s) =>
           withPendingSync({
@@ -1214,7 +1227,7 @@ presidingConfig: getDefaultPresidingConfig(),
           })
         ),
 
-      // ── Interested Status Config ─────────────────────────────────────
+      // â”€â”€ Interested Status Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       addInterestedStatus: (name, color, icon) => {
         const id = `custom_${crypto.randomUUID()}`;
         set((s) =>
@@ -1277,7 +1290,7 @@ presidingConfig: getDefaultPresidingConfig(),
           })
         ),
 
-      // ── Transient Month Navigation ────────────────────────────────────
+      // â”€â”€ Transient Month Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       setViewedMonth: (date) =>
         set({
           uiState: {
@@ -1306,7 +1319,7 @@ presidingConfig: getDefaultPresidingConfig(),
           },
         }),
 
-      // ── Bulk ───────────────────────────────────────────────────────────
+      // â”€â”€ Bulk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       importData: (file, options) =>
         set((s) => {
           const remoteProgram = (file as BackupFile & { program?: RemoteProgramPayload }).program;
@@ -1319,7 +1332,7 @@ presidingConfig: getDefaultPresidingConfig(),
             const hasInterested = (file.interested_people ?? []).length > 0;
             if (!hasTimeEntries && !hasGoals && !hasInterested) {
               console.warn("[ServiceFlow] importData blocked: backup file has no data arrays");
-              return {}; // No-op — preserve existing data
+              return {}; // No-op â€” preserve existing data
             }
           }
 
@@ -1351,7 +1364,10 @@ const nextTombstones = remoteProgram?.tombstones
              presidingPrefs: remoteProgram?.prefs && typeof remoteProgram.prefs === "object"
                ? normalizePresidingPrefs({ ...s.presidingPrefs, ...(remoteProgram.prefs as Partial<PresidingPrefs>) })
                : normalizePresidingPrefs(s.presidingPrefs),
-             presidingSession: nextSessions[nextSessions.length - 1] ?? null,
+             presidingSession:
+               nextSessions
+                 .filter((session) => (session.weekId ?? getProgramWeekId()) === getProgramWeekId())
+                 .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null,
              presidingSessions: nextSessions,
              presidingTombstones: nextTombstones,
             commentsConfig: remoteComments?.config ? migrateCommentsConfig(remoteComments.config) : s.commentsConfig,
@@ -1371,7 +1387,7 @@ const nextTombstones = remoteProgram?.tombstones
           syncMetadata: INITIAL_SYNC_METADATA,
         })),
 
-      // ── Presiding ────────────────────────────────────────────────────────
+      // â”€â”€ Presiding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       setPresidingConfig: (cfg) => set((s) => {
         const normalized = migratePresidingConfig(cfg, false);
         const requestedWeekId = cfg.activeWeekId;
@@ -1413,15 +1429,32 @@ const nextTombstones = remoteProgram?.tombstones
         })),
       ensureActiveProgramWeek: (date = new Date()) =>
         set((s) => {
-          const weekId = getProgramWeekId(date);
-          const existing = s.presidingConfig.weeks.find((week) => week.weekId === weekId);
-          if (s.presidingConfig.activeWeekId === weekId && existing) return {};
-          const catalog = getJwWolWeekCatalogEntry(weekId);
+          const currentWeekId = getProgramWeekId(date);
+          const existingById = new Map(s.presidingConfig.weeks.map((week) => [week.weekId, week]));
           const template = getDefaultPresidingConfig().weeks[0];
-          const weeks = existing
-            ? s.presidingConfig.weeks
-            : [...s.presidingConfig.weeks, { ...template, ...(catalog ?? {}), weekId }];
-           return withPendingSync({ presidingConfig: { weeks, activeWeekId: weekId } });
+          let weeksChanged = false;
+          let weeks = s.presidingConfig.weeks;
+          for (let i = 0; i <= PROGRAM_WEEKS_AHEAD; i++) {
+            const wid = getProgramWeekIdOffset(i, date);
+            if (existingById.has(wid)) continue;
+            const catalog = getJwWolWeekCatalogEntry(wid);
+            const sections = template.sections.map((section) => ({
+              ...section,
+              subsections: section.subsections.map((sub) => ({ ...sub })),
+            }));
+            weeks = [...weeks, { ...template, ...(catalog ?? {}), weekId: wid, sections, updatedAt: now() }];
+            weeksChanged = true;
+          }
+          const priorActive = s.presidingConfig.activeWeekId;
+          const isIsoWeek = (id: string | null): id is string => Boolean(id && /^\d{4}-W\d{2}$/.test(id));
+          const keepActive = isIsoWeek(priorActive) && priorActive >= currentWeekId;
+          const nextActiveWeekId = keepActive ? priorActive : currentWeekId;
+          const nextSession = s.presidingSession && s.presidingSession.weekId !== nextActiveWeekId ? null : s.presidingSession;
+          if (!weeksChanged && s.presidingConfig.activeWeekId === nextActiveWeekId && s.presidingSession === nextSession) return {};
+          return withPendingSync({
+            presidingConfig: { weeks, activeWeekId: nextActiveWeekId },
+            presidingSession: nextSession,
+          });
         }),
       startPresidingSession: () =>
         set((s) => {
@@ -1437,14 +1470,17 @@ const nextTombstones = remoteProgram?.tombstones
         }),
       addPresidingLogEntry: (entry) =>
         set((s) => {
-          const current = s.presidingSession ?? {
-            id: uuid(),
-            weekId: s.presidingConfig.activeWeekId ?? getProgramWeekId(),
-             date: new Date().toISOString().slice(0, 10),
-             startedAt: new Date().toISOString(),
-             log: [],
-             updatedAt: now(),
-           };
+          const activeWeekId = s.presidingConfig.activeWeekId ?? getProgramWeekId();
+          const current = s.presidingSession && s.presidingSession.weekId === activeWeekId
+            ? s.presidingSession
+            : {
+                id: uuid(),
+                weekId: activeWeekId,
+                date: new Date().toISOString().slice(0, 10),
+                startedAt: new Date().toISOString(),
+                log: [],
+                updatedAt: now(),
+              };
            const timestamp = now();
            const nextSession = {
              ...current,
@@ -1527,7 +1563,7 @@ resetPresidingConfig: () =>
             presidingTombstones: collectProgramTombstones(s),
          })),
 
-      // ── Comments ────────────────────────────────────────────────────────
+      // â”€â”€ Comments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       setCommentsConfig: (cfg) =>
         set(withPendingSync({
           commentsConfig: migrateCommentsConfig(cfg),
@@ -1641,7 +1677,7 @@ presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingCo
   )
 );
 
-// ─── Serializer (single source of truth for JSON format) ─────────────────────
+// â”€â”€â”€ Serializer (single source of truth for JSON format) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function serializeBackup(state: {
   profile: UserProfile | null;

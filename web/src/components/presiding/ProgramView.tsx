@@ -19,7 +19,9 @@ import {
   totalPresidingMinutes,
   createPresidingSection,
   getDefaultWeek,
+  getIsoWeekMonday,
   getJwWolWeekCatalogEntry,
+  getProgramWeekId,
   getTimerRoles,
 } from "@/types/presiding";
 
@@ -423,8 +425,15 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   };
   const createWeek = () => {
     const def = getDefaultWeek();
-    const id = `w${Date.now()}`;
-    onConfigChange({ weeks: [...config.weeks, { ...def, weekId: id }], activeWeekId: id });
+    const isoIds = config.weeks.map(w => w.weekId).filter(id => /^\d{4}-W\d{2}$/.test(id)).sort();
+    const monday = isoIds.length > 0 ? getIsoWeekMonday(isoIds[isoIds.length - 1]) : null;
+    const nextId = monday
+      ? getProgramWeekId(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7))
+      : getProgramWeekId();
+    onConfigChange({
+      weeks: [...config.weeks, { ...def, ...(getJwWolWeekCatalogEntry(nextId) ?? {}), weekId: nextId }],
+      activeWeekId: nextId,
+    });
     setShowWeekMenu(false);
   };
   const deleteWeek = () => {
@@ -740,7 +749,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
       </div>
 
       {/* ===== SESSION REVIEW ===== */}
-      <SessionReview sessionLog={sessionLog} sessionHistory={sessionHistory} prefs={prefs} isEs={isEs} lbl={lbl}
+      <SessionReview sessionLog={sessionLog} sessionHistory={sessionHistory} activeWeekId={activeWeek?.weekId ?? null} prefs={prefs} isEs={isEs} lbl={lbl}
         accentColor={accentColor} sectionColorFor={sectionColorFor}
         chairmanExpectedCount={prefs.chairmanExpectedCount} chairmanExpectedSeconds={prefs.chairmanExpectedSeconds}
         onDeleteLog={onDeleteLog} onUpdateLog={onUpdateLog} />
@@ -1016,8 +1025,8 @@ function LogEditor({ entry, lbl, chairmanExpectedCount, chairmanExpectedSeconds,
   );
 }
 
-function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentColor, sectionColorFor, chairmanExpectedCount, chairmanExpectedSeconds, onDeleteLog, onUpdateLog }: {
-  sessionLog: TimerLogEntry[]; sessionHistory: MeetingSession[]; prefs: PresidingPrefs; isEs: boolean; lbl: typeof L.en;
+function SessionReview({ sessionLog, sessionHistory, activeWeekId, prefs, isEs, lbl, accentColor, sectionColorFor, chairmanExpectedCount, chairmanExpectedSeconds, onDeleteLog, onUpdateLog }: {
+  sessionLog: TimerLogEntry[]; sessionHistory: MeetingSession[]; activeWeekId: string | null; prefs: PresidingPrefs; isEs: boolean; lbl: typeof L.en;
   accentColor: string; sectionColorFor: (sectionId: string) => string;
   chairmanExpectedCount: number; chairmanExpectedSeconds: number;
   onDeleteLog?: (logId: string) => void;
@@ -1025,8 +1034,9 @@ function SessionReview({ sessionLog, sessionHistory, prefs, isEs, lbl, accentCol
 }) {
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const reviewEntries = sessionHistory.length > 0
-    ? sessionHistory.flatMap((session) => session.log.map((entry) => ({ entry, date: session.date })))
+  const weekSessions = sessionHistory.filter((s) => s.weekId === activeWeekId);
+  const reviewEntries = weekSessions.length > 0
+    ? weekSessions.flatMap((session) => session.log.map((entry) => ({ entry, date: session.date })))
     : sessionLog.map((entry) => ({ entry, date: "" }));
   const roleName = (entry: TimerLogEntry) => {
     if (!entry.role) return lbl.timer;
