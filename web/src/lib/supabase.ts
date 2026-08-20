@@ -551,7 +551,7 @@ export async function pushProgram(program: ProgramSyncState, userId: string): Pr
 
   const weeks = program.config.weeks.map((week) => ({
     user_id: userId, week_id: week.weekId, week_range_en: week.weekRangeEn, week_range_es: week.weekRangeEs,
-    bible_reading: week.bibleReading, sections_json: sanitizeProgramSections(week.sections), updated_at: week.updatedAt ?? new Date(0).toISOString(),
+    bible_reading: week.bibleReading, bible_reading_es: week.bibleReadingEs ?? "", sections_json: sanitizeProgramSections(week.sections), updated_at: week.updatedAt ?? new Date(0).toISOString(),
   })).filter((week) => isCurrent("week", week.week_id, week.updated_at));
   if (weeks.length > 0) {
     const { error } = await client.from("program_weeks").upsert(weeks, { onConflict: "user_id,week_id" });
@@ -694,7 +694,7 @@ export async function pullProgram(userId: string): Promise<ProgramSyncState | nu
     const visibleInterventions = interventionRows.filter((item) => item.week_id === row.week_id && isVisible("intervention", `${item.week_id}:${item.section_id}`, item.updated_at));
     return {
     weekId: String(row.week_id), weekRangeEn: String(row.week_range_en ?? ""), weekRangeEs: String(row.week_range_es ?? ""),
-    bibleReading: String(row.bible_reading ?? ""), sections: visibleInterventions.length > 0 || interventionRows.some((item) => item.week_id === row.week_id)
+    bibleReading: String(row.bible_reading ?? ""), bibleReadingEs: String(row.bible_reading_es ?? ""), sections: visibleInterventions.length > 0 || interventionRows.some((item) => item.week_id === row.week_id)
       ? sectionsFromRows(visibleInterventions)
       : sectionsFromLegacyJson(row.sections_json),
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,

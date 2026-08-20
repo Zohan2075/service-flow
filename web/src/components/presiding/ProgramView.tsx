@@ -408,7 +408,9 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   const catalogEntry = activeWeek ? getJwWolWeekCatalogEntry(activeWeek.weekId) : undefined;
   const weekRangeEn = catalogEntry?.weekRangeEn ?? activeWeek?.weekRangeEn ?? "";
   const weekRangeEs = catalogEntry?.weekRangeEs ?? activeWeek?.weekRangeEs ?? "";
-  const bibleReading = catalogEntry?.bibleReading ?? activeWeek?.bibleReading ?? "";
+  const bibleReading = isEs
+    ? (catalogEntry?.bibleReadingEs ?? activeWeek?.bibleReadingEs ?? activeWeek?.bibleReading ?? "")
+    : (catalogEntry?.bibleReading ?? activeWeek?.bibleReading ?? "");
 
   const updateActiveWeek = useCallback((fn: (w: ProgramWeek) => ProgramWeek) => {
     if (!config || !activeWeek) return;

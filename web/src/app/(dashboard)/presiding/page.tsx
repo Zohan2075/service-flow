@@ -44,6 +44,7 @@ function PresidingDashboard() {
   const deleteLogEntry = useStore((s) => s.deletePresidingLogEntry);
   const startSession = useStore((s) => s.startPresidingSession);
   const ensureActiveProgramWeek = useStore((s) => s.ensureActiveProgramWeek);
+  const refreshProgramWeekReadings = useStore((s) => s.refreshProgramWeekReadings);
 
   // Comments wiring (moved from the standalone /presiding/comments route)
   const commentsConfig = useStore((s) => s.commentsConfig);
@@ -72,9 +73,10 @@ function PresidingDashboard() {
 
   useEffect(() => {
     ensureActiveProgramWeek();
+    if (navigator.onLine) void refreshProgramWeekReadings();
     const interval = window.setInterval(() => ensureActiveProgramWeek(), 60_000);
     return () => window.clearInterval(interval);
-  }, [ensureActiveProgramWeek]);
+  }, [ensureActiveProgramWeek, refreshProgramWeekReadings]);
 
   // Stable refs to avoid recreation of handleLogEntry
   const startSessionRef = useRef(startSession);

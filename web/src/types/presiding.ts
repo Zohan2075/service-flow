@@ -26,6 +26,7 @@ export interface ProgramWeek {
   weekRangeEn: string;      // "AUGUST 3-9"
   weekRangeEs: string;      // "3-9 DE AGOSTO"
   bibleReading: string;
+  bibleReadingEs?: string;
   sections: PresidingSection[];
   updatedAt?: string;
 }
@@ -35,6 +36,7 @@ export interface ProgramWeekCatalogEntry {
   weekRangeEn: string;
   weekRangeEs: string;
   bibleReading: string;
+  bibleReadingEs?: string;
 }
 
 /** Local JW WOL weekly metadata; keep the dashboard independent of the network. */
@@ -44,18 +46,21 @@ export const JW_WOL_WEEKLY_PROGRAM_CATALOG: Record<string, ProgramWeekCatalogEnt
     weekRangeEn: "AUGUST 3-9",
     weekRangeEs: "3-9 DE AGOSTO",
     bibleReading: "Jeremiah 22, 23",
+    bibleReadingEs: "JEREMÍAS 22, 23",
   },
   "2026-W33": {
     weekId: "2026-W33",
     weekRangeEn: "AUGUST 10-16",
     weekRangeEs: "10-16 DE AGOSTO",
     bibleReading: "Jeremiah 24, 25",
+    bibleReadingEs: "JEREMÍAS 24, 25",
   },
   "2026-W34": {
     weekId: "2026-W34",
     weekRangeEn: "AUGUST 17-23",
     weekRangeEs: "17-23 DE AGOSTO",
     bibleReading: "Jeremiah 26-28",
+    bibleReadingEs: "JEREMÍAS 26-28",
   },
 };
 
@@ -64,7 +69,7 @@ export function getJwWolWeekCatalogEntry(weekId: string): ProgramWeekCatalogEntr
   if (staticEntry) return staticEntry;
   const range = formatWeekRange(weekId);
   if (!range) return undefined;
-  return { weekId, ...range, bibleReading: "" };
+  return { weekId, ...range, bibleReading: "", bibleReadingEs: "" };
 }
 
 export interface PresidingConfig {
@@ -78,6 +83,7 @@ export function getDefaultWeek(): ProgramWeek {
     weekRangeEn: "",
     weekRangeEs: "",
     bibleReading: "",
+    bibleReadingEs: "",
     sections: DEFAULTS.map(mk),
   };
 }
@@ -271,6 +277,7 @@ export function getDefaultPresidingConfig(date = new Date()): PresidingConfig {
         weekRangeEn: entry?.weekRangeEn ?? "",
         weekRangeEs: entry?.weekRangeEs ?? "",
         bibleReading: entry?.bibleReading ?? "",
+        bibleReadingEs: entry?.bibleReadingEs ?? "",
         sections: buildS38Sections(),
       };
     }),

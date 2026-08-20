@@ -176,6 +176,7 @@ interface AppState {
   deletePresidingLogEntry: (logId: string) => void;
 resetPresidingConfig: () => void;
   ensureActiveProgramWeek: (date?: Date) => void;
+  refreshProgramWeekReadings: (options?: { force?: boolean }) => Promise<void>;
 
   // comments actions
   setCommentsConfig: (cfg: CommentsConfig) => void;
@@ -455,6 +456,7 @@ function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): Presidi
       weekRangeEn: week.weekRangeEn ?? "",
       weekRangeEs: week.weekRangeEs ?? "",
       bibleReading: week.bibleReading ?? "",
+      bibleReadingEs: typeof week.bibleReadingEs === "string" ? week.bibleReadingEs : "",
       updatedAt: typeof week.updatedAt === "string" ? week.updatedAt : "1970-01-01T00:00:00.000Z",
       sections: Array.isArray(week.sections) ? normalizeSections(week.sections) : [],
     } as ProgramWeek;
@@ -1456,6 +1458,47 @@ const nextTombstones = remoteProgram?.tombstones
             presidingSession: nextSession,
           });
         }),
+      refreshProgramWeekReadings: async (options = {}) => {
+        try {
+          const s = get();
+          const targets = s.presidingConfig.weeks.filter((week) =>
+            options.force || !week.bibleReading || !week.bibleReadingEs
+          );
+          if (targets.length === 0) return;
+          const results = await Promise.allSettled(targets.map(async (week) => {
+            try {
+              const res = await fetch("/api/jw-workbook?weekId=" + encodeURIComponent(week.weekId));
+              if (!res.ok) return null;
+              const data = (await res.json()) as { bibleReadingEn?: unknown; bibleReadingEs?: unknown };
+              if (typeof data.bibleReadingEn !== "string") return null;
+              return {
+                week,
+                bibleReading: data.bibleReadingEn,
+                bibleReadingEs: typeof data.bibleReadingEs === "string" ? data.bibleReadingEs : "",
+              };
+            } catch {
+              return null;
+            }
+          }));
+          const merged = new Map(results
+            .filter((r): r is PromiseFulfilledResult<{ week: ProgramWeek; bibleReading: string; bibleReadingEs: string } | null> => r.status === "fulfilled")
+            .map((r) => r.value)
+            .filter((value): value is { week: ProgramWeek; bibleReading: string; bibleReadingEs: string } => value !== null)
+            .map((value) => [value.week.weekId, value]));
+          if (merged.size === 0) return;
+          set((state) => withPendingSync({
+            presidingConfig: {
+              ...state.presidingConfig,
+              weeks: state.presidingConfig.weeks.map((week) => {
+                const update = merged.get(week.weekId);
+                return update ? { ...week, bibleReading: update.bibleReading, bibleReadingEs: update.bibleReadingEs, updatedAt: now() } : week;
+              }),
+            },
+          }));
+        } catch {
+          // Never throw out of the refresh action.
+        }
+      },
       startPresidingSession: () =>
         set((s) => {
           const session: MeetingSession = {
