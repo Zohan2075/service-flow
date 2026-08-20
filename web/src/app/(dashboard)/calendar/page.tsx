@@ -21,7 +21,7 @@ import { useStore } from "@/lib/store";
 import { isoWeekKey, isInterestedPersonCompleted } from "@/lib/isoWeek";
 import { calendarDateKey, computeDurationSeconds, durationDisplay, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import type { TimeEntry, ServiceType, CalendarDay, InterestedPerson } from "@/types/data";
-import { cn } from "@/lib/utils";
+import { cn, capProgressColor } from "@/lib/utils";
 import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
 import AddEntryModal from "@/components/entries/AddEntryModal";
 import toast from "react-hot-toast";
@@ -715,13 +715,10 @@ export default function CalendarPage() {
                     return `${Math.round(total)} / ${monthlyCapHours}h`;
                   })()}
                 </span>
-                <span className={cn(
-                  "font-semibold",
-                  monthlyUsedHours.exempt >= monthlyCapHours ? "text-blue-500" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) > monthlyCapHours ? "text-amber-500" :
-                  (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "text-emerald-500" :
-                  "text-red-500"
-                )}>
+                <span
+                  className="font-semibold"
+                  style={{ color: capProgressColor(monthlyUsedHours.capped, monthlyUsedHours.exempt, monthlyCapHours) }}
+                >
                   {(() => {
                     const { capped, exempt } = monthlyUsedHours;
                     const shown = exempt >= monthlyCapHours ? exempt : capped + exempt;
@@ -732,14 +729,11 @@ export default function CalendarPage() {
               </div>
               <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    monthlyUsedHours.exempt >= monthlyCapHours ? "bg-blue-500" :
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) > monthlyCapHours ? "bg-amber-500" :
-                    (monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours >= 0.5 ? "bg-emerald-500" :
-                    "bg-red-500"
-                  )}
-                  style={{ width: `${Math.min(100, (((monthlyUsedHours.exempt >= monthlyCapHours ? monthlyUsedHours.exempt : monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100))}%` }}
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, (((monthlyUsedHours.exempt >= monthlyCapHours ? monthlyUsedHours.exempt : monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100))}%`,
+                    backgroundColor: capProgressColor(monthlyUsedHours.capped, monthlyUsedHours.exempt, monthlyCapHours),
+                  }}
                 />
               </div>
             </div>

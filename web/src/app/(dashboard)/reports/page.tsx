@@ -5,7 +5,7 @@ import { endOfMonth, format, startOfMonth } from "date-fns";
 import { useStore } from "@/lib/store";
 import { calendarDateKey, computeDurationSeconds, isPlannedEntry, isUnitsEntry } from "@/types/data";
 import type { GoalDefinition, ServiceType, TimeEntry } from "@/types/data";
-import { formatDuration, cn } from "@/lib/utils";
+import { formatDuration, capProgressColor } from "@/lib/utils";
 import { monthShortYear, useT } from "@/lib/i18n";
 
 type ServiceTotals = {
@@ -686,20 +686,20 @@ export default function ReportsPage() {
                 <span className="font-bold text-slate-700 dark:text-slate-200">
                   {capLabel}
                 </span>
-                <span className={cn(
-                  "font-semibold",
-                  exempt >= monthlyCapHours ? "text-blue-500" : total > monthlyCapHours ? "text-amber-500" : total / monthlyCapHours >= 0.5 ? "text-emerald-500" : "text-red-500"
-                )}>
+                <span
+                  className="font-semibold"
+                  style={{ color: capProgressColor(capped, exempt, monthlyCapHours) }}
+                >
                   {capPct}%
                 </span>
               </div>
               <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                 <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    exempt >= monthlyCapHours ? "bg-blue-500" : total > monthlyCapHours ? "bg-amber-500" : total / monthlyCapHours >= 0.5 ? "bg-emerald-500" : "bg-red-500"
-                  )}
-                  style={{ width: `${Math.min(100, (shown / monthlyCapHours) * 100)}%` }}
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, (shown / monthlyCapHours) * 100)}%`,
+                    backgroundColor: capProgressColor(capped, exempt, monthlyCapHours),
+                  }}
                 />
               </div>
             </div>
