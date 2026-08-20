@@ -2,7 +2,7 @@
 type: planning
 entity: plan
 plan: "jw-wol-weekly-readings"
-status: active
+status: completed
 created: "2026-08-20"
 updated: "2026-08-20"
 ---
@@ -78,9 +78,9 @@ Browser clients cannot fetch WOL directly (CORS), so we need a server-side Next.
 
 | Phase | Title | Scope | Status |
 |-------|-------|-------|--------|
-| 1 | WOL fetch + parse + API route | [Detail](phases/phase-1.md) | pending |
-| 2 | Data model, store refresh & sync | [Detail](phases/phase-2.md) | pending |
-| 3 | UI display & page trigger | [Detail](phases/phase-3.md) | pending |
+| 1 | WOL fetch + parse + API route | [Detail](phases/phase-1.md) | completed |
+| 2 | Data model, store refresh & sync | [Detail](phases/phase-2.md) | completed |
+| 3 | UI display & page trigger | [Detail](phases/phase-3.md) | completed |
 
 ## Risks & Open Questions
 
@@ -98,3 +98,4 @@ Browser clients cannot fetch WOL directly (CORS), so we need a server-side Next.
 ### 2026-08-20
 
 - Plan created
+- All 3 phases implemented, verified against live WOL, and committed (`8eb904f`)
