@@ -164,7 +164,7 @@ function hydrateTimerRecords(sessionLog: TimerLogEntry[]): Record<string, TimerR
   return records;
 }
 
-function useProgramTimers(
+export function useProgramTimers(
   sections: PresidingSection[],
   sessionLog: TimerLogEntry[],
   onLog: (entry: TimerLogEntry) => void,
@@ -322,16 +322,72 @@ function useProgramTimers(
   return { getTimerState, toggleTimer, resetTimer, stopActive: finalizeActive, activeTimer };
 }
 
+/* ---------- active timer bar (page-level overlay) ---------- */
+
+export function ActiveTimerBar({ activeTimer, accentColor, isEs, onStop }: {
+  activeTimer: ActiveTimer & { elapsedSec: number }; accentColor: string; isEs: boolean; onStop: () => void;
+}) {
+  const barL = isEs
+    ? { master: "Temporizador activo", current: "Ahora", assignee: "Asignado", presiding: "Presidente", timer: "Temporizador", stop: "Detener" }
+    : { master: "Active timer", current: "Now", assignee: "Assignee", presiding: "Presiding", timer: "Timer", stop: "Stop" };
+  return (
+    <div className="shrink-0 sticky top-0 z-40 px-4 md:px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-surface via-surface to-surface/95 backdrop-blur shadow-lg shadow-slate-200/50 dark:shadow-black/25">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <span className="relative flex size-3 shrink-0" aria-hidden="true">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
+          </span>
+          <div className="text-center shrink-0 min-w-[4.5rem]">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">{barL.master}</p>
+            <p className="font-mono text-2xl font-black leading-none tabular-nums">{fmtTime(activeTimer.elapsedSec)}</p>
+          </div>
+        </div>
+        <div className="flex-1 min-w-0 text-center">
+          <p className="text-[10px] uppercase tracking-wider font-bold truncate text-emerald-600">{barL.current}</p>
+          <p className="text-sm font-bold tabular-nums truncate text-slate-700 dark:text-slate-100">
+            {isEs ? (activeTimer.titleEs || activeTimer.titleEn) : (activeTimer.titleEn || activeTimer.titleEs)}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "rounded-full px-3 py-1 text-[11px] font-bold",
+            activeTimer.role === "presiding"
+              ? "text-white"
+              : activeTimer.role === "assignee"
+                ? "bg-primary text-white"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
+          )}
+          style={activeTimer.role === "presiding" ? { backgroundColor: accentColor } : undefined}>
+          {activeTimer.role ? (activeTimer.role === "assignee" ? barL.assignee : barL.presiding) : barL.timer}
+        </span>
+        <button onClick={onStop}
+          className="min-h-11 shrink-0 rounded-xl bg-amber-500 px-4 text-sm font-black text-black shadow-md active:scale-95">
+          {barL.stop}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- main component ---------- */
 
 interface Props {
   lang: "en" | "es"; config: PresidingConfig; prefs: PresidingPrefs;
-  sessionLog: TimerLogEntry[]; sessionHistory?: MeetingSession[]; onConfigChange: (cfg: PresidingConfig) => void; onLogEntry: (entry: TimerLogEntry) => void;
+  sessionLog: TimerLogEntry[]; sessionHistory?: MeetingSession[]; onConfigChange: (cfg: PresidingConfig) => void;
    onDeleteLog?: (logId: string) => void;
   onUpdateLog?: (logId: string, patch: Partial<TimerLogEntry>) => void;
+  timerProps: {
+    getTimerState: (sectionId: string, role: TimerRole | null) => { elapsedSec: number; running: boolean };
+    toggleTimer: (sectionId: string, role: TimerRole | null) => void;
+    resetTimer: (sectionId: string, role: TimerRole | null) => void;
+    stopActive: () => void;
+    activeTimer: (ActiveTimer & { elapsedSec: number }) | null;
+  };
 }
 
-export default function ProgramView({ lang, config, prefs, sessionLog, sessionHistory = [], onConfigChange, onLogEntry, onDeleteLog, onUpdateLog }: Props) {
+export default function ProgramView({ lang, config, prefs, sessionLog, sessionHistory = [], onConfigChange, onDeleteLog, onUpdateLog, timerProps }: Props) {
+  const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timerProps;
   const isEs = lang === "es"; const lbl = L[lang];
   const accentColor = useStore((state) => state.settings.accentColor);
 
@@ -448,9 +504,6 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
     if (i === 0) legacyOffset += 5;
   }
 
-  const timer = useProgramTimers(sections, sessionLog, onLogEntry, onUpdateLog, onDeleteLog, prefs.chairmanExpectedCount, prefs.chairmanExpectedSeconds);
-  const { getTimerState, toggleTimer, resetTimer, stopActive, activeTimer } = timer;
-
   // Keep the active timer visible while minimized: document.title + App Badge (installed PWA only).
   const activeKey = activeTimer?.key ?? null;
   const activeElapsedSec = activeTimer?.elapsedSec ?? 0;
@@ -547,46 +600,6 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
           </div>
         </div>
       </div>
-
-      {/* ===== ACTIVE TIMER BAR ===== */}
-      {activeTimer && (
-        <div className="shrink-0 sticky top-0 z-40 px-4 md:px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-surface via-surface to-surface/95 backdrop-blur shadow-lg shadow-slate-200/50 dark:shadow-black/25">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="relative flex size-3 shrink-0" aria-hidden="true">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
-              </span>
-              <div className="text-center shrink-0 min-w-[4.5rem]">
-                <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">{lbl.master}</p>
-                <p className="font-mono text-2xl font-black leading-none tabular-nums">{fmtTime(activeTimer.elapsedSec)}</p>
-              </div>
-            </div>
-            <div className="flex-1 min-w-0 text-center">
-              <p className="text-[10px] uppercase tracking-wider font-bold truncate text-emerald-600">{lbl.current}</p>
-              <p className="text-sm font-bold tabular-nums truncate text-slate-700 dark:text-slate-100">
-                {isEs ? (activeTimer.titleEs || activeTimer.titleEn) : (activeTimer.titleEn || activeTimer.titleEs)}
-              </p>
-            </div>
-            <span
-              className={cn(
-                "rounded-full px-3 py-1 text-[11px] font-bold",
-                activeTimer.role === "presiding"
-                  ? "text-white"
-                  : activeTimer.role === "assignee"
-                    ? "bg-primary text-white"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
-              )}
-              style={activeTimer.role === "presiding" ? { backgroundColor: accentColor } : undefined}>
-              {activeTimer.role ? (activeTimer.role === "assignee" ? lbl.assignee : lbl.presiding) : lbl.timer}
-            </span>
-            <button onClick={stopActive}
-              className="min-h-11 shrink-0 rounded-xl bg-amber-500 px-4 text-sm font-black text-black shadow-md active:scale-95">
-              {lbl.stop}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ===== PROGRAM BODY ===== */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-5 pt-3 pb-6 space-y-4">

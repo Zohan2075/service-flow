@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/i18n";
-import ProgramView from "@/components/presiding/ProgramView";
+import ProgramView, { ActiveTimerBar, useProgramTimers } from "@/components/presiding/ProgramView";
 import CommentsView from "@/components/comments/CommentsView";
 
 export default function PresidingPage() {
@@ -21,6 +21,7 @@ export default function PresidingPage() {
 
 function PresidingDashboard() {
   const lang = useStore((s) => s.settings.language);
+  const accentColor = useStore((s) => s.settings.accentColor);
   const config = useStore((s) => s.presidingConfig);
   const prefs = useStore((s) => s.presidingPrefs);
   const session = useStore((s) => s.presidingSession);
@@ -81,6 +82,17 @@ function PresidingDashboard() {
     config?.weeks?.find((w) => w.weekId === config.activeWeekId) ?? config?.weeks?.[0],
     [config]
   );
+  // Lift the Program timer controller here so timers/overlay survive tab switches (hooks rules: call unconditionally).
+  const sections = activeWeek?.sections ?? [];
+  const timer = useProgramTimers(
+    sections,
+    sessionLog,
+    handleLogEntry,
+    updateLogEntry,
+    deleteLogEntry,
+    prefs.chairmanExpectedCount,
+    prefs.chairmanExpectedSeconds,
+  );
   if (!activeWeek?.sections?.length) {
     return <div className="flex items-center justify-center h-full text-sm text-slate-400">Loading program...</div>;
   }
@@ -117,6 +129,15 @@ function PresidingDashboard() {
         </div>
       </div>
 
+      {timer.activeTimer && (
+        <ActiveTimerBar
+          activeTimer={timer.activeTimer}
+          accentColor={accentColor}
+          isEs={lang === "es"}
+          onStop={timer.stopActive}
+        />
+      )}
+
       {tab === "program" ? (
         <ProgramView
           lang={lang}
@@ -125,9 +146,9 @@ function PresidingDashboard() {
           sessionLog={sessionLog}
           sessionHistory={sessions}
           onConfigChange={setConfig}
-          onLogEntry={handleLogEntry}
           onUpdateLog={updateLogEntry}
           onDeleteLog={deleteLogEntry}
+          timerProps={timer}
         />
       ) : (
         <CommentsView
