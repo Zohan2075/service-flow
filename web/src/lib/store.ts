@@ -568,16 +568,24 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
           color: typeof item.color === "string" ? item.color : "#2B579A",
           icon: typeof item.icon === "string" ? item.icon : "category",
           sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index,
+          parentCategoryId: typeof item.parentCategoryId === "string" && item.parentCategoryId
+            ? item.parentCategoryId
+            : undefined,
           updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "1970-01-01T00:00:00.000Z",
         };
       })
     : [];
+  const categoryIds = new Set(categories.map((category) => category.id));
+  // Filter orphaned boxes (e.g. boxes left behind when a category/subsection
+  // was deleted on another device) so they never render as ghosts.
+  const keepKnownBoxes = (list: CommentBox[]) =>
+    list.filter((box) => categoryIds.has(box.categoryId));
   // New shape: per-week boxes keyed by program weekId.
   if (cfg.boxesByWeek && typeof cfg.boxesByWeek === "object") {
     const boxesByWeek: Record<string, CommentBox[]> = {};
     for (const [weekId, list] of Object.entries(cfg.boxesByWeek)) {
       boxesByWeek[weekId] = Array.isArray(list)
-        ? list.map((box) => normalizeCommentBox(box as Partial<CommentBox>))
+        ? keepKnownBoxes(list.map((box) => normalizeCommentBox(box as Partial<CommentBox>)))
         : [];
     }
     return { categories, boxesByWeek };
@@ -587,7 +595,7 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
     return {
       categories,
       boxesByWeek: {
-        [getProgramWeekId()]: cfg.boxes.map((box) => normalizeCommentBox(box as Partial<CommentBox>)),
+        [getProgramWeekId()]: keepKnownBoxes(cfg.boxes.map((box) => normalizeCommentBox(box as Partial<CommentBox>))),
       },
     };
   }

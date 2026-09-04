@@ -10,6 +10,8 @@ export interface CommentCategory {
   color: string;   // hex
   icon: string;    // Material Symbols name
   sortOrder: number;
+  /** Set when this category is a subsection nested under another category (one level deep). */
+  parentCategoryId?: string;
   updatedAt?: string;
 }
 
@@ -44,13 +46,20 @@ export function getDefaultCommentsConfig(): CommentsConfig {
   };
 }
 
-export function createCommentCategory(name = "", color = "#2B579A", icon = "category", sortOrder = 0): CommentCategory {
+export function createCommentCategory(
+  name = "",
+  color = "#2B579A",
+  icon = "category",
+  sortOrder = 0,
+  parentCategoryId?: string,
+): CommentCategory {
   return {
     id: newCommentId(),
     name,
     color,
     icon,
     sortOrder,
+    parentCategoryId,
     updatedAt: new Date().toISOString(),
   };
 }
