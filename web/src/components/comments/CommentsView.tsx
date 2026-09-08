@@ -270,11 +270,11 @@ function BoxCard({
         </span>
       )}
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 sm:gap-1">
         <button
           onClick={onToggle}
           className={cn(
-            "flex items-center justify-center gap-1 px-3 py-2 min-h-11 rounded-xl text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+            "flex items-center justify-center gap-1 px-2 sm:px-3 py-2 min-h-11 rounded-xl text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
             isRunning
               ? "bg-white/20 text-white hover:bg-white/30"
               : "bg-primary text-white hover:bg-primary/90"
@@ -284,7 +284,7 @@ function BoxCard({
           <span className="material-symbols-outlined text-sm">
             {isRunning ? "pause" : "play_arrow"}
           </span>
-          {isRunning ? t("stop") : t("start")}
+          <span className="hidden sm:inline">{isRunning ? t("stop") : t("start")}</span>
         </button>
         <button
           onClick={onEditTime}
@@ -850,6 +850,17 @@ export default function CommentsView({
                         cancelTimeEdit={cancelTimeEdit}
                       />
                     ))}
+                    {/* Add tile: keeps an add affordance visible at the end of
+                        an expanded list, no scrolling to the header needed. */}
+                    <button
+                      onClick={() => addBox(cat.id)}
+                      className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-3 aspect-square text-slate-400 hover:border-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      title={t("addBox")}
+                      aria-label={t("addBox")}
+                    >
+                      <span className="material-symbols-outlined text-3xl">add</span>
+                      <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
+                    </button>
                   </div>
 
                   {/* Subsections (one level deep) */}
@@ -939,6 +950,16 @@ export default function CommentsView({
                               cancelTimeEdit={cancelTimeEdit}
                             />
                           ))}
+                          {/* Add tile for the subsection grid. */}
+                          <button
+                            onClick={() => addBox(sub.id)}
+                            className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-3 aspect-square text-slate-400 hover:border-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                            title={t("addBox")}
+                            aria-label={t("addBox")}
+                          >
+                            <span className="material-symbols-outlined text-3xl">add</span>
+                            <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
+                          </button>
                         </div>
                       </div>
                     );
