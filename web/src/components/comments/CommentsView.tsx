@@ -679,7 +679,7 @@ export default function CommentsView({
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 gap-4 p-4 md:p-6 overflow-y-auto">
+    <div className="flex flex-col h-full min-h-0 gap-4 p-4 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 overflow-y-auto">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
