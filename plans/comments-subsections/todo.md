@@ -40,3 +40,4 @@ updated: "2026-08-20"
 
 - Plan created (single phase)
 - Phase 1 implemented and verified (type-check + build pass); changes in working tree pending commit
+- Follow-up fixes: (1) header buttons icon-only on mobile (`hidden sm:inline` labels) + truncating names + shrink-protected counts so all actions fit on narrow screens; (2) auto-add now fires only when the stopped box is the most recent box of its category — re-timing an older box never inserts a new one (6 simulated scenarios pass)
