@@ -478,8 +478,22 @@ export default function CommentsView({
     [runDurationSec],
   );
 
-  // AUTO-ADD: when a stopped box accumulated time (>0s), append a fresh empty
-  // box right after it in the same category, ready for the next comment.
+  // A box is "most recent" when it is the last box of its category in the
+  // per-week list — the position where fresh boxes are auto-appended. Only the
+  // most recent box spawns a successor; re-timing an older box must not.
+  const isMostRecentInCategory = useCallback(
+    (list: CommentBox[], boxId: string): boolean => {
+      const target = list.find((b) => b.id === boxId);
+      if (!target) return false;
+      const sameCategory = list.filter((b) => b.categoryId === target.categoryId);
+      return sameCategory.length > 0 && sameCategory[sameCategory.length - 1].id === boxId;
+    },
+    [],
+  );
+
+  // AUTO-ADD: when the MOST RECENT box of a category is stopped with time (>0s),
+  // append a fresh empty box right after it, ready for the next comment.
+  // Stopping a previous (older) box never inserts anything.
   const insertAutoAddBox = useCallback(
     (list: CommentBox[], stoppedId: string, stoppedDuration: number): CommentBox[] => {
       if (stoppedDuration <= 0) return list;
@@ -493,7 +507,8 @@ export default function CommentsView({
   );
 
   // Toggle a box's timer: stop the currently-running box (auto-adding a fresh
-  // box after it when it accumulated time), then start or stop the tapped box.
+  // box after it ONLY when it is the most recent box of its category and it
+  // accumulated time), then start or stop the tapped box.
   const handleToggle = useCallback(
     (box: CommentBox) => {
       const timestamp = Date.now();
@@ -502,12 +517,16 @@ export default function CommentsView({
 
       if (running && running.id !== box.id) {
         nextBoxes = nextBoxes.map((b) => (b.id === running.id ? stopBoxAt(running, timestamp) : b));
-        nextBoxes = insertAutoAddBox(nextBoxes, running.id, runDurationSec(running, timestamp));
+        if (isMostRecentInCategory(boxes, running.id)) {
+          nextBoxes = insertAutoAddBox(nextBoxes, running.id, runDurationSec(running, timestamp));
+        }
       }
 
       if (box.runningSinceISO) {
         nextBoxes = nextBoxes.map((b) => (b.id === box.id ? stopBoxAt(box, timestamp) : b));
-        nextBoxes = insertAutoAddBox(nextBoxes, box.id, runDurationSec(box, timestamp));
+        if (isMostRecentInCategory(boxes, box.id)) {
+          nextBoxes = insertAutoAddBox(nextBoxes, box.id, runDurationSec(box, timestamp));
+        }
       } else {
         nextBoxes = nextBoxes.map((b) =>
           b.id === box.id
@@ -518,7 +537,7 @@ export default function CommentsView({
 
       setWeekBoxes(nextBoxes);
     },
-    [boxes, setWeekBoxes, stopBoxAt, insertAutoAddBox, runDurationSec],
+    [boxes, setWeekBoxes, stopBoxAt, insertAutoAddBox, isMostRecentInCategory, runDurationSec],
   );
 
   const handleReset = useCallback(
@@ -728,10 +747,10 @@ export default function CommentsView({
           return (
             <section key={cat.id} className="space-y-3">
               {/* Category header */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <button
                   onClick={() => toggleCollapsed(cat.id)}
-                  className="text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400 transition-colors p-1 -m-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400 transition-colors p-1 -m-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shrink-0"
                   title={collapsed ? t("expand") : t("collapse")}
                   aria-label={collapsed ? t("expand") : t("collapse")}
                   aria-expanded={!collapsed}
@@ -760,37 +779,39 @@ export default function CommentsView({
                 ) : (
                   <button
                     onClick={() => startEditCategory(cat)}
-                    className="inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                    className="inline-flex items-center gap-1.5 min-w-0 hover:opacity-80 transition-opacity"
                     title={t("edit")}
                   >
-                    <span>{cat.name || t("categoryName")}</span>
-                    <span className={cn("material-symbols-outlined text-base", anyRunning ? "text-primary" : "text-slate-400")}>
+                    <span className="truncate min-w-0">{cat.name || t("categoryName")}</span>
+                    <span className={cn("material-symbols-outlined text-base shrink-0", anyRunning ? "text-primary" : "text-slate-400")}>
                       edit
                     </span>
                   </button>
                 )}
-                <span className="text-xs font-bold text-slate-400 tabular-nums ml-auto">
+                <span className="text-xs font-bold text-slate-400 tabular-nums ml-auto shrink-0">
                   {rootBoxCount(cat.id)} · {fmtDuration(rootTotalSec(cat.id))}
                 </span>
                 <button
                   onClick={() => addSubsection(cat)}
-                  className="flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-2.5 py-1.5 rounded-lg transition-colors"
+                  className="flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-2 py-1.5 sm:px-2.5 rounded-lg transition-colors shrink-0"
                   title={t("addSubsection")}
                   aria-label={t("addSubsection")}
                 >
                   <span className="material-symbols-outlined text-sm">subdirectory_arrow_right</span>
-                  {t("addSubsection")}
+                  <span className="hidden sm:inline">{t("addSubsection")}</span>
                 </button>
                 <button
                   onClick={() => addBox(cat.id)}
-                  className="flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-2.5 py-1.5 rounded-lg transition-colors"
+                  className="flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-2 py-1.5 sm:px-2.5 rounded-lg transition-colors shrink-0"
+                  title={t("addBox")}
+                  aria-label={t("addBox")}
                 >
                   <span className="material-symbols-outlined text-sm">add</span>
-                  {t("addBox")}
+                  <span className="hidden sm:inline">{t("addBox")}</span>
                 </button>
                 <button
                   onClick={() => removeCategory(cat)}
-                  className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shrink-0"
                   title={t("removeCategory")}
                   aria-label={t("removeCategory")}
                 >
@@ -837,7 +858,7 @@ export default function CommentsView({
                     return (
                       <div key={sub.id} className="pl-6 space-y-2">
                         {/* Subsection header */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <span
                             className="size-2 rounded-full shrink-0"
                             style={{ backgroundColor: sub.color }}
@@ -858,28 +879,30 @@ export default function CommentsView({
                           ) : (
                             <button
                               onClick={() => startEditCategory(sub)}
-                              className="inline-flex items-center gap-1.5 text-xs font-bold hover:opacity-80 transition-opacity"
+                              className="inline-flex items-center gap-1.5 min-w-0 text-xs font-bold hover:opacity-80 transition-opacity"
                               title={t("edit")}
                             >
-                              <span>{sub.name || t("subsectionName")}</span>
-                              <span className={cn("material-symbols-outlined text-sm", anyRunning ? "text-primary" : "text-slate-400")}>
+                              <span className="truncate min-w-0">{sub.name || t("subsectionName")}</span>
+                              <span className={cn("material-symbols-outlined text-sm shrink-0", anyRunning ? "text-primary" : "text-slate-400")}>
                                 edit
                               </span>
                             </button>
                           )}
-                          <span className="text-xs font-bold text-slate-400 tabular-nums ml-auto">
+                          <span className="text-xs font-bold text-slate-400 tabular-nums ml-auto shrink-0">
                             {subBoxes.length} · {fmtDuration(categoryTotalSec(sub.id))}
                           </span>
                           <button
                             onClick={() => addBox(sub.id)}
-                            className="flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-2.5 py-1.5 rounded-lg transition-colors"
+                            className="flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-2 py-1.5 sm:px-2.5 rounded-lg transition-colors shrink-0"
+                            title={t("addBox")}
+                            aria-label={t("addBox")}
                           >
                             <span className="material-symbols-outlined text-sm">add</span>
-                            {t("addBox")}
+                            <span className="hidden sm:inline">{t("addBox")}</span>
                           </button>
                           <button
                             onClick={() => removeSubsection(sub)}
-                            className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                            className="text-slate-300 hover:text-red-500 dark:text-slate-600 transition-colors p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shrink-0"
                             title={t("removeSubsection")}
                             aria-label={t("removeSubsection")}
                           >
