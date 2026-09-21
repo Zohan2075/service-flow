@@ -27,6 +27,8 @@ export interface ProgramWeek {
   weekRangeEs: string;      // "3-9 DE AGOSTO"
   bibleReading: string;
   bibleReadingEs?: string;
+  /** Local-only marker that this week's sections came from the JW workbook. */
+  sourceWolDocid?: string;
   sections: PresidingSection[];
   updatedAt?: string;
 }
@@ -257,7 +259,7 @@ function mk(d: typeof DEFAULTS[0], scheduledStartMinute?: number): PresidingSect
 }
 
 /** Fresh S-38 template sections; call per week so no week shares section objects. */
-function buildS38Sections(): PresidingSection[] {
+export function buildS38Sections(): PresidingSection[] {
   return [
     mk(DEFAULTS[0]), // opening
     { ...mk(DEFAULTS[1]), subsections: [mk(DEFAULTS[2]), mk(DEFAULTS[3]), mk(DEFAULTS[4]), mk(DEFAULTS[5])] }, // treasures

@@ -1,7 +1,8 @@
 // ─── GET /api/jw-workbook?weekId=2026-W34 ─────────────────────────────────────
 // Server-side proxy to the JW WOL meeting workbook. Browser clients cannot
 // fetch WOL directly (CORS), so this route fetches/parses server-side and
-// returns `{ weekId, bibleReadingEn, bibleReadingEs }`.
+// returns `{ weekId, bibleReadingEn, bibleReadingEs, programEn, programEs }`
+// where programEn/programEs are the parsed weekly meeting programs.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getWorkbookReading } from "@/lib/jwWorkbook";

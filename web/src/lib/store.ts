@@ -26,8 +26,10 @@ import type {
   ProgramTombstone,
 } from "@/types/presiding";
 import {
+  buildS38Sections,
   getDefaultPresidingConfig,
   getDefaultPresidingPrefs,
+  getDefaultTimerRoles,
   getTimerRoles,
   getProgramWeekId,
   getProgramWeekIdOffset,
@@ -42,6 +44,165 @@ import {
   getDefaultCommentsConfig,
   newCommentId,
 } from "@/types/comments";
+
+// ─── Workbook program auto-apply helpers ─────────────────────────────────────
+
+type WorkbookProgramGroup = Exclude<SectionGroup, null>;
+
+interface WorkbookProgramPart {
+  group: SectionGroup;
+  title: string;
+  minutes: number;
+}
+
+const WK_GROUP_PARENT_IDS: Record<WorkbookProgramGroup, string> = {
+  treasures: "treasures",
+  fieldMinistry: "field",
+  living: "living",
+};
+
+const WK_GROUP_SLUGS: Record<WorkbookProgramGroup, string> = {
+  treasures: "t",
+  fieldMinistry: "f",
+  living: "l",
+};
+
+const WK_GROUP_HEADERS: Record<WorkbookProgramGroup, { titleEn: string; titleEs: string }> = {
+  treasures: { titleEn: "Treasures From God's Word", titleEs: "Tesoros de la Biblia" },
+  fieldMinistry: { titleEn: "Apply Yourself to the Field Ministry", titleEs: "Seamos mejores maestros" },
+  living: { titleEn: "Living as Christians", titleEs: "Nuestra vida cristiana" },
+};
+
+const flatSectionIds = (sections: PresidingSection[]): string[] =>
+  sections.flatMap((section) => [section.id, ...flatSectionIds(section.subsections)]);
+
+const isPristineSections = (sections: PresidingSection[]): boolean => {
+  const ids = flatSectionIds(sections);
+  const templateIds = flatSectionIds(buildS38Sections());
+  return ids.length === templateIds.length && ids.every((id, index) => id === templateIds[index]);
+};
+
+const hasAnyAssignee = (sections: PresidingSection[]): boolean =>
+  sections.some((section) => section.assigneeName !== "" || hasAnyAssignee(section.subsections));
+
+const weekHasLogs = (weekId: string, sessions: MeetingSession[]): boolean =>
+  sessions.some((session) => session.weekId === weekId && session.log.length > 0);
+
+/** Replaces-eligibility knowable pre-fetch: no customization + (docid marker OR pristine template). */
+const replacesEligible = (week: ProgramWeek, sessions: MeetingSession[]): boolean =>
+  !hasAnyAssignee(week.sections) &&
+  !weekHasLogs(week.weekId, sessions) &&
+  ((typeof week.sourceWolDocid === "string" && week.sourceWolDocid !== "") || isPristineSections(week.sections));
+
+/** Canonical projection used for change detection (excludes updatedAt / scheduled minutes). */
+const projectSections = (sections: PresidingSection[]): unknown =>
+  sections.map((section) => ({
+    id: section.id,
+    titleEn: section.titleEn,
+    titleEs: section.titleEs,
+    duration: section.duration,
+    group: section.group,
+    assigneeName: section.assigneeName,
+    timerRoles: section.timerRoles ?? null,
+    subsections: projectSections(section.subsections),
+  }));
+
+const weeksEqual = (a: ProgramWeek, b: ProgramWeek): boolean =>
+  a.bibleReading === b.bibleReading &&
+  a.bibleReadingEs === b.bibleReadingEs &&
+  a.sourceWolDocid === b.sourceWolDocid &&
+  JSON.stringify(projectSections(a.sections)) === JSON.stringify(projectSections(b.sections));
+
+const parseWorkbookParts = (value: unknown): WorkbookProgramPart[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const part = item as Record<string, unknown>;
+    const title = typeof part.title === "string" ? part.title.trim().replace(/\s+/g, " ") : "";
+    const minutes = typeof part.minutes === "number" && Number.isFinite(part.minutes) ? part.minutes : 0;
+    const rawGroup = part.group;
+    const group: SectionGroup =
+      rawGroup === "treasures" || rawGroup === "fieldMinistry" || rawGroup === "living" ? rawGroup : null;
+    return { group, title, minutes };
+  });
+};
+
+const buildWorkbookSections = (
+  weekId: string,
+  programEn: WorkbookProgramPart[],
+  programEs: WorkbookProgramPart[],
+): PresidingSection[] => {
+  const zipEs = programEs.length === programEn.length;
+  const titleEsOf = (index: number) => (zipEs && programEs[index] ? programEs[index].title : "");
+  const mkStandalone = (id: string, titleEn: string, titleEs: string, duration: number): PresidingSection => ({
+    id,
+    titleEn,
+    titleEs,
+    duration,
+    assigneeName: "",
+    subsections: [],
+    group: null,
+    timerRoles: getDefaultTimerRoles({ id, titleEn, titleEs, group: null }),
+  });
+
+  const sections: PresidingSection[] = [];
+
+  // Leading standalone opening part
+  let index = 0;
+  if (programEn.length > 0 && programEn[0].group === null) {
+    const part = programEn[0];
+    sections.push(mkStandalone(`${weekId}-open`, part.title, titleEsOf(index), part.minutes));
+    index = 1;
+  }
+
+  // Contiguous grouped runs + trailing standalone parts
+  while (index < programEn.length) {
+    const part = programEn[index];
+    const group: SectionGroup = part.group;
+    if (group === null) {
+      sections.push(mkStandalone(`${weekId}-concl`, part.title, titleEsOf(index), part.minutes));
+      index++;
+      continue;
+    }
+
+    const slug = WK_GROUP_SLUGS[group];
+    const subsections: PresidingSection[] = [];
+    let runIndex = 0;
+    let total = 0;
+    while (index < programEn.length && programEn[index].group === group) {
+      runIndex++;
+      const runPart = programEn[index];
+      const subId = `${weekId}-${slug}${runIndex}`;
+      const subTitleEs = titleEsOf(index);
+      subsections.push({
+        id: subId,
+        titleEn: runPart.title,
+        titleEs: subTitleEs,
+        duration: runPart.minutes,
+        assigneeName: "",
+        subsections: [],
+        group,
+        timerRoles: getDefaultTimerRoles({ id: subId, titleEn: runPart.title, titleEs: subTitleEs, group }),
+      });
+      total += runPart.minutes;
+      index++;
+    }
+
+    const parentId = `${weekId}-${WK_GROUP_PARENT_IDS[group]}`;
+    const header = WK_GROUP_HEADERS[group];
+    sections.push({
+      id: parentId,
+      titleEn: header.titleEn,
+      titleEs: header.titleEs,
+      duration: total,
+      assigneeName: "",
+      subsections,
+      group,
+      timerRoles: getDefaultTimerRoles({ id: parentId, titleEn: header.titleEn, titleEs: header.titleEs, group }),
+    });
+  }
+
+  return sections;
+};
 
 // â”€â”€â”€ IndexedDB storage adapter for Zustand â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -176,7 +337,7 @@ interface AppState {
   deletePresidingLogEntry: (logId: string) => void;
 resetPresidingConfig: () => void;
   ensureActiveProgramWeek: (date?: Date) => void;
-  refreshProgramWeekReadings: (options?: { force?: boolean }) => Promise<void>;
+  refreshProgramFromWorkbook: (options?: { force?: boolean }) => Promise<void>;
 
   // comments actions
   setCommentsConfig: (cfg: CommentsConfig) => void;
@@ -457,6 +618,7 @@ function migratePresidingConfig(raw: unknown, rollToCurrentWeek = true): Presidi
       weekRangeEs: week.weekRangeEs ?? "",
       bibleReading: week.bibleReading ?? "",
       bibleReadingEs: typeof week.bibleReadingEs === "string" ? week.bibleReadingEs : "",
+      sourceWolDocid: typeof week.sourceWolDocid === "string" ? week.sourceWolDocid : undefined,
       updatedAt: typeof week.updatedAt === "string" ? week.updatedAt : "1970-01-01T00:00:00.000Z",
       sections: Array.isArray(week.sections) ? normalizeSections(week.sections) : [],
     } as ProgramWeek;
@@ -1466,43 +1628,69 @@ const nextTombstones = remoteProgram?.tombstones
             presidingSession: nextSession,
           });
         }),
-      refreshProgramWeekReadings: async (options = {}) => {
+      refreshProgramFromWorkbook: async (options = {}) => {
         try {
           const s = get();
           const targets = s.presidingConfig.weeks.filter((week) =>
-            options.force || !week.bibleReading || !week.bibleReadingEs
+            options.force || !week.bibleReading || !week.bibleReadingEs || replacesEligible(week, s.presidingSessions)
           );
           if (targets.length === 0) return;
           const results = await Promise.allSettled(targets.map(async (week) => {
             try {
               const res = await fetch("/api/jw-workbook?weekId=" + encodeURIComponent(week.weekId));
               if (!res.ok) return null;
-              const data = (await res.json()) as { bibleReadingEn?: unknown; bibleReadingEs?: unknown };
+              const data = (await res.json()) as {
+                bibleReadingEn?: unknown;
+                bibleReadingEs?: unknown;
+                programEn?: unknown;
+                programEs?: unknown;
+              };
               if (typeof data.bibleReadingEn !== "string") return null;
               return {
                 week,
                 bibleReading: data.bibleReadingEn,
                 bibleReadingEs: typeof data.bibleReadingEs === "string" ? data.bibleReadingEs : "",
+                programEn: parseWorkbookParts(data.programEn),
+                programEs: parseWorkbookParts(data.programEs),
               };
             } catch {
               return null;
             }
           }));
           const merged = new Map(results
-            .filter((r): r is PromiseFulfilledResult<{ week: ProgramWeek; bibleReading: string; bibleReadingEs: string } | null> => r.status === "fulfilled")
+            .filter((r): r is PromiseFulfilledResult<{ week: ProgramWeek; bibleReading: string; bibleReadingEs: string; programEn: WorkbookProgramPart[]; programEs: WorkbookProgramPart[] } | null> => r.status === "fulfilled")
             .map((r) => r.value)
-            .filter((value): value is { week: ProgramWeek; bibleReading: string; bibleReadingEs: string } => value !== null)
+            .filter((value): value is { week: ProgramWeek; bibleReading: string; bibleReadingEs: string; programEn: WorkbookProgramPart[]; programEs: WorkbookProgramPart[] } => value !== null)
             .map((value) => [value.week.weekId, value]));
           if (merged.size === 0) return;
-          set((state) => withPendingSync({
-            presidingConfig: {
-              ...state.presidingConfig,
-              weeks: state.presidingConfig.weeks.map((week) => {
-                const update = merged.get(week.weekId);
-                return update ? { ...week, bibleReading: update.bibleReading, bibleReadingEs: update.bibleReadingEs, updatedAt: now() } : week;
-              }),
-            },
-          }));
+          // Apply against fresh state so safety checks see the latest customization/logs.
+          const state = get();
+          let changed = false;
+          const nextWeeks = state.presidingConfig.weeks.map((week) => {
+            const update = merged.get(week.weekId);
+            if (!update) return week;
+            let candidate: ProgramWeek = { ...week, bibleReading: update.bibleReading, bibleReadingEs: update.bibleReadingEs };
+            const canApplyProgram =
+              update.programEn.length > 0 &&
+              !hasAnyAssignee(week.sections) &&
+              !weekHasLogs(week.weekId, state.presidingSessions) &&
+              ((typeof week.sourceWolDocid === "string" && week.sourceWolDocid !== "") || isPristineSections(week.sections));
+            if (canApplyProgram) {
+              candidate = {
+                ...candidate,
+                sections: buildWorkbookSections(week.weekId, update.programEn, update.programEs),
+                sourceWolDocid: "workbook",
+              };
+            }
+            if (!weeksEqual(candidate, week)) {
+              changed = true;
+              return candidate;
+            }
+            return week;
+          });
+          if (!changed) return;
+          // Single write via setPresidingConfig: normalization, stamping, tombstones, pending sync.
+          get().setPresidingConfig({ ...state.presidingConfig, weeks: nextWeeks });
         } catch {
           // Never throw out of the refresh action.
         }

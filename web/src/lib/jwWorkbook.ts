@@ -1,7 +1,8 @@
-// ─── JW WOL Meeting Workbook: weekly Bible reading fetch + parse ─────────────
+// ─── JW WOL Meeting Workbook: weekly Bible reading + program fetch/parse ─────
 //
 // Fetches the JW Watchtower ONLINE LIBRARY (WOL) meeting workbook pages and
-// extracts the weekly Bible reading in English and Spanish. Parsing is
+// extracts the weekly Bible reading and the full weekly meeting program in
+// English and Spanish. Parsing is
 // regex-based (no runtime dependencies) and isolated here so it is
 // unit-testable. Uses a relative import (not the `@/` alias) so this module
 // can be compiled standalone with tsc for verification.
@@ -20,6 +21,21 @@ export interface WorkbookResult {
   weekId: string;
   bibleReadingEn: string;
   bibleReadingEs: string;
+  programEn: WorkbookPart[];
+  programEs: WorkbookPart[];
+}
+
+/** One timed part of the weekly meeting program (opening/concluding have group null). */
+export interface WorkbookPart {
+  group: "treasures" | "fieldMinistry" | "living" | null;
+  title: string;
+  minutes: number;
+}
+
+export interface ParsedProgram {
+  opening: WorkbookPart | null;
+  groups: { group: "treasures" | "fieldMinistry" | "living"; parts: WorkbookPart[] }[];
+  concluding: WorkbookPart | null;
 }
 
 export type WorkbookError =
@@ -125,6 +141,137 @@ export function parseReading(html: string): string {
   return "";
 }
 
+/** Strip a leading part number like "1. " / "10) " from a part title. */
+function stripPartNumber(title: string): string {
+  return title.replace(/^(\d+)[.)\s]+/, "").trim();
+}
+
+/** Extract "(N min.)" / "(N mins.)" from an HTML block's plain text. */
+function parseMinutesFromHtml(html: string): number | null {
+  const text = collapseWhitespace(decodeEntities(html.replace(/<[^>]*>/g, " ")));
+  const m = /\((\d+)\s+mins?\.\)/i.exec(text);
+  return m ? Number(m[1]) : null;
+}
+
+/** Plain-text of an h2/h3 block, used for keyword matching and titles. */
+function headingText(html: string): string {
+  return collapseWhitespace(decodeEntities(html.replace(/<[^>]*>/g, " ")));
+}
+
+/** Concatenated `<strong>` text of a heading block (part titles live in strongs). */
+function headingStrongText(html: string): string {
+  const strongs: string[] = [];
+  const strongRe = /<strong>([\s\S]*?)<\/strong>/g;
+  let strong: RegExpExecArray | null;
+  while ((strong = strongRe.exec(html)) !== null) {
+    strongs.push(collapseWhitespace(decodeEntities(strong[1].replace(/<[^>]*>/g, " "))));
+  }
+  return collapseWhitespace(strongs.join(" "));
+}
+
+/**
+ * Parse the full weekly meeting program from a workbook weekly page (EN or
+ * ES). Walks `<h2>`/`<h3>` headings in document order: group `<h2>` banners
+ * are matched by keyword, timed parts are the `<h3>`s with a "(N min[s].)"
+ * duration (inline or in the following `<p>`). Song-only headers and untimed
+ * headings are skipped. Never throws; returns a best-effort structure.
+ */
+export function parseProgram(html: string, lang: Lang): ParsedProgram {
+  const empty: ParsedProgram = { opening: null, groups: [], concluding: null };
+  try {
+    const openingRe = lang === "es" ? /palabras de introducci/i : /opening comments/i;
+    const concludingRe = lang === "es" ? /^palabras de conclusi/i : /^concluding comments/i;
+    const songRe = lang === "es" ? /^canci[oó]n\s+\d+/i : /^song\s+\d+/i;
+    const groupKeywords: {
+      group: "treasures" | "fieldMinistry" | "living";
+      re: RegExp;
+    }[] = [
+      { group: "treasures", re: lang === "es" ? /TESOROS DE LA BIBLIA/i : /TREASURES FROM GOD/i },
+      { group: "fieldMinistry", re: lang === "es" ? /SEAMOS MEJORES/i : /APPLY YOURSELF/i },
+      { group: "living", re: lang === "es" ? /NUESTRA VIDA CRISTIANA/i : /LIVING AS CHRISTIANS/i },
+    ];
+
+    const program: ParsedProgram = { opening: null, groups: [], concluding: null };
+    let current: ParsedProgram["groups"][number] | null = null;
+
+    // Walk h2/h3 headings in document order; for each h3, look for a duration
+    // inline, else in the text up to the next heading (covers the following
+    // `<p>(10 min.)</p>` block).
+    const headingRe = /<(h2|h3)\b[^>]*>([\s\S]*?)<\/\1>/g;
+    const matches: { tag: "h2" | "h3"; block: string; start: number; end: number }[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = headingRe.exec(html)) !== null) {
+      matches.push({ tag: m[1] as "h2" | "h3", block: m[2], start: m.index, end: m.index + m[0].length });
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+      const { tag, block, start, end } = matches[i];
+      const plain = headingText(block);
+      if (!plain) continue;
+
+      if (tag === "h2") {
+        const hit = groupKeywords.find((g) => g.re.test(plain));
+        if (hit) {
+          current = { group: hit.group, parts: [] };
+          program.groups.push(current);
+        }
+        continue;
+      }
+
+      // h3 part candidate.
+      const songOnly = songRe.test(plain) && !/\((\d+)\s+mins?\.\)/i.test(plain);
+      if (songOnly) continue;
+
+      // Duration: inline in the h3, else in the following inter-heading text.
+      let minutes = parseMinutesFromHtml(block);
+      if (minutes === null) {
+        const nextStart = i + 1 < matches.length ? matches[i + 1].start : html.length;
+        const between = html.slice(end, nextStart);
+        minutes = parseMinutesFromHtml(between);
+      }
+      if (minutes === null) continue;
+
+      const title = stripPartNumber(headingStrongText(block) || plain);
+      if (!title) continue;
+
+      const part: WorkbookPart = { group: null, title, minutes };
+      if (openingRe.test(plain)) {
+        if (!program.opening) {
+          // "Song N and Prayer | Opening Comments" → keep from the keyword on.
+          const kw = title.search(openingRe);
+          program.opening = { group: null, title: kw >= 0 ? title.slice(kw).trim() : title, minutes };
+        }
+        continue;
+      }
+      if (concludingRe.test(plain)) {
+        if (!program.concluding) {
+          // "Concluding Comments | Song N" → drop the trailing song segment.
+          const clean = title.split("|")[0].trim() || title;
+          program.concluding = { group: null, title: clean, minutes };
+        }
+        continue;
+      }
+      if (current) {
+        current.parts.push({ ...part, group: current.group });
+      }
+      // Parts before the first group h2 (other than opening) are ignored.
+    }
+
+    return program;
+  } catch {
+    return empty;
+  }
+}
+
+/** Flatten a ParsedProgram into an ordered part list (opening, groups, concluding). */
+function flattenProgram(program: ParsedProgram): WorkbookPart[] {
+  const parts: WorkbookPart[] = [];
+  if (program.opening) parts.push(program.opening);
+  for (const g of program.groups) parts.push(...g.parts);
+  if (program.concluding) parts.push(program.concluding);
+  return parts;
+}
+
 const USER_AGENT = "Mozilla/5.0 (compatible; ServiceFlow/1.0)";
 
 /** Fetch a URL as text, throwing on non-200 responses. */
@@ -139,7 +286,7 @@ export async function fetchText(url: string): Promise<string> {
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const cache = new Map<string, { result: WorkbookResult; expiresAt: number }>();
 
-/** Resolve a weekId to the EN/ES Bible reading, caching positive results for 24h. */
+/** Resolve a weekId to the EN/ES Bible reading + program, caching for 24h. */
 export async function getWorkbookReading(weekId: string): Promise<WorkbookResult | WorkbookError> {
   if (!/^\d{4}-W\d{2}$/.test(weekId)) return { code: "INVALID_WEEK" };
 
@@ -168,11 +315,19 @@ export async function getWorkbookReading(weekId: string): Promise<WorkbookResult
     const esHtml = await fetchText(`https://wol.jw.org/es/wol/d/r4/lp-s/${entry.docid}`);
     const bibleReadingEn = parseReading(enHtml);
     const bibleReadingEs = parseReading(esHtml);
+    const programEn = flattenProgram(parseProgram(enHtml, "en"));
+    const programEs = flattenProgram(parseProgram(esHtml, "es"));
     if (!bibleReadingEn) {
       return { code: "FETCH_ERROR", message: "No reading found on EN weekly page" };
     }
 
-    const result: WorkbookResult = { weekId, bibleReadingEn, bibleReadingEs };
+    const result: WorkbookResult = {
+      weekId,
+      bibleReadingEn,
+      bibleReadingEs,
+      programEn,
+      programEs,
+    };
     cache.set(weekId, { result, expiresAt: Date.now() + CACHE_TTL_MS });
     return result;
   } catch (err) {
