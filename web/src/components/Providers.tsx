@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { I18nProvider } from "@/lib/i18n";
 import { SyncProvider } from "@/lib/sync";
 import { InterestedNotificationsProvider } from "@/components/InterestedNotificationsProvider";
+import SyncGuard from "@/components/SyncGuard";
+
 import { Toaster } from "react-hot-toast";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -21,6 +23,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                   className: "dark:bg-slate-800 dark:text-white",
                 }}
               />
+              <SyncGuard />
             </InterestedNotificationsProvider>
           </SyncProvider>
         </I18nProvider>

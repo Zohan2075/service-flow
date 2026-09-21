@@ -229,7 +229,11 @@ function InterestedDashboard() {
                 return (
                   <div
                     key={person.id}
-                    className="w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 relative overflow-hidden"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleOpenEdit(person)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpenEdit(person); } }}
+                    className="w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 relative overflow-hidden cursor-pointer hover:border-primary/30 transition-colors"
                     style={{
                       borderLeft: `4px solid ${statusInfo.color}`,
                       background: person.gender === "female"
@@ -269,21 +273,14 @@ function InterestedDashboard() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={() => handleOpenEdit(person)}
-                        title={t("interested.edit")}
-                        className="inline-flex items-center justify-center size-8 rounded-lg text-slate-500 hover:bg-primary/10 hover:text-primary transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-lg">edit</span>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(person)}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(person); }}
                         title={t("interested.delete")}
                         className="inline-flex items-center justify-center size-8 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 transition-colors"
                       >
                         <span className="material-symbols-outlined text-lg">delete</span>
                       </button>
                       <button
-                        onClick={() => toggleInterestedPersonCompleted(person.id)}
+                        onClick={(e) => { e.stopPropagation(); toggleInterestedPersonCompleted(person.id); }}
                         title={t("interested.reactivate")}
                         className="inline-flex items-center justify-center size-8 rounded-lg text-slate-500 hover:bg-green-50 hover:text-green-600 transition-colors"
                       >

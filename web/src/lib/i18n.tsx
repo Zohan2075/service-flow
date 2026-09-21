@@ -16,6 +16,10 @@ const translations = {
     "nav.settings": "Settings",
     "nav.interested": "Interested People",
 
+    // Sync guard
+    "sync.saving": "Saving changes...",
+    "sync.syncing": "Syncing with the cloud...",
+
     // Login
     "login.welcome": "Welcome back",
     "login.googleHint": "Google sign-in needs a Google OAuth client id in web/.env.local before it can open the Google account window.",
@@ -378,6 +382,10 @@ const translations = {
     "nav.comments": "Comentarios",
     "nav.settings": "Ajustes",
     "nav.interested": "Estudios y Revisitas",
+
+    // Sync guard
+    "sync.saving": "Guardando...",
+    "sync.syncing": "Sincronizando con la nube...",
 
     // Login
     "login.welcome": "Bienvenido de nuevo",
