@@ -17,6 +17,9 @@ import {
   SECTION_COLORS,
   SECTION_ICONS,
   totalPresidingMinutes,
+  computeScheduleOffsets,
+  gapForStartEdit,
+  durationForEndEdit,
   createPresidingSection,
   getDefaultWeek,
   getIsoWeekMonday,
@@ -493,27 +496,14 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   const clock = (m: number) => fmtClock(m, prefs.timeFormat === "24h");
   const startMinTotal = prefs.meetingStartHour * 60 + prefs.meetingStartMinute;
 
-  let legacyOffset = 0; const startTimes: number[] = []; const endTimes: number[] = [];
-  for (let i = 0; i < sections.length; i++) {
-    const s = sections[i];
-    if (s.subsections.length > 0) {
-        for (const sub of s.subsections) {
-          const offset = sub.scheduledStartMinute ?? legacyOffset;
-          const endOffset = sub.scheduledEndMinute ?? (offset + sub.duration);
-          startTimes.push(startMinTotal + offset);
-          endTimes.push(startMinTotal + endOffset);
-          legacyOffset = Math.max(legacyOffset, endOffset);
-      }
-    } else {
-      const offset = s.scheduledStartMinute ?? legacyOffset;
-      const endOffset = s.scheduledEndMinute ?? (offset + s.duration);
-      startTimes.push(startMinTotal + offset);
-      endTimes.push(startMinTotal + endOffset);
-      legacyOffset = Math.max(legacyOffset, endOffset);
-    }
-    // Song & Prayer offset: first timed part after opening starts 5 min later
-    if (i === 0) legacyOffset += 5;
-  }
+  // Cascading schedule: every timed part starts exactly when the previous one
+  // ends, so editing any duration shifts all downstream start/end times
+  // automatically. Stored scheduledStartMinute/scheduledEndMinute pins are
+  // intentionally ignored for display.
+  const { startOffsets, endOffsets, totalEndMinute } = computeScheduleOffsets(sections);
+  const startTimes = startOffsets.map(o => startMinTotal + o);
+  const endTimes = endOffsets.map(o => startMinTotal + o);
+  const cascadeEndMin = startMinTotal + totalEndMinute;
 
   // Keep the active timer visible while minimized: document.title + App Badge (installed PWA only).
   const activeKey = activeTimer?.key ?? null;
@@ -696,7 +686,8 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                       const flatIdx = intIdx++; const num = partNum++;
                       const timerRoles = getTimerRoles(sub, grp);
                       return <InterventionRow key={sub.id} num={num} section={sub} color={col}
-                         startTime={clock(startTimes[flatIdx] ?? 0)} endTime={clock(endTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
+                         startTime={clock(startTimes[flatIdx] ?? 0)} endTime={clock(endTimes[flatIdx] ?? 0)} timerRoles={timerRoles}
+                        startAbsoluteMin={startTimes[flatIdx] ?? 0} endAbsoluteMin={endTimes[flatIdx] ?? 0} meetingStartMinute={startMinTotal}
                         getTimerState={getTimerState} isEs={isEs} lbl={lbl}
                         inlineId={inlineId} inlineField={inlineField}
                         onTap={() => { setInlineId(sub.id); setInlineField("title"); }}
@@ -721,7 +712,8 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
               const timerRoles = getTimerRoles(sec);
               cards.push(
                 <InterventionRow key={sec.id} num={num} section={sec} color={col}
-                   startTime={clock(startTimes[flatIdx] ?? 0)} endTime={clock(endTimes[flatIdx] ?? 0)} meetingStartMinute={startMinTotal} timerRoles={timerRoles}
+                   startTime={clock(startTimes[flatIdx] ?? 0)} endTime={clock(endTimes[flatIdx] ?? 0)} timerRoles={timerRoles}
+                  startAbsoluteMin={startTimes[flatIdx] ?? 0} endAbsoluteMin={endTimes[flatIdx] ?? 0} meetingStartMinute={startMinTotal}
                   getTimerState={getTimerState} isEs={isEs} lbl={lbl}
                   inlineId={inlineId} inlineField={inlineField}
                   onTap={() => { setInlineId(sec.id); setInlineField("title"); }}
@@ -746,7 +738,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
         {/* Totals */}
         <p className="text-center text-xs text-slate-500 dark:text-slate-400 pt-1">
-          {lbl.totalTime}: {totalMin} {lbl.min} · {clock(startMinTotal)} → {clock(startMinTotal + totalMin)}
+          {lbl.totalTime}: {totalMin} {lbl.min} · {clock(startMinTotal)} → {clock(cascadeEndMin)}
         </p>
       </div>
 
@@ -838,11 +830,12 @@ function TimerLegend({ isEs, lbl, accentColor }: { isEs: boolean; lbl: typeof L.
 /* ---------- InterventionRow (card-based) ---------- */
 
 function InterventionRow({
-  num, section, color, startTime, endTime, meetingStartMinute, timerRoles, getTimerState, isEs, lbl,
+  num, section, color, startTime, endTime, startAbsoluteMin, endAbsoluteMin, meetingStartMinute, timerRoles, getTimerState, isEs, lbl,
   inlineId, inlineField, onTap, onEditField, onClose, onUpdate, onRemove, onToggleTimer, onResetTimer,
   standalone = false,
 }: {
-  num: number; section: PresidingSection; color: string; startTime: string; endTime: string; meetingStartMinute: number;
+  num: number; section: PresidingSection; color: string; startTime: string; endTime: string;
+  startAbsoluteMin: number; endAbsoluteMin: number; meetingStartMinute: number;
   timerRoles: TimerRole[];
   getTimerState: (sectionId: string, role: TimerRole | null) => { elapsedSec: number; running: boolean };
   isEs: boolean; lbl: typeof L.en;
@@ -853,17 +846,14 @@ function InterventionRow({
   standalone?: boolean;
 }) {
   const isThisInline = inlineId === section.id;
+  const currentStartOffset = startAbsoluteMin - meetingStartMinute;
+  const desiredFromInput = (value: string): number | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(value);
+    if (!m) return null;
+    const target = Number(m[1]) * 60 + Number(m[2]);
+    return ((target - meetingStartMinute) % 1440 + 1440) % 1440;
+  };
   const title = isEs ? (section.titleEs || section.titleEn || "") : (section.titleEn || section.titleEs || "");
-  const startOffset = section.scheduledStartMinute ?? 0;
-  const endOffset = section.scheduledEndMinute ?? (startOffset + section.duration);
-  const startInput = (() => {
-    const minute = (meetingStartMinute + startOffset) % (24 * 60);
-    return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
-  })();
-  const endInput = (() => {
-    const minute = (meetingStartMinute + endOffset) % (24 * 60);
-    return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
-  })();
 
   const wrapperClass = standalone
     ? "rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface shadow-sm"
@@ -886,7 +876,7 @@ function InterventionRow({
               <button key={f} onClick={() => onEditField(f)}
                 className={cn("rounded-lg px-3 py-1 text-xs font-medium transition-colors",
                   inlineField === f ? "bg-primary text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500")}>
-                   {f === "title" ? (isEs ? "ES/EN" : "EN/ES") : f === "assignee" ? (isEs ? "Nombre" : "Name") : f === "start" ? (isEs ? "Inicio" : "Start") : f === "end" ? lbl.end : lbl.min}
+                   {f === "title" ? (isEs ? "ES/EN" : "EN/ES") : f === "assignee" ? (isEs ? "Nombre" : "Name") : f === "duration" ? lbl.min : f === "start" ? (isEs ? "Inicio" : "Start") : lbl.end}
               </button>
             ))}
           </div>
@@ -896,23 +886,22 @@ function InterventionRow({
               onChange={e => onUpdate(s => ({ ...s, duration: Math.max(1, parseInt(e.target.value) || 1) }))}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary" autoFocus />
           ) : inlineField === "start" ? (
-            <input type="time" value={startInput}
+            <input type="time" value={fmtClock(startAbsoluteMin, true)}
               onChange={e => {
-                const [hours, minutes] = e.target.value.split(":").map(Number);
-                if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
-                const target = hours * 60 + minutes;
-                const offset = (target - meetingStartMinute + 24 * 60) % (24 * 60);
-                onUpdate(s => ({ ...s, scheduledStartMinute: offset }));
+                const desired = desiredFromInput(e.target.value);
+                if (desired === null) return;
+                onUpdate(s => {
+                  const gap = gapForStartEdit(s, currentStartOffset, desired);
+                  return { ...s, gapBeforeMinute: gap > 0 ? gap : undefined };
+                });
               }}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary" autoFocus />
           ) : inlineField === "end" ? (
-            <input type="time" value={endInput}
+            <input type="time" value={fmtClock(endAbsoluteMin, true)}
               onChange={e => {
-                const [hours, minutes] = e.target.value.split(":").map(Number);
-                if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
-                const target = hours * 60 + minutes;
-                const offset = (target - meetingStartMinute + 24 * 60) % (24 * 60);
-                onUpdate(s => ({ ...s, scheduledEndMinute: Math.max(s.scheduledStartMinute ?? 0, offset) }));
+                const desired = desiredFromInput(e.target.value);
+                if (desired === null) return;
+                onUpdate(s => ({ ...s, duration: durationForEndEdit(currentStartOffset, desired) }));
               }}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold focus:outline-none focus:ring-2 focus:ring-primary" autoFocus />
           ) : inlineField === "assignee" ? (

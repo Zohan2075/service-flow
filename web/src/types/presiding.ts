@@ -17,6 +17,8 @@ export interface PresidingSection {
   scheduledStartMinute?: number;
   /** Minutes after the meeting start. */
   scheduledEndMinute?: number;
+  /** Minutes inserted before this part (user gap on the cascading schedule). */
+  gapBeforeMinute?: number;
   /** Client/server conflict timestamp. */
   updatedAt?: string;
 }
@@ -307,6 +309,61 @@ export function totalPresidingMinutes(sections: PresidingSection[]): number {
   }
   return total;
 }
+
+// ─── Cascading schedule ───────────────────────────────────────────────────────
+
+/** Finite, non-negative minutes for a gap value; absent/NaN values count as 0. */
+function gapOf(gap: number | undefined): number {
+  return Number.isFinite(gap) ? Math.max(0, gap as number) : 0;
+}
+
+/**
+ * Pure cascade offsets (minutes after meeting start): every timed part starts
+ * when the previous one ends. Built-in gaps: the "Living as Christians" group
+ * starts 4 min late (song), and the first top-level item is followed by a 5 min
+ * Song & Prayer gap. User gaps (`gapBeforeMinute`) are inserted before the
+ * owning part (for groups: before their first child). Never mutates `sections`.
+ */
+export function computeScheduleOffsets(sections: PresidingSection[]): { startOffsets: number[]; endOffsets: number[]; totalEndMinute: number } {
+  let cursor = 0;
+  const startOffsets: number[] = [];
+  const endOffsets: number[] = [];
+  const pushTimed = (durationMin: number) => {
+    const d = Number.isFinite(durationMin) ? Math.max(0, durationMin) : 0;
+    startOffsets.push(cursor);
+    cursor += d;
+    endOffsets.push(cursor);
+  };
+  for (let i = 0; i < sections.length; i++) {
+    const s = sections[i];
+    // Song gap: the Living as Christians section starts 4 min later because of
+    // the song sung right before it (invisible gap, not a timed part).
+    if (s.group === "living") cursor += 4;
+    cursor += gapOf(s.gapBeforeMinute);
+    if (s.subsections.length > 0) {
+      for (const sub of s.subsections) {
+        cursor += gapOf(sub.gapBeforeMinute);
+        pushTimed(sub.duration);
+      }
+    } else {
+      pushTimed(s.duration);
+    }
+    // Song & Prayer offset: first timed part after opening starts 5 min later
+    if (i === 0) cursor += 5;
+  }
+  return { startOffsets, endOffsets, totalEndMinute: cursor };
+}
+
+/** New gap for a start-time edit: shift by the delta, clamp at the natural cascade position. */
+export function gapForStartEdit(section: Pick<PresidingSection, "gapBeforeMinute">, currentStartOffset: number, desiredStartOffset: number): number {
+  return Math.max(0, (section.gapBeforeMinute ?? 0) + (desiredStartOffset - currentStartOffset));
+}
+
+/** New duration for an end-time edit: end − current cascaded start, at least 1 min. */
+export function durationForEndEdit(currentStartOffset: number, desiredEndOffset: number): number {
+  return Math.max(1, desiredEndOffset - currentStartOffset);
+}
+
 
 // ─── JW section colors ────────────────────────────────────────────────────────
 

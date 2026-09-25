@@ -459,6 +459,7 @@ function flattenProgramSections(sections: PresidingSection[], userId: string, we
       title_en: section.titleEn, title_es: section.titleEs, duration_min: section.duration, group_name: section.group,
        scheduled_start_minute: section.scheduledStartMinute ?? 0,
        scheduled_end_minute: section.scheduledEndMinute ?? ((section.scheduledStartMinute ?? 0) + section.duration),
+       gap_before_minute: section.gapBeforeMinute ?? 0,
        timer_roles: getTimerRoles(section), updated_at: section.updatedAt ?? new Date(0).toISOString(),
     });
     rows.push(...flattenProgramSections(section.subsections, userId, weekId, section.id));
@@ -489,6 +490,7 @@ function sectionsFromRows(rows: Record<string, unknown>[]): PresidingSection[] {
        group: (row.group_name as PresidingSection["group"]) ?? null,
        scheduledStartMinute: Number(row.scheduled_start_minute ?? 0),
        scheduledEndMinute: Number(row.scheduled_end_minute ?? (Number(row.scheduled_start_minute ?? 0) + Number(row.duration_min ?? 0))),
+       gapBeforeMinute: Number(row.gap_before_minute ?? 0) || undefined,
        updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
       timerRoles: Array.isArray(row.timer_roles) ? row.timer_roles as PresidingSection["timerRoles"] : undefined,
       subsections: build(String(row.section_id)),
@@ -505,6 +507,7 @@ function sectionsFromLegacyJson(value: unknown): PresidingSection[] {
       duration: Number(item.duration ?? item.duration_min ?? 0), assigneeName: "",
        group: (item.group as PresidingSection["group"]) ?? null, scheduledStartMinute: Number(item.scheduledStartMinute ?? item.scheduled_start_minute ?? 0),
        scheduledEndMinute: Number(item.scheduledEndMinute ?? item.scheduled_end_minute ?? (Number(item.scheduledStartMinute ?? item.scheduled_start_minute ?? 0) + Number(item.duration ?? item.duration_min ?? 0))),
+       gapBeforeMinute: Number(item.gapBeforeMinute ?? item.gap_before_minute ?? 0) || undefined,
        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : undefined,
       timerRoles: Array.isArray(item.timerRoles) ? item.timerRoles as PresidingSection["timerRoles"] : undefined,
       subsections: sectionsFromLegacyJson(item.subsections),
