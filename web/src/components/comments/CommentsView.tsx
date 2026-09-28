@@ -9,6 +9,22 @@ import type {
   CommentCategory,
 } from "@/types/comments";
 import { createCommentBox, createCommentCategory } from "@/types/comments";
+import {
+  DndContext,
+  MouseSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 /* ---------- helpers ---------- */
 
@@ -183,15 +199,23 @@ function BoxCard({
   cancelTimeEdit,
 }: BoxCardProps) {
   const isRunning = Boolean(box.runningSinceISO);
+  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: box.id });
   return (
     <div
+      ref={setNodeRef}
+      {...listeners}
       className={cn(
         "relative flex flex-col items-center justify-center gap-2 rounded-2xl border p-3 aspect-square transition-all",
         isRunning
           ? "bg-primary text-white border-transparent shadow-lg"
-          : "bg-surface border-slate-200 dark:border-slate-700 shadow-sm hover:border-primary/40"
+          : "bg-surface border-slate-200 dark:border-slate-700 shadow-sm hover:border-primary/40",
+        isDragging && "z-10 shadow-xl ring-2 ring-primary/40"
       )}
-      style={isRunning ? undefined : { borderTopColor: color, borderTopWidth: 3 }}
+      style={{
+        ...(isRunning ? {} : { borderTopColor: color, borderTopWidth: 3 }),
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
     >
       {isRunning && (
         <span className="absolute top-2 right-2 material-symbols-outlined text-sm animate-pulse">timelapse</span>
@@ -365,6 +389,8 @@ export default function CommentsView({
 
   const t = (key: keyof typeof L.en) => pick(lang, L.en[key], L.es[key]);
 
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 350, tolerance: 6 } }));
+
   const boxes = useMemo(() => config.boxesByWeek[weekId] ?? [], [config.boxesByWeek, weekId]);
 
   // Tick once per second while any box is running so live durations update.
@@ -473,6 +499,32 @@ export default function CommentsView({
       });
     },
     [config, onConfigChange, weekId],
+  );
+
+  // Reorder a box within its own category/subsection group. Groups are
+  // rendered in per-grid DnD contexts, so `over` is always in the same group;
+  // the reordered group is written back via slot replacement, keeping every
+  // other group's positions in the flat per-week array untouched.
+  const handleBoxDragEnd = useCallback(
+    ({ active, over }: DragEndEvent) => {
+      if (!over || active.id === over.id) return;
+      const activeBox = boxes.find((b) => b.id === active.id);
+      if (!activeBox) return;
+      const group = boxes.filter((b) => b.categoryId === activeBox.categoryId);
+      const oldIndex = group.findIndex((b) => b.id === active.id);
+      const newIndex = group.findIndex((b) => b.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const reordered = arrayMove(group, oldIndex, newIndex);
+      const slots = boxes
+        .map((b, i) => (b.categoryId === activeBox.categoryId ? i : -1))
+        .filter((i) => i >= 0);
+      const next = [...boxes];
+      slots.forEach((slot, k) => {
+        if (reordered[k]) next[slot] = reordered[k];
+      });
+      setWeekBoxes(next);
+    },
+    [boxes, setWeekBoxes],
   );
 
   const runDurationSec = useCallback((target: CommentBox, timestamp: number): number => {
@@ -846,46 +898,50 @@ export default function CommentsView({
               {!collapsed && (
                 <>
                   {/* Box grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                    {catBoxes.map((box) => (
-                      <BoxCard
-                        key={box.id}
-                        box={box}
-                        color={cat.color}
-                        liveSec={liveSecFor(box)}
-                        isEditingName={editingBoxId === box.id}
-                        isEditingTime={editingTimeBoxId === box.id}
-                        draft={draft}
-                        setDraft={setDraft}
-                        editingRef={editingRef}
-                        timeMinutes={timeMinutes}
-                        timeSeconds={timeSeconds}
-                        setTimeMinutes={setTimeMinutes}
-                        setTimeSeconds={setTimeSeconds}
-                        t={t}
-                        onEditName={() => startEditBox(box)}
-                        onEditTime={() => startEditTime(box)}
-                        onToggle={() => handleToggle(box)}
-                        onReset={() => handleReset(box)}
-                        onRemove={() => removeBox(box)}
-                        commitEdit={commitEdit}
-                        cancelEdit={cancelEdit}
-                        commitTimeEdit={commitTimeEdit}
-                        cancelTimeEdit={cancelTimeEdit}
-                      />
-                    ))}
-                    {/* Add tile: keeps an add affordance visible at the end of
-                        an expanded list, no scrolling to the header needed. */}
-                    <button
-                      onClick={() => addBox(cat.id)}
-                      className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-3 aspect-square text-slate-400 hover:border-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                      title={t("addBox")}
-                      aria-label={t("addBox")}
-                    >
-                      <span className="material-symbols-outlined text-3xl">add</span>
-                      <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
-                    </button>
-                  </div>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleBoxDragEnd}>
+                    <SortableContext items={catBoxes.map((b) => b.id)} strategy={rectSortingStrategy}>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                        {catBoxes.map((box) => (
+                          <BoxCard
+                            key={box.id}
+                            box={box}
+                            color={cat.color}
+                            liveSec={liveSecFor(box)}
+                            isEditingName={editingBoxId === box.id}
+                            isEditingTime={editingTimeBoxId === box.id}
+                            draft={draft}
+                            setDraft={setDraft}
+                            editingRef={editingRef}
+                            timeMinutes={timeMinutes}
+                            timeSeconds={timeSeconds}
+                            setTimeMinutes={setTimeMinutes}
+                            setTimeSeconds={setTimeSeconds}
+                            t={t}
+                            onEditName={() => startEditBox(box)}
+                            onEditTime={() => startEditTime(box)}
+                            onToggle={() => handleToggle(box)}
+                            onReset={() => handleReset(box)}
+                            onRemove={() => removeBox(box)}
+                            commitEdit={commitEdit}
+                            cancelEdit={cancelEdit}
+                            commitTimeEdit={commitTimeEdit}
+                            cancelTimeEdit={cancelTimeEdit}
+                          />
+                        ))}
+                        {/* Add tile: keeps an add affordance visible at the end of
+                            an expanded list, no scrolling to the header needed. */}
+                        <button
+                          onClick={() => addBox(cat.id)}
+                          className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-3 aspect-square text-slate-400 hover:border-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                          title={t("addBox")}
+                          aria-label={t("addBox")}
+                        >
+                          <span className="material-symbols-outlined text-3xl">add</span>
+                          <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
+                        </button>
+                      </div>
+                    </SortableContext>
+                  </DndContext>
 
                   {/* Subsections (one level deep) */}
                   {subsections.map((sub) => {
@@ -946,45 +1002,49 @@ export default function CommentsView({
                         </div>
 
                         {/* Subsection box grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                          {subBoxes.map((box) => (
-                            <BoxCard
-                              key={box.id}
-                              box={box}
-                              color={sub.color}
-                              liveSec={liveSecFor(box)}
-                              isEditingName={editingBoxId === box.id}
-                              isEditingTime={editingTimeBoxId === box.id}
-                              draft={draft}
-                              setDraft={setDraft}
-                              editingRef={editingRef}
-                              timeMinutes={timeMinutes}
-                              timeSeconds={timeSeconds}
-                              setTimeMinutes={setTimeMinutes}
-                              setTimeSeconds={setTimeSeconds}
-                              t={t}
-                              onEditName={() => startEditBox(box)}
-                              onEditTime={() => startEditTime(box)}
-                              onToggle={() => handleToggle(box)}
-                              onReset={() => handleReset(box)}
-                              onRemove={() => removeBox(box)}
-                              commitEdit={commitEdit}
-                              cancelEdit={cancelEdit}
-                              commitTimeEdit={commitTimeEdit}
-                              cancelTimeEdit={cancelTimeEdit}
-                            />
-                          ))}
-                          {/* Add tile for the subsection grid. */}
-                          <button
-                            onClick={() => addBox(sub.id)}
-                            className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-3 aspect-square text-slate-400 hover:border-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                            title={t("addBox")}
-                            aria-label={t("addBox")}
-                          >
-                            <span className="material-symbols-outlined text-3xl">add</span>
-                            <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
-                          </button>
-                        </div>
+                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleBoxDragEnd}>
+                          <SortableContext items={subBoxes.map((b) => b.id)} strategy={rectSortingStrategy}>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                              {subBoxes.map((box) => (
+                                <BoxCard
+                                  key={box.id}
+                                  box={box}
+                                  color={sub.color}
+                                  liveSec={liveSecFor(box)}
+                                  isEditingName={editingBoxId === box.id}
+                                  isEditingTime={editingTimeBoxId === box.id}
+                                  draft={draft}
+                                  setDraft={setDraft}
+                                  editingRef={editingRef}
+                                  timeMinutes={timeMinutes}
+                                  timeSeconds={timeSeconds}
+                                  setTimeMinutes={setTimeMinutes}
+                                  setTimeSeconds={setTimeSeconds}
+                                  t={t}
+                                  onEditName={() => startEditBox(box)}
+                                  onEditTime={() => startEditTime(box)}
+                                  onToggle={() => handleToggle(box)}
+                                  onReset={() => handleReset(box)}
+                                  onRemove={() => removeBox(box)}
+                                  commitEdit={commitEdit}
+                                  cancelEdit={cancelEdit}
+                                  commitTimeEdit={commitTimeEdit}
+                                  cancelTimeEdit={cancelTimeEdit}
+                                />
+                              ))}
+                              {/* Add tile for the subsection grid. */}
+                              <button
+                                onClick={() => addBox(sub.id)}
+                                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-3 aspect-square text-slate-400 hover:border-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                                title={t("addBox")}
+                                aria-label={t("addBox")}
+                              >
+                                <span className="material-symbols-outlined text-3xl">add</span>
+                                <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
+                              </button>
+                            </div>
+                          </SortableContext>
+                        </DndContext>
                       </div>
                     );
                   })}
