@@ -231,14 +231,23 @@ function BoxCard({
       )}
 
       {isEditingTime ? (
-        <div className="flex items-center gap-1">
+        <div
+          className="flex items-center gap-1"
+          onBlur={(event) => {
+            const next = event.relatedTarget as HTMLElement | null;
+            // Focus moving to the toggle button is handled by its own click
+            // (commit + close) — don't double-commit here.
+            if (next?.closest("[data-time-toggle]")) return;
+            // Commit only when focus truly leaves the editor group.
+            if (!event.currentTarget.contains(next)) commitTimeEdit();
+          }}
+        >
           <input
             type="number"
             min={0}
             max={9999}
             value={timeMinutes}
             onChange={(e) => setTimeMinutes(e.target.value)}
-            onBlur={commitTimeEdit}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
               if (e.key === "Escape") cancelTimeEdit();
@@ -254,7 +263,6 @@ function BoxCard({
             max={59}
             value={timeSeconds}
             onChange={(e) => setTimeSeconds(e.target.value)}
-            onBlur={commitTimeEdit}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
               if (e.key === "Escape") cancelTimeEdit();
@@ -270,11 +278,11 @@ function BoxCard({
         </span>
       )}
 
-      <div className="flex items-center gap-0.5 sm:gap-1">
+      <div className="flex flex-wrap items-center justify-center gap-0.5 sm:gap-1">
         <button
           onClick={onToggle}
           className={cn(
-            "flex items-center justify-center gap-1 px-2 sm:px-3 py-2 min-h-11 rounded-xl text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+            "flex items-center justify-center gap-1 min-w-11 min-h-11 px-0 sm:px-3 py-2 rounded-xl text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
             isRunning
               ? "bg-white/20 text-white hover:bg-white/30"
               : "bg-primary text-white hover:bg-primary/90"
@@ -289,21 +297,24 @@ function BoxCard({
         <button
           onClick={onEditTime}
           disabled={isRunning}
+          data-time-toggle
           className={cn(
-            "flex items-center justify-center p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+            "flex items-center justify-center p-1.5 sm:p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
             isRunning
               ? "text-white/30 cursor-not-allowed"
-              : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800",
+              : isEditingTime
+                ? "text-primary bg-primary/10"
+                : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800",
           )}
-          title={t("editTime")}
-          aria-label={t("editTime")}
+          title={isEditingTime ? t("done") : t("editTime")}
+          aria-label={isEditingTime ? t("done") : t("editTime")}
         >
-          <span className="material-symbols-outlined text-sm">schedule</span>
+          <span className="material-symbols-outlined text-sm">{isEditingTime ? "check" : "schedule"}</span>
         </button>
         <button
           onClick={onReset}
           className={cn(
-            "flex items-center justify-center p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+            "flex items-center justify-center p-1.5 sm:p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
             isRunning
               ? "text-white/90 hover:text-white hover:bg-white/20"
               : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800",
@@ -316,7 +327,7 @@ function BoxCard({
         <button
           onClick={onRemove}
           className={cn(
-            "flex items-center justify-center p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+            "flex items-center justify-center p-1.5 sm:p-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
             isRunning
               ? "text-white/90 hover:text-white hover:bg-white/20"
               : "text-slate-300 hover:text-red-500 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/20",
@@ -343,6 +354,8 @@ export default function CommentsView({
   const [editingBoxId, setEditingBoxId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editingTimeBoxId, setEditingTimeBoxId] = useState<string | null>(null);
+  // Mirrors editingTimeBoxId so the toggle button always sees the freshest target.
+  const editingTimeBoxIdRef = useRef<string | null>(null);
   const [timeMinutes, setTimeMinutes] = useState("0");
   const [timeSeconds, setTimeSeconds] = useState("0");
   const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<ReadonlySet<string>>(new Set());
@@ -661,20 +674,31 @@ export default function CommentsView({
   };
 
   // ── mm:ss time editor (only when the box is NOT running) ────────────────
+  // Toggle: pressing the edit-time button again (now a check mark) commits and
+  // brings the stopwatch back. A ref keeps the toggle deterministic even when
+  // a blur/commit races the click.
   const startEditTime = (box: CommentBox) => {
     if (box.runningSinceISO) return;
+    if (editingTimeBoxIdRef.current === box.id) {
+      commitTimeEdit();
+      return;
+    }
+    editingTimeBoxIdRef.current = box.id;
     setEditingTimeBoxId(box.id);
     setTimeMinutes(String(Math.floor(box.accumulatedSec / 60)));
     setTimeSeconds(String(box.accumulatedSec % 60));
   };
   const commitTimeEdit = () => {
-    if (!editingTimeBoxId) return;
+    const targetId = editingTimeBoxIdRef.current;
+    if (!targetId) return;
     const minutes = Math.min(9999, Math.max(0, Math.floor(Number(timeMinutes) || 0)));
     const seconds = Math.min(59, Math.max(0, Math.floor(Number(timeSeconds) || 0)));
-    updateCommentBox(weekId, editingTimeBoxId, { accumulatedSec: minutes * 60 + seconds });
+    updateCommentBox(weekId, targetId, { accumulatedSec: minutes * 60 + seconds });
+    editingTimeBoxIdRef.current = null;
     setEditingTimeBoxId(null);
   };
   const cancelTimeEdit = () => {
+    editingTimeBoxIdRef.current = null;
     setEditingTimeBoxId(null);
   };
 
