@@ -204,7 +204,10 @@ function BoxCard({
   cancelTimeEdit,
 }: BoxCardProps) {
   const isRunning = Boolean(box.runningSinceISO);
-  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: box.id });
+  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: box.id,
+    transition: { duration: 150, easing: "ease" },
+  });
   return (
     <div
       ref={setNodeRef}
@@ -218,8 +221,13 @@ function BoxCard({
       )}
       style={{
         ...(isRunning ? {} : { borderTopColor: color, borderTopWidth: 3 }),
+        touchAction: "manipulation",
         transform: CSS.Transform.toString(transform),
-        transition,
+        // While dragging, kill the Tailwind `transition-all` (class transitions
+        // still apply when the inline value is null) so the card is glued to
+        // the pointer instead of easing after it.
+        transition: isDragging ? "none" : transition,
+        willChange: isDragging ? "transform" : undefined,
       }}
     >
       {isRunning && (
@@ -395,7 +403,7 @@ export default function CommentsView({
 
   const t = (key: keyof typeof L.en) => pick(lang, L.en[key], L.es[key]);
 
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 350, tolerance: 6 } }));
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 4 } }), useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }));
 
   const boxes = useMemo(() => config.boxesByWeek[weekId] ?? [], [config.boxesByWeek, weekId]);
 
