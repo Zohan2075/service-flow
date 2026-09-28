@@ -9,6 +9,7 @@ import type {
   CommentCategory,
 } from "@/types/comments";
 import { createCommentBox, createCommentCategory } from "@/types/comments";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   DndContext,
   MouseSensor,
@@ -89,6 +90,8 @@ const L = {
     offline: "Offline — saved locally",
     saveError: "Save error",
     retry: "Retry",
+    cancel: "Cancel",
+    resetTimeConfirm: "Delete the recorded time of this comment?",
   },
   es: {
     title: "Comentarios",
@@ -128,6 +131,8 @@ const L = {
     offline: "Sin conexión — guardado localmente",
     saveError: "Error al guardar",
     retry: "Reintentar",
+    cancel: "Cancelar",
+    resetTimeConfirm: "¿Eliminar el tiempo registrado de este comentario?",
   },
 } as const;
 
@@ -383,6 +388,7 @@ export default function CommentsView({
   const [timeMinutes, setTimeMinutes] = useState("0");
   const [timeSeconds, setTimeSeconds] = useState("0");
   const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<ReadonlySet<string>>(new Set());
+  const [confirm, setConfirm] = useState<{ message: string; confirmLabel: string; run: () => void } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const editingRef = useRef<HTMLInputElement | null>(null);
   const updateCommentBox = useStore((s) => s.updateCommentBox);
@@ -607,9 +613,17 @@ export default function CommentsView({
 
   const handleReset = useCallback(
     (box: CommentBox) => {
-      updateCommentBox(weekId, box.id, { accumulatedSec: 0, runningSinceISO: undefined });
+      if (box.accumulatedSec <= 0 && !box.runningSinceISO) {
+        updateCommentBox(weekId, box.id, { accumulatedSec: 0, runningSinceISO: undefined });
+        return;
+      }
+      setConfirm({
+        message: t("resetTimeConfirm"),
+        confirmLabel: t("reset"),
+        run: () => updateCommentBox(weekId, box.id, { accumulatedSec: 0, runningSinceISO: undefined }),
+      });
     },
-    [updateCommentBox, weekId],
+    [updateCommentBox, weekId, t],
   );
 
   const startEditCategory = (cat: CommentCategory) => {
@@ -655,24 +669,30 @@ export default function CommentsView({
   const removeCategory = (cat: CommentCategory) => {
     const subsections = subsectionsByParent.get(cat.id) ?? [];
     const hasSubsections = subsections.length > 0;
-    if (!window.confirm(t(hasSubsections ? "removeCategoryConfirmSubs" : "removeCategoryConfirm"))) return;
-    const timestamp = Date.now();
-    // Finalize any running timer inside the category or its subsections before
-    // dropping the boxes, mirroring the stop logic in handleToggle (prevents
-    // lost run time). Deleting the root cascades to subsections + their boxes.
-    const affectedIds = new Set([cat.id, ...subsections.map((sub) => sub.id)]);
-    const boxesByWeek: Record<string, CommentBox[]> = {};
-    for (const [wk, list] of Object.entries(config.boxesByWeek)) {
-      const finalized = list.map((b) =>
-        affectedIds.has(b.categoryId) && b.runningSinceISO ? stopBoxAt(b, timestamp) : b
-      );
-      boxesByWeek[wk] = finalized.filter((b) => !affectedIds.has(b.categoryId));
-    }
-    onConfigChange({
-      ...config,
-      categories: config.categories.filter((c) => !affectedIds.has(c.id)),
-      boxesByWeek,
+    setConfirm({
+      message: t(hasSubsections ? "removeCategoryConfirmSubs" : "removeCategoryConfirm"),
+      confirmLabel: t("removeCategory"),
+      run: () => {
+        const timestamp = Date.now();
+        // Finalize any running timer inside the category or its subsections before
+        // dropping the boxes, mirroring the stop logic in handleToggle (prevents
+        // lost run time). Deleting the root cascades to subsections + their boxes.
+        const affectedIds = new Set([cat.id, ...subsections.map((sub) => sub.id)]);
+        const boxesByWeek: Record<string, CommentBox[]> = {};
+        for (const [wk, list] of Object.entries(config.boxesByWeek)) {
+          const finalized = list.map((b) =>
+            affectedIds.has(b.categoryId) && b.runningSinceISO ? stopBoxAt(b, timestamp) : b
+          );
+          boxesByWeek[wk] = finalized.filter((b) => !affectedIds.has(b.categoryId));
+        }
+        onConfigChange({
+          ...config,
+          categories: config.categories.filter((c) => !affectedIds.has(c.id)),
+          boxesByWeek,
+        });
+      },
     });
+    return;
   };
 
   const addSubsection = (parent: CommentCategory) => {
@@ -685,21 +705,27 @@ export default function CommentsView({
   };
 
   const removeSubsection = (sub: CommentCategory) => {
-    if (!window.confirm(t("removeSubsectionConfirm"))) return;
-    const timestamp = Date.now();
-    // Finalize any running timer inside the subsection before dropping its boxes.
-    const boxesByWeek: Record<string, CommentBox[]> = {};
-    for (const [wk, list] of Object.entries(config.boxesByWeek)) {
-      const finalized = list.map((b) =>
-        b.categoryId === sub.id && b.runningSinceISO ? stopBoxAt(b, timestamp) : b
-      );
-      boxesByWeek[wk] = finalized.filter((b) => b.categoryId !== sub.id);
-    }
-    onConfigChange({
-      ...config,
-      categories: config.categories.filter((c) => c.id !== sub.id),
-      boxesByWeek,
+    setConfirm({
+      message: t("removeSubsectionConfirm"),
+      confirmLabel: t("removeSubsection"),
+      run: () => {
+        const timestamp = Date.now();
+        // Finalize any running timer inside the subsection before dropping its boxes.
+        const boxesByWeek: Record<string, CommentBox[]> = {};
+        for (const [wk, list] of Object.entries(config.boxesByWeek)) {
+          const finalized = list.map((b) =>
+            b.categoryId === sub.id && b.runningSinceISO ? stopBoxAt(b, timestamp) : b
+          );
+          boxesByWeek[wk] = finalized.filter((b) => b.categoryId !== sub.id);
+        }
+        onConfigChange({
+          ...config,
+          categories: config.categories.filter((c) => c.id !== sub.id),
+          boxesByWeek,
+        });
+      },
     });
+    return;
   };
 
   const addBox = (categoryId: string) => {
@@ -710,11 +736,17 @@ export default function CommentsView({
   };
 
   const removeBox = (box: CommentBox) => {
-    if (!window.confirm(t("removeBoxConfirm"))) return;
-    const timestamp = Date.now();
-    // Finalize the run before removing the box (prevents lost run time).
-    if (box.runningSinceISO) stopBoxAt(box, timestamp);
-    setWeekBoxes(boxes.filter((b) => b.id !== box.id));
+    setConfirm({
+      message: t("removeBoxConfirm"),
+      confirmLabel: t("removeBox"),
+      run: () => {
+        const timestamp = Date.now();
+        // Finalize the run before removing the box (prevents lost run time).
+        if (box.runningSinceISO) stopBoxAt(box, timestamp);
+        setWeekBoxes(boxes.filter((b) => b.id !== box.id));
+      },
+    });
+    return;
   };
 
   // Quick "+" in the active strip: add a box to the running box's category,
@@ -1063,6 +1095,22 @@ export default function CommentsView({
         <span className="material-symbols-outlined">add</span>
         {t("addCategory")}
       </button>
+
+      {confirm && (
+        <ConfirmDialog
+          open
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          cancelLabel={t("cancel")}
+          danger
+          onConfirm={() => {
+            const run = confirm.run;
+            setConfirm(null);
+            run();
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </div>
   );
 }

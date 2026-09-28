@@ -27,6 +27,7 @@ import {
   getProgramWeekId,
   getTimerRoles,
 } from "@/types/presiding";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 /* ---------- helpers ---------- */
 
@@ -105,6 +106,7 @@ const L = {
     noSections: "No parts. Reset in Settings.", 
     weekLabel: "Week", newWeek: "New Week", deleteWeek: "Delete Week",
     deleteWeekConfirm: "Delete this week's program?",
+    deleteLogConfirm: "Delete this recorded time?",
     congrats: "Congregation Bible Study", concluding: "Concluding Comments", edit: "Edit",
     legend: "Timer legend", activeRole: "Active", assigneeRole: "Assignee / Reader", presidingRole: "Presiding / Chairman",
   },
@@ -122,6 +124,7 @@ const L = {
     noSections: "No hay partes. Restablecer en Configuración.",
     weekLabel: "Semana", newWeek: "Nueva Semana", deleteWeek: "Eliminar Semana",
     deleteWeekConfirm: "¿Eliminar el programa de esta semana?",
+    deleteLogConfirm: "¿Eliminar este tiempo registrado?",
     congrats: "Estudio Bíblico de la Congregación", concluding: "Palabras de conclusión", edit: "Editar",
     legend: "Leyenda de temporizadores", activeRole: "Activo", assigneeRole: "Asignado / Lector", presidingRole: "Presidente",
   },
@@ -422,6 +425,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
 
   // Week management
   const [showWeekMenu, setShowWeekMenu] = useState(false);
+  const [confirm, setConfirm] = useState<{ message: string; confirmLabel: string; run: () => void } | null>(null);
   const weekDisplay = isEs ? (weekRangeEs || weekRangeEn) : (weekRangeEn || weekRangeEs);
 
   const switchWeek = (weekId: string) => {
@@ -443,10 +447,16 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   };
   const deleteWeek = () => {
     if (config.weeks.length <= 1) return;
-    if (!window.confirm(lbl.deleteWeekConfirm)) return;
-    const remaining = config.weeks.filter(w => w.weekId !== activeWeek!.weekId);
-    onConfigChange({ weeks: remaining, activeWeekId: remaining[0]?.weekId ?? null });
-    setShowWeekMenu(false);
+    setConfirm({
+      message: lbl.deleteWeekConfirm,
+      confirmLabel: lbl.deleteWeek,
+      run: () => {
+        const remaining = config.weeks.filter(w => w.weekId !== activeWeek!.weekId);
+        onConfigChange({ weeks: remaining, activeWeekId: remaining[0]?.weekId ?? null });
+        setShowWeekMenu(false);
+      },
+    });
+    return;
   };
 
   // Inline editing state
@@ -463,12 +473,18 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
   };
 
   const removeSection = (id: string) => {
-    if (!window.confirm(lbl.removeConfirm)) return;
-    const walk = (list: PresidingSection[]): PresidingSection[] => list
-      .filter(s => s.id !== id)
-      .map(s => ({ ...s, subsections: s.subsections.some(sub => sub.id === id) ? s.subsections.filter(sub => sub.id !== id) : walk(s.subsections) }));
-    updateActiveWeek((w) => ({ ...w, sections: walk(w.sections) }));
-    if (inlineId === id) setInlineId(null);
+    setConfirm({
+      message: lbl.removeConfirm,
+      confirmLabel: lbl.remove,
+      run: () => {
+        const walk = (list: PresidingSection[]): PresidingSection[] => list
+          .filter(s => s.id !== id)
+          .map(s => ({ ...s, subsections: s.subsections.some(sub => sub.id === id) ? s.subsections.filter(sub => sub.id !== id) : walk(s.subsections) }));
+        updateActiveWeek((w) => ({ ...w, sections: walk(w.sections) }));
+        if (inlineId === id) setInlineId(null);
+      },
+    });
+    return;
   };
 
   const addSubsection = (parentId: string, group: SectionGroup) => {
@@ -747,6 +763,22 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
         accentColor={accentColor} sectionColorFor={sectionColorFor}
         chairmanExpectedCount={prefs.chairmanExpectedCount} chairmanExpectedSeconds={prefs.chairmanExpectedSeconds}
         onDeleteLog={onDeleteLog} onUpdateLog={onUpdateLog} />
+
+      {confirm && (
+        <ConfirmDialog
+          open
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          cancelLabel={lbl.cancel}
+          danger
+          onConfirm={() => {
+            const run = confirm.run;
+            setConfirm(null);
+            run();
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1025,6 +1057,7 @@ function SessionReview({ sessionLog, sessionHistory, activeWeekId, prefs, isEs, 
 }) {
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingLogDeleteId, setPendingLogDeleteId] = useState<string | null>(null);
   const weekSessions = sessionHistory.filter((s) => s.weekId === activeWeekId);
   const reviewEntries = weekSessions.length > 0
     ? weekSessions.flatMap((session) => session.log.map((entry) => ({ entry, date: session.date })))
@@ -1062,7 +1095,7 @@ function SessionReview({ sessionLog, sessionHistory, activeWeekId, prefs, isEs, 
                        <div className="flex flex-wrap justify-end gap-1">
                          <span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ color: chipColor, backgroundColor: chipColor + "15" }}>{roleName(entry)}</span>
                          {entry.id && onUpdateLog && <button type="button" onClick={() => setEditingId(entry.id!)} aria-label={`${lbl.editLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-primary/10 hover:text-primary"><span className="material-symbols-outlined text-base">edit</span></button>}
-                         {onDeleteLog && entry.id && <button type="button" onClick={() => onDeleteLog(entry.id!)} aria-label={`${lbl.deleteLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"><span className="material-symbols-outlined text-base">delete</span></button>}
+                         {onDeleteLog && entry.id && <button type="button" onClick={() => setPendingLogDeleteId(entry.id!)} aria-label={`${lbl.deleteLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"><span className="material-symbols-outlined text-base">delete</span></button>}
                        </div>
                        <span className="col-span-2 font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
                         <span className={cn("justify-self-end font-mono font-semibold", isOvertime ? "text-red-500" : "text-emerald-600")}>
@@ -1082,6 +1115,22 @@ function SessionReview({ sessionLog, sessionHistory, activeWeekId, prefs, isEs, 
         <span>⏱ {lbl.sessionLog} {reviewEntries.length > 0 && `(${reviewEntries.length})`}</span>
         <span className="text-slate-400 text-lg leading-none">{show ? "▲" : "▼"}</span>
       </button>
+
+      {pendingLogDeleteId && (
+        <ConfirmDialog
+          open
+          message={lbl.deleteLogConfirm}
+          confirmLabel={lbl.deleteLog}
+          cancelLabel={lbl.cancel}
+          danger
+          onConfirm={() => {
+            const id = pendingLogDeleteId;
+            setPendingLogDeleteId(null);
+            onDeleteLog?.(id);
+          }}
+          onCancel={() => setPendingLogDeleteId(null)}
+        />
+      )}
     </div>
   );
 }
