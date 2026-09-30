@@ -60,3 +60,48 @@ body {
   border: 0;
   border-radius: 9999px;
 }
+
+/* ── Design polish (motion-and-design-polish Phase 1) ─────────────────── */
+
+/* Consistent keyboard focus ring */
+:focus-visible {
+  outline: 2px solid rgb(var(--sf-primary));
+  outline-offset: 2px;
+}
+
+/* Primary-tinted text selection */
+::selection {
+  background-color: rgb(var(--sf-primary) / 0.25);
+}
+
+/* Thin, theme-aware scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.5) transparent;
+}
+.dark * {
+  scrollbar-color: rgb(71 85 105 / 0.6) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(148 163 184 / 0.5);
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgb(71 85 105 / 0.6);
+}
+
+/* Remove mobile tap highlight flash */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  transition: background-color 300ms ease, color 300ms ease;
+}

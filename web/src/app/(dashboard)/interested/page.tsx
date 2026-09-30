@@ -9,6 +9,10 @@ import { isInterestedPersonCompleted } from "@/lib/isoWeek";
 import { cn } from "@/lib/utils";
 import { useT, dateTimeString } from "@/lib/i18n";
 import toast from "react-hot-toast";
+import { motion } from "motion/react";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import OptionChip from "@/components/ui/OptionChip";
+import { StaggerGroup, fadeUp, SPRING_SOFT, EASE_OUT } from "@/components/ui/motion";
 
 const InterestedPersonModal = dynamic(
   () => import("@/components/interested/InterestedPersonModal"),
@@ -139,57 +143,44 @@ function InterestedDashboard() {
 
         {/* Segmented tabs: Active / Finished */}
         <div className="mt-3">
-          <div className="flex w-full rounded-xl bg-slate-100 dark:bg-slate-800 p-1 overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => selectTab("active")}
-              className={
-                "flex-1 whitespace-nowrap min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2.5 sm:py-2 text-sm font-semibold transition-colors min-h-11 " +
-                (tab === "active"
-                  ? "bg-surface dark:bg-slate-700 shadow-sm text-primary"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300")
-              }
-            >
-              <span className="material-symbols-outlined text-base shrink-0">person_search</span>
-              <span className="truncate">{t("interested.tabActive")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => selectTab("finished")}
-              className={
-                "flex-1 whitespace-nowrap min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2.5 sm:py-2 text-sm font-semibold transition-colors min-h-11 " +
-                (tab === "finished"
-                  ? "bg-surface dark:bg-slate-700 shadow-sm text-primary"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300")
-              }
-            >
-              <span className="material-symbols-outlined text-base shrink-0">task_alt</span>
-              <span className="truncate">{t("interested.tabFinished")}</span>
-            </button>
-          </div>
+          <SegmentedControl
+            fullWidth
+            size="lg"
+            value={tab}
+            onChange={(v) => selectTab(v)}
+            options={[
+              {
+                value: "active",
+                label: (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-base shrink-0">person_search</span>
+                    <span className="truncate">{t("interested.tabActive")}</span>
+                  </span>
+                ),
+              },
+              {
+                value: "finished",
+                label: (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-base shrink-0">task_alt</span>
+                    <span className="truncate">{t("interested.tabFinished")}</span>
+                  </span>
+                ),
+              },
+            ]}
+          />
         </div>
 
         {/* Filter tabs — horizontally scrollable on mobile */}
         <div className="mt-3 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
           <div className="flex gap-1.5 rounded-xl bg-slate-100 p-1.5 dark:bg-slate-800 min-w-max">
             {filterOptions.map((option) => (
-              <button
+              <OptionChip
                 key={option.id}
-                type="button"
+                variant="soft"
+                selected={statusFilter === option.id}
                 onClick={() => setStatusFilter(option.id)}
-                className={cn(
-                  "flex items-center justify-center gap-1.5 py-2 px-3.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-all",
-                  statusFilter === option.id
-                    ? "text-slate-900 dark:text-white shadow-sm scale-[1.02]"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
-                )}
-                style={
-                  statusFilter === option.id && option.color
-                    ? { backgroundColor: option.color + "25" }
-                    : statusFilter === option.id
-                      ? { backgroundColor: "var(--surface)" }
-                      : {}
-                }
+                className="py-2 px-3.5 text-xs rounded-lg whitespace-nowrap"
               >
                 {option.color && (
                   <span
@@ -202,7 +193,7 @@ function InterestedDashboard() {
                   />
                 )}
                 {option.label}
-              </button>
+              </OptionChip>
             ))}
           </div>
         </div>
@@ -220,17 +211,20 @@ function InterestedDashboard() {
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <StaggerGroup className="space-y-2" step={0.03}>
             {filteredPeople.map((person) => {
               const statusInfo = getStatusInfo(person.status);
               const completed = isInterestedPersonCompleted(person);
               if (tab === "finished") {
                 const lastVisitDate = person.next_visit_date ?? person.initial_conversation_date;
                 return (
-                  <div
+                  <motion.div
                     key={person.id}
                     role="button"
                     tabIndex={0}
+                    variants={fadeUp}
+                    whileHover={{ y: -2 }}
+                    transition={SPRING_SOFT}
                     onClick={() => handleOpenEdit(person)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpenEdit(person); } }}
                     className="w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 relative overflow-hidden cursor-pointer hover:border-primary/30 transition-colors"
@@ -287,12 +281,15 @@ function InterestedDashboard() {
                         <span className="material-symbols-outlined text-lg">undo</span>
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               }
               return (
-                <button
+                <motion.button
                   key={person.id}
+                  variants={fadeUp}
+                  whileHover={{ y: -2 }}
+                  transition={SPRING_SOFT}
                   onClick={() => handleOpenEdit(person)}
                   className={cn(
                     "w-full text-left bg-surface rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors relative overflow-hidden",
@@ -350,7 +347,13 @@ function InterestedDashboard() {
                       )}
                       title={completed ? t("interested.markActive") : t("interested.markCompleted")}
                     >
-                      <span className="material-symbols-outlined text-base">{completed ? "check_circle" : "radio_button_unchecked"}</span>
+                      <motion.span
+                        className="material-symbols-outlined text-base"
+                        animate={completed ? { scale: [0.8, 1.1, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.25, ease: EASE_OUT }}
+                      >
+                        {completed ? "check_circle" : "radio_button_unchecked"}
+                      </motion.span>
                     </span>
                     {person.latitude != null && person.longitude != null && (
                       <a
@@ -387,20 +390,22 @@ function InterestedDashboard() {
                       )}
                     </div>
                   </div>
-                </button>
+                </motion.button>
               );
             })}
-          </div>
+          </StaggerGroup>
         )}
       </div>
 
       {/* FAB — offset above mobile nav */}
-      <button
+      <motion.button
         onClick={handleOpenAddModal}
-        className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20 md:hidden"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.9 }}
+        className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center z-20 md:hidden"
       >
         <span className="material-symbols-outlined text-2xl">add</span>
-      </button>
+      </motion.button>
 
       {showAddModal && (
         <InterestedPersonModal onClose={() => setShowAddModal(false)} />

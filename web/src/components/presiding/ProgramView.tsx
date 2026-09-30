@@ -28,6 +28,9 @@ import {
   getTimerRoles,
 } from "@/types/presiding";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import { motion } from "motion/react";
+import { popIn, SPRING_SNAPPY } from "@/components/ui/motion";
 
 /* ---------- helpers ---------- */
 
@@ -575,7 +578,12 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
               <span className="material-symbols-outlined text-base text-slate-500 dark:text-slate-400">{showWeekMenu ? "expand_less" : "expand_more"}</span>
             </button>
             {showWeekMenu && (
-              <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-surface rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg py-1 max-h-48 overflow-y-auto">
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={popIn}
+                className="absolute top-full left-0 right-0 mt-1 z-30 origin-top bg-surface rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg py-1 max-h-48 overflow-y-auto"
+              >
                 {config.weeks.map(w => (
                   <button key={w.weekId} onClick={() => switchWeek(w.weekId)}
                     className={cn("w-full text-left px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors",
@@ -595,7 +603,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                     </button>
                   )}
                 </div>
-              </div>
+              </motion.div>
             )}
           </div>
           {/* Stop the one active timer without competing intervals. */}
@@ -829,21 +837,26 @@ function TimerButton({ role, label, elapsedSec, running, onClick, onReset, actio
   const actionLabel = running ? actionLabels.stop : elapsedSec > 0 ? actionLabels.resume : actionLabels.start;
   return (
     <div className="flex shrink-0 items-center gap-1">
-      <button type="button" onClick={(event) => { event.stopPropagation(); onClick(); }}
+      <motion.button type="button" onClick={(event) => { event.stopPropagation(); onClick(); }}
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.92 }}
+        transition={SPRING_SNAPPY}
         className={cn(
-          "size-12 sm:size-14 rounded-full flex flex-col items-center justify-center gap-0 shadow-sm transition-all active:scale-95 shrink-0",
+          "size-12 sm:size-14 rounded-full flex flex-col items-center justify-center gap-0 shadow-sm transition-colors shrink-0",
           running ? "bg-amber-500 text-black" : presiding ? "bg-violet-600" : "bg-primary",
           !running && (presiding ? "active:bg-violet-800" : "active:bg-primary/80"),
         )}
         aria-label={`${label} ${actionLabel}`} aria-pressed={running}>
         <span className="material-symbols-outlined text-xs sm:text-sm leading-none">{running ? "stop" : "play_arrow"}</span>
         <span className="font-mono text-[10px] sm:text-[11px] font-bold leading-none tabular-nums">{fmtTime(elapsedSec)}</span>
-      </button>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onReset(); }}
-        className="size-11 rounded-full border border-slate-200 bg-surface text-slate-400 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 active:scale-95 dark:border-slate-700 dark:hover:border-red-800 dark:hover:bg-red-950/20"
+      </motion.button>
+      <motion.button type="button" onClick={(event) => { event.stopPropagation(); onReset(); }}
+        whileTap={{ scale: 0.92 }}
+        transition={SPRING_SNAPPY}
+        className="size-11 rounded-full border border-slate-200 bg-surface text-slate-400 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:hover:border-red-800 dark:hover:bg-red-950/20"
         aria-label={`${actionLabels.resetUnsaved}: ${label}`} title={actionLabels.resetUnsaved}>
         <span className="material-symbols-outlined text-base leading-none">restart_alt</span>
-      </button>
+      </motion.button>
     </div>
   );
 }
@@ -903,15 +916,21 @@ function InterventionRow({
             </button>
           </div>
           {/* Field tabs */}
-          <div className="flex gap-1 flex-wrap">
-            {(["title", "assignee", "duration", "start", "end"] as const).map(f => (
-              <button key={f} onClick={() => onEditField(f)}
-                className={cn("rounded-lg px-3 py-1 text-xs font-medium transition-colors",
-                  inlineField === f ? "bg-primary text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500")}>
-                   {f === "title" ? (isEs ? "ES/EN" : "EN/ES") : f === "assignee" ? (isEs ? "Nombre" : "Name") : f === "duration" ? lbl.min : f === "start" ? (isEs ? "Inicio" : "Start") : lbl.end}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            size="sm"
+            className="flex-wrap"
+            value={inlineField ?? ""}
+            onChange={(v) => onEditField(v as "title" | "assignee" | "duration" | "start" | "end")}
+            options={(["title", "assignee", "duration", "start", "end"] as const).map((f) => ({
+              value: f,
+              label:
+                f === "title" ? (isEs ? "ES/EN" : "EN/ES")
+                : f === "assignee" ? (isEs ? "Nombre" : "Name")
+                : f === "duration" ? lbl.min
+                : f === "start" ? (isEs ? "Inicio" : "Start")
+                : lbl.end,
+            }))}
+          />
           {/* Editor */}
           {inlineField === "duration" ? (
             <input type="number" min={1} max={120} value={section.duration}

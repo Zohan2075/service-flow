@@ -10,6 +10,8 @@ import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { commentTimestamp, useT } from "@/lib/i18n";
 import toast from "react-hot-toast";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import OptionChip from "@/components/ui/OptionChip";
 
 // Fix Leaflet default marker icon for Next.js/webpack
 L.Icon.Default.mergeOptions({
@@ -316,23 +318,15 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           {/* Gender */}
           <div>
             <label className="block text-sm font-semibold mb-1">{t("interested.gender")}</label>
-            <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-              {(["male", "female", "other"] as const).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setGender(g)}
-                  className={cn(
-                    "py-2 text-sm font-semibold rounded-lg transition-colors",
-                    gender === g
-                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500"
-                  )}
-                >
-                  {g === "male" ? t("interested.male") : g === "female" ? t("interested.female") : t("interested.unspecified")}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              fullWidth
+              value={gender}
+              onChange={(v) => setGender(v)}
+              options={(["male", "female", "other"] as const).map((g) => ({
+                value: g,
+                label: g === "male" ? t("interested.male") : g === "female" ? t("interested.female") : t("interested.unspecified"),
+              }))}
+            />
           </div>
 
           {/* Age */}
@@ -353,22 +347,12 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             <label className="block text-sm font-semibold mb-1">{t("interested.status")}</label>
             <div className="flex flex-wrap gap-2">
               {statusOptions.map((opt) => (
-                <button
+                <OptionChip
                   key={opt.id}
-                  type="button"
+                  variant="solid"
+                  color={opt.color}
+                  selected={status === opt.id}
                   onClick={() => setStatus(opt.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition-all",
-                    status === opt.id
-                      ? "border-transparent text-white"
-                      : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
-                  )}
-                  style={
-                    status === opt.id
-                      ? { backgroundColor: opt.color, borderColor: opt.color }
-                      : {}
-                  }
-                  suppressHydrationWarning
                 >
                   <span
                     className="size-2 rounded-full"
@@ -376,7 +360,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
                     suppressHydrationWarning
                   />
                   {opt.name}
-                </button>
+                </OptionChip>
               ))}
             </div>
           </div>

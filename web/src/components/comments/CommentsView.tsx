@@ -10,6 +10,8 @@ import type {
 } from "@/types/comments";
 import { createCommentBox, createCommentCategory } from "@/types/comments";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { motion } from "motion/react";
+import { StaggerGroup, fadeUp, SPRING_SOFT } from "@/components/ui/motion";
 import {
   DndContext,
   MouseSensor,
@@ -234,6 +236,12 @@ function BoxCard({
         <span className="absolute top-2 right-2 material-symbols-outlined text-sm animate-pulse">timelapse</span>
       )}
 
+      <motion.div
+        variants={fadeUp}
+        whileHover={isDragging ? undefined : { y: -1 }}
+        transition={SPRING_SOFT}
+        className="flex w-full flex-col items-center justify-center gap-2"
+      >
       {isEditingName ? (
         <div className="w-full px-1">
           <input
@@ -375,6 +383,7 @@ function BoxCard({
           <span className="material-symbols-outlined text-sm">delete</span>
         </button>
       </div>
+      </motion.div>
     </div>
   );
 }
@@ -940,7 +949,7 @@ export default function CommentsView({
                   {/* Box grid */}
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleBoxDragEnd}>
                     <SortableContext items={catBoxes.map((b) => b.id)} strategy={rectSortingStrategy}>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      <StaggerGroup step={0.03} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                         {catBoxes.map((box) => (
                           <BoxCard
                             key={box.id}
@@ -979,7 +988,7 @@ export default function CommentsView({
                           <span className="material-symbols-outlined text-3xl">add</span>
                           <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
                         </button>
-                      </div>
+                      </StaggerGroup>
                     </SortableContext>
                   </DndContext>
 
@@ -1044,7 +1053,7 @@ export default function CommentsView({
                         {/* Subsection box grid */}
                         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleBoxDragEnd}>
                           <SortableContext items={subBoxes.map((b) => b.id)} strategy={rectSortingStrategy}>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                            <StaggerGroup step={0.03} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                               {subBoxes.map((box) => (
                                 <BoxCard
                                   key={box.id}
@@ -1082,7 +1091,7 @@ export default function CommentsView({
                                 <span className="material-symbols-outlined text-3xl">add</span>
                                 <span className="text-[10px] font-bold hidden sm:inline">{t("addBox")}</span>
                               </button>
-                            </div>
+                            </StaggerGroup>
                           </SortableContext>
                         </DndContext>
                       </div>

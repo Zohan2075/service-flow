@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useStore } from "@/lib/store";
+import { SPRING_SNAPPY, SPRING_SOFT } from "@/components/ui/motion";
 
 export default function MobileNavBar() {
   const pathname = usePathname();
@@ -89,14 +91,20 @@ export default function MobileNavBar() {
                   : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
               )}
             >
-              <span
-                className={cn(
-                  "flex items-center justify-center rounded-2xl px-3 py-1 transition-colors",
-                  active && "bg-primary/10"
-                )}
+              <motion.span
+                whileTap={{ scale: 0.92 }}
+                transition={SPRING_SNAPPY}
+                className="relative flex items-center justify-center rounded-2xl px-3 py-1 transition-colors"
               >
-                <span className="material-symbols-outlined text-2xl leading-none shrink-0">{icon}</span>
-              </span>
+                {active && (
+                  <motion.span
+                    layoutId="mobile-nav-active"
+                    transition={SPRING_SOFT}
+                    className="absolute inset-0 rounded-2xl bg-primary/10"
+                  />
+                )}
+                <span className="material-symbols-outlined relative z-10 text-2xl leading-none shrink-0">{icon}</span>
+              </motion.span>
               <span
                 className={cn(
                   "text-[10px] leading-none text-center max-w-full truncate px-0.5",
@@ -113,9 +121,13 @@ export default function MobileNavBar() {
             onClick={handleSignOut}
             className="flex flex-1 min-w-0 flex-col items-center justify-center gap-1 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500 px-0.5"
           >
-            <span className="flex items-center justify-center rounded-2xl px-3 py-1">
+            <motion.span
+              whileTap={{ scale: 0.92 }}
+              transition={SPRING_SNAPPY}
+              className="flex items-center justify-center rounded-2xl px-3 py-1"
+            >
               <span className="material-symbols-outlined text-2xl leading-none shrink-0">logout</span>
-            </span>
+            </motion.span>
             <span className="text-[10px] font-medium leading-none text-center max-w-full truncate px-0.5">
               {t("sidebar.signOut")}
             </span>

@@ -7,6 +7,8 @@ import { calendarDateKey, computeDurationSeconds, isPlannedEntry, isUnitsEntry }
 import type { GoalDefinition, ServiceType, TimeEntry } from "@/types/data";
 import { formatDuration, capProgressColor } from "@/lib/utils";
 import { monthShortYear, useT } from "@/lib/i18n";
+import { motion } from "motion/react";
+import { fadeUp, SPRING_SOFT, StaggerGroup } from "@/components/ui/motion";
 
 type ServiceTotals = {
   id: string;
@@ -534,32 +536,35 @@ export default function ReportsPage() {
     <>
       <header className="flex items-center justify-between px-4 md:px-6 py-4 bg-surface/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={goToPreviousViewedMonth}
             className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
             <span className="material-symbols-outlined text-base">chevron_left</span>
-          </button>
+          </motion.button>
           <h2 className="text-lg md:text-xl font-bold min-w-[10rem] text-center">
             {monthShortYear(currentDate, language)}
           </h2>
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={goToNextViewedMonth}
             className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
             <span className="material-symbols-outlined text-base">chevron_right</span>
-          </button>
-          <button
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={goToToday}
             className="ml-2 px-3 py-1.5 text-xs font-bold bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
           >
             {t("calendar.today")}
-          </button>
+          </motion.button>
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6 space-y-6 bg-canvas">
-        <div className={`grid grid-cols-2 ${monthlyTotals.units > 0 ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4`}>
+        <StaggerGroup step={0.05} className={`grid grid-cols-2 ${monthlyTotals.units > 0 ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4`}>
           {[
             { label: t("reports.totalHours"), value: formatDuration(monthlyTotals.seconds), icon: "schedule" },
             { label: t("reports.daysWorked"), value: monthlyDaysWorked.toString(), icon: "calendar_today" },
@@ -571,7 +576,7 @@ export default function ReportsPage() {
           ].map(({ label, value, icon }) => (
             <SummaryCard key={label} label={label} value={value} icon={icon} />
           ))}
-        </div>
+        </StaggerGroup>
 
         <div className="bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/30 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
           <div>
@@ -638,7 +643,7 @@ export default function ReportsPage() {
             {monthlyCombinedGoalCards.length === 0 ? (
               <p className="text-sm text-slate-400">{t("reports.noCombinedGoals")}</p>
             ) : (
-              <div className="space-y-3">
+              <StaggerGroup step={0.04} className="space-y-3">
                 {monthlyCombinedGoalCards.map((goalCard) => (
                     <CombinedGoalProgressCard
                       key={goalCard.goal.id}
@@ -652,7 +657,7 @@ export default function ReportsPage() {
                       capExceeded={monthlyCapExceeded}
                     />
                 ))}
-              </div>
+              </StaggerGroup>
             )}
           </div>
         </div>
@@ -694,12 +699,11 @@ export default function ReportsPage() {
                 </span>
               </div>
               <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(100, (shown / monthlyCapHours) * 100)}%`,
-                    backgroundColor: capProgressColor(capped, exempt, monthlyCapHours),
-                  }}
+                <motion.div
+                  className="h-full rounded-full"
+                  animate={{ width: `${Math.min(100, (shown / monthlyCapHours) * 100)}%` }}
+                  transition={SPRING_SOFT}
+                  style={{ backgroundColor: capProgressColor(capped, exempt, monthlyCapHours) }}
                 />
               </div>
             </div>
@@ -761,7 +765,7 @@ export default function ReportsPage() {
               {yearlyCombinedGoalCards.length === 0 ? (
                 <p className="text-sm text-slate-400">{t("reports.noCombinedGoals")}</p>
               ) : (
-                <div className="space-y-3">
+                <StaggerGroup step={0.04} className="space-y-3">
                   {yearlyCombinedGoalCards.map((goalCard) => (
                     <CombinedGoalProgressCard
                       key={`year-${goalCard.goal.id}`}
@@ -775,7 +779,7 @@ export default function ReportsPage() {
                       accentColor={accentColor}
                     />
                   ))}
-                </div>
+                </StaggerGroup>
               )}
             </div>
           </div>
@@ -787,7 +791,7 @@ export default function ReportsPage() {
 
 function SummaryCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/20 p-4 shadow-sm">
+    <motion.div variants={fadeUp} className="relative overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-surface via-surface to-slate-50/70 dark:to-slate-950/20 p-4 shadow-sm">
       <div className="relative flex items-center gap-2 text-slate-400 mb-3">
         <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <span className="material-symbols-outlined text-base">{icon}</span>
@@ -795,7 +799,7 @@ function SummaryCard({ label, value, icon }: { label: string; value: string; ico
         <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
       </div>
       <p className="relative text-2xl font-bold text-primary">{value}</p>
-    </div>
+    </motion.div>
   );
 }
 
@@ -840,7 +844,7 @@ function ServiceGroupSection({
         <h4 className="font-semibold text-sm text-slate-500 uppercase tracking-wide">{title}</h4>
         <p className="text-xs text-slate-400">{description}</p>
       </div>
-      <div className="space-y-3">{children}</div>
+      <StaggerGroup step={0.04} className="space-y-3">{children}</StaggerGroup>
     </section>
   );
 }
@@ -872,7 +876,7 @@ function ServiceTotalsCard({
   const showCelebration = period === "month" && Boolean(goalSummary?.isComplete);
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
+    <motion.div variants={fadeUp} className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
       {showCelebration && <GoalSeal label={t("reports.wellDone")} />}
 
       <div className="flex items-start justify-between gap-4">
@@ -942,9 +946,11 @@ function ServiceTotalsCard({
 
       {showContributionBar && serviceTotal.entryType === "time" && contributionPercent > 0 && (
         <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{ width: `${contributionPercent}%`, background: serviceTotal.color }}
+          <motion.div
+            className="h-full rounded-full"
+            animate={{ width: `${contributionPercent}%` }}
+            transition={SPRING_SOFT}
+            style={{ background: serviceTotal.color }}
           />
         </div>
       )}
@@ -956,7 +962,7 @@ function ServiceTotalsCard({
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -988,7 +994,7 @@ function CombinedGoalProgressCard({
   const showCelebration = period === "month" && Boolean(goalSummary?.isComplete);
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
+    <motion.div variants={fadeUp} className="relative overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-950/20 p-4 shadow-sm space-y-3">
       {capExceeded && <CapCelebratedRibbon label={t("reports.capMet")} />}
       {!capExceeded && showCelebration && <GoalSeal label={t("reports.wellDone")} />}
 
@@ -1059,7 +1065,7 @@ function CombinedGoalProgressCard({
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -1154,9 +1160,11 @@ function GoalMetricRow({ metric, accentColor }: { metric: GoalMetric; accentColo
 
       {metric.showBar && (
         <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{ width: `${Math.min(100, metric.percent)}%`, background: metric.fill, opacity: metric.opacity }}
+          <motion.div
+            className="h-full rounded-full"
+            animate={{ width: `${Math.min(100, metric.percent)}%` }}
+            transition={SPRING_SOFT}
+            style={{ background: metric.fill, opacity: metric.opacity }}
           />
         </div>
       )}

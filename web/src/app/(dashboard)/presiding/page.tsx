@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import ProgramView, { ActiveTimerBar, useProgramTimers } from "@/components/presiding/ProgramView";
 import CommentsView from "@/components/comments/CommentsView";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 
 export default function PresidingPage() {
   return (
@@ -113,32 +114,32 @@ function PresidingDashboard() {
     <div className="flex flex-col h-full min-h-0">
       {/* Tab bar */}
       <div className="shrink-0 px-4 pt-4 pb-2">
-        <div className="flex w-full rounded-xl bg-slate-100 dark:bg-slate-800 p-1 overflow-x-auto">
-          <button
-            onClick={() => selectTab("program")}
-            className={
-              "flex-1 whitespace-nowrap min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2.5 sm:py-2 text-sm font-semibold transition-colors min-h-11 " +
-              (tab === "program"
-                ? "bg-surface dark:bg-slate-700 shadow-sm text-primary"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300")
-            }
-          >
-            <span className="material-symbols-outlined text-base shrink-0">menu_book</span>
-            <span className="truncate">{t("nav.program")}</span>
-          </button>
-          <button
-            onClick={() => selectTab("comments")}
-            className={
-              "flex-1 whitespace-nowrap min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2.5 sm:py-2 text-sm font-semibold transition-colors min-h-11 " +
-              (tab === "comments"
-                ? "bg-surface dark:bg-slate-700 shadow-sm text-primary"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300")
-            }
-          >
-            <span className="material-symbols-outlined text-base shrink-0">forum</span>
-            <span className="truncate">{t("nav.comments")}</span>
-          </button>
-        </div>
+        <SegmentedControl
+          fullWidth
+          size="lg"
+          value={tab}
+          onChange={(v) => selectTab(v)}
+          options={[
+            {
+              value: "program",
+              label: (
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <span className="material-symbols-outlined text-base shrink-0">menu_book</span>
+                  <span className="truncate">{t("nav.program")}</span>
+                </span>
+              ),
+            },
+            {
+              value: "comments",
+              label: (
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <span className="material-symbols-outlined text-base shrink-0">forum</span>
+                  <span className="truncate">{t("nav.comments")}</span>
+                </span>
+              ),
+            },
+          ]}
+        />
       </div>
 
       {timer.activeTimer && (

@@ -25,6 +25,9 @@ import { cn, capProgressColor } from "@/lib/utils";
 import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
 import AddEntryModal from "@/components/entries/AddEntryModal";
 import toast from "react-hot-toast";
+import { motion } from "motion/react";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import { SPRING_SOFT, StaggerGroup, StaggerItem } from "@/components/ui/motion";
 
 const InterestedPersonModal = dynamic(
   () => import("@/components/interested/InterestedPersonModal"),
@@ -597,12 +600,13 @@ export default function CalendarPage() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
-              <button
+              <motion.button
+                whileTap={{ scale: 0.95 }}
                 onClick={viewMode === "monthly" ? goToPreviousViewedMonth : goToPreviousWeek}
                 className="rounded-lg p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <span className="material-symbols-outlined text-base">chevron_left</span>
-              </button>
+              </motion.button>
               <h2 className="min-w-0 flex-1 text-center text-base font-bold sm:min-w-[10rem] md:text-xl">
                 <span className="block truncate">
                   {viewMode === "monthly"
@@ -610,44 +614,32 @@ export default function CalendarPage() {
                     : `${shortDate(weekStart, language)} – ${shortDate(weekEnd, language)}`}
                 </span>
               </h2>
-              <button
+              <motion.button
+                whileTap={{ scale: 0.95 }}
                 onClick={viewMode === "monthly" ? goToNextViewedMonth : goToNextWeek}
                 className="rounded-lg p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <span className="material-symbols-outlined text-base">chevron_right</span>
-              </button>
+              </motion.button>
             </div>
             {/* View mode toggle */}
-            <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800 shrink-0">
-              <button
-                onClick={() => setViewMode("monthly")}
-                className={cn(
-                  "px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors",
-                  viewMode === "monthly"
-                    ? "bg-surface text-primary shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                )}
-              >
-                {t("calendar.month")}
-              </button>
-              <button
-                onClick={() => setViewMode("weekly")}
-                className={cn(
-                  "px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors",
-                  viewMode === "weekly"
-                    ? "bg-surface text-primary shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                )}
-              >
-                {t("calendar.week")}
-              </button>
-            </div>
-            <button
+            <SegmentedControl
+              size="sm"
+              className="shrink-0"
+              value={viewMode}
+              onChange={(v) => setViewMode(v)}
+              options={[
+                { value: "monthly", label: t("calendar.month") },
+                { value: "weekly", label: t("calendar.week") },
+              ]}
+            />
+            <motion.button
+              whileTap={{ scale: 0.95 }}
               onClick={viewMode === "monthly" ? goToday : goToCurrentWeek}
               className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
             >
               {t("calendar.today")}
-            </button>
+            </motion.button>
           </div>
 
           {/* Totals — monthly or weekly */}
@@ -728,10 +720,13 @@ export default function CalendarPage() {
                 </span>
               </div>
               <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
+                <motion.div
+                  className="h-full rounded-full"
+                  animate={{
                     width: `${Math.min(100, (((monthlyUsedHours.exempt >= monthlyCapHours ? monthlyUsedHours.exempt : monthlyUsedHours.capped + monthlyUsedHours.exempt) / monthlyCapHours) * 100))}%`,
+                  }}
+                  transition={SPRING_SOFT}
+                  style={{
                     backgroundColor: capProgressColor(monthlyUsedHours.capped, monthlyUsedHours.exempt, monthlyCapHours),
                   }}
                 />
@@ -860,17 +855,18 @@ export default function CalendarPage() {
             }
 
             return (
-              <div className="space-y-3">
+              <StaggerGroup key={format(selectedDate, "yyyy-MM-dd")} className="space-y-3" step={0.03}>
                 {selectedDayData?.entries.map((entry) => {
                   const st = serviceTypeMap[entry.service_type_id];
                   return (
-                    <EntryCard
-                      key={entry.id}
-                      entry={entry}
-                      serviceType={st}
-                      onEdit={() => setEditingEntry(entry)}
-                      onDelete={() => handleDelete(entry.id)}
-                    />
+                    <StaggerItem key={entry.id}>
+                      <EntryCard
+                        entry={entry}
+                        serviceType={st}
+                        onEdit={() => setEditingEntry(entry)}
+                        onDelete={() => handleDelete(entry.id)}
+                      />
+                    </StaggerItem>
                   );
                 })}
                 {dayPeople.map((person) => {
@@ -885,19 +881,21 @@ export default function CalendarPage() {
                     />
                   );
                 })}
-              </div>
+              </StaggerGroup>
             );
           })()}
         </div>
       </div>
 
       {/* FAB — offset above mobile nav */}
-      <button
+      <motion.button
         onClick={handleOpenAddModal}
-        className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-20 md:hidden"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.9 }}
+        className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] size-14 bg-primary text-white rounded-2xl shadow-xl flex items-center justify-center z-20 md:hidden"
       >
         <span className="material-symbols-outlined text-2xl">add</span>
-      </button>
+      </motion.button>
 
       {showAddModal && (
         <AddEntryModal
@@ -942,7 +940,10 @@ function EntryCard({
   const isPlanned = isPlannedEntry(entry);
 
   return (
-      <div className={cn(
+      <motion.div
+        whileHover={{ y: -1 }}
+        transition={SPRING_SOFT}
+        className={cn(
       "bg-surface p-4 rounded-2xl border shadow-sm",
       isPlanned
         ? "border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/10"
@@ -1015,7 +1016,7 @@ function EntryCard({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

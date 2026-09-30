@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import {
   DndContext,
   KeyboardSensor,
@@ -22,9 +23,12 @@ import { CSS } from "@dnd-kit/utilities";
 import { useStore, serializeBackup, deserializeBackup } from "@/lib/store";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useSync } from "@/lib/sync";
-import { cn } from "@/lib/utils";
+import { cn, contrastTextColor } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
 import { useInterestedNotifications } from "@/components/InterestedNotificationsProvider";
+import { SPRING_SOFT, SPRING_SNAPPY, StaggerGroup, StaggerItem } from "@/components/ui/motion";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import Switch from "@/components/ui/Switch";
 import { dateTimeString, monthShortYear, useT } from "@/lib/i18n";
 import type { GoalDefinition, ServiceType, InterestedStatusConfig, NotificationSound } from "@/types/data";
 import toast from "react-hot-toast";
@@ -514,22 +518,26 @@ export default function SettingsPage() {
               <h3 className="text-lg font-bold">{t("settings.organizedSettingsTitle")}</h3>
               <p className="text-sm text-slate-500">{t("settings.organizedSettingsDesc")}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <StaggerGroup step={0.03} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {settingsCategories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => setActiveCategory(category.id)}
-                  className="flex min-h-16 items-center gap-3 rounded-2xl border border-slate-200 px-4 py-4 text-left transition-all hover:border-primary/40 hover:bg-slate-50 active:scale-[0.99] dark:border-slate-800 dark:hover:border-primary/40 dark:hover:bg-slate-900/40"
-                >
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <span className="material-symbols-outlined text-2xl">{category.icon}</span>
-                  </span>
-                  <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{category.label}</span>
-                  <span className="material-symbols-outlined text-slate-300 dark:text-slate-600">chevron_right</span>
-                </button>
+                <StaggerItem key={category.id}>
+                  <motion.button
+                    type="button"
+                    onClick={() => setActiveCategory(category.id)}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.99 }}
+                    transition={SPRING_SOFT}
+                    className="flex min-h-16 w-full items-center gap-3 rounded-2xl border border-slate-200 px-4 py-4 text-left transition-colors hover:border-primary/40 hover:bg-slate-50 dark:border-slate-800 dark:hover:border-primary/40 dark:hover:bg-slate-900/40"
+                  >
+                    <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <span className="material-symbols-outlined text-2xl">{category.icon}</span>
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{category.label}</span>
+                    <span className="material-symbols-outlined text-slate-300 dark:text-slate-600">chevron_right</span>
+                  </motion.button>
+                </StaggerItem>
               ))}
-            </div>
+            </StaggerGroup>
           </div>
         ) : null}
 
@@ -680,39 +688,51 @@ export default function SettingsPage() {
           {/* Theme preset */}
           <div className="mb-5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.theme")}</p>
-            <div className="grid grid-cols-1 gap-2 md:gap-3 sm:grid-cols-3">
-              {(["light", "dark", "system"] as const).map((th) => (
-                <button
-                  key={th}
-                  onClick={() => setTheme(th)}
-                  className={cn(
-                    "flex-1 py-2.5 md:py-3 rounded-xl text-sm font-semibold capitalize border-2 transition-all",
-                    theme === th
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
-                  )}
-                >
-                  {th === "light" ? t("settings.light") : th === "dark" ? t("settings.dark") : t("settings.system")}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              fullWidth
+              options={[
+                { value: "light", label: t("settings.light") },
+                { value: "dark", label: t("settings.dark") },
+                { value: "system", label: t("settings.system") },
+              ]}
+              value={theme}
+              onChange={(value) => setTheme(value)}
+              ariaLabel={t("settings.theme")}
+            />
           </div>
 
           {/* Accent color */}
           <div className="mb-5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.accentColor")}</p>
             <div className="flex gap-2 flex-wrap">
-              {ACCENT_PRESETS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => updateSettings({ accentColor: c })}
-                  className={cn(
-                    "size-8 md:size-9 rounded-full border-2 transition-all",
-                    settings.accentColor === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent"
-                  )}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
+              {ACCENT_PRESETS.map((c) => {
+                const selected = settings.accentColor === c;
+                return (
+                  <motion.button
+                    key={c}
+                    onClick={() => updateSettings({ accentColor: c })}
+                    aria-pressed={selected}
+                    whileTap={{ scale: 0.9 }}
+                    animate={{ scale: selected ? 1.1 : 1 }}
+                    transition={SPRING_SNAPPY}
+                    className={cn(
+                      "relative flex size-8 md:size-9 items-center justify-center rounded-full border-2 transition-colors",
+                      selected ? "border-slate-900 dark:border-white" : "border-transparent"
+                    )}
+                    style={{ backgroundColor: c }}
+                  >
+                    <motion.span
+                      initial={false}
+                      animate={{ scale: selected ? 1 : 0, opacity: selected ? 1 : 0 }}
+                      transition={SPRING_SNAPPY}
+                      className="material-symbols-outlined text-[14px] leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                      style={{ color: contrastTextColor(c) }}
+                    >
+                      check
+                    </motion.span>
+                  </motion.button>
+                );
+              })}
               <label
                 className="size-8 md:size-9 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
                 title="Custom color"
@@ -745,18 +765,35 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="flex gap-2 flex-wrap">
-              {surfacePresets.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => updateActiveSurface(c)}
-                  className={cn(
-                    "size-8 md:size-9 rounded-lg border-2 transition-all",
-                    activeSurface === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
-                  )}
-                  style={{ backgroundColor: c }}
-                  suppressHydrationWarning
-                />
-              ))}
+              {surfacePresets.map((c) => {
+                const selected = activeSurface === c;
+                return (
+                  <motion.button
+                    key={c}
+                    onClick={() => updateActiveSurface(c)}
+                    aria-pressed={selected}
+                    whileTap={{ scale: 0.9 }}
+                    animate={{ scale: selected ? 1.1 : 1 }}
+                    transition={SPRING_SNAPPY}
+                    className={cn(
+                      "relative flex size-8 md:size-9 items-center justify-center rounded-lg border-2 transition-colors",
+                      selected ? "border-primary" : "border-slate-200 dark:border-slate-700"
+                    )}
+                    style={{ backgroundColor: c }}
+                    suppressHydrationWarning
+                  >
+                    <motion.span
+                      initial={false}
+                      animate={{ scale: selected ? 1 : 0, opacity: selected ? 1 : 0 }}
+                      transition={SPRING_SNAPPY}
+                      className="material-symbols-outlined text-[14px] leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                      style={{ color: contrastTextColor(c) }}
+                    >
+                      check
+                    </motion.span>
+                  </motion.button>
+                );
+              })}
               <label
                 className="size-8 md:size-9 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
                 title="Custom color"
@@ -789,18 +826,35 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="flex gap-2 flex-wrap">
-              {surfacePresets.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => updateActiveBackground(c)}
-                  className={cn(
-                    "size-8 md:size-9 rounded-lg border-2 transition-all",
-                    activeBackground === c ? "border-primary scale-110" : "border-slate-200 dark:border-slate-700"
-                  )}
-                  style={{ backgroundColor: c }}
-                  suppressHydrationWarning
-                />
-              ))}
+              {surfacePresets.map((c) => {
+                const selected = activeBackground === c;
+                return (
+                  <motion.button
+                    key={c}
+                    onClick={() => updateActiveBackground(c)}
+                    aria-pressed={selected}
+                    whileTap={{ scale: 0.9 }}
+                    animate={{ scale: selected ? 1.1 : 1 }}
+                    transition={SPRING_SNAPPY}
+                    className={cn(
+                      "relative flex size-8 md:size-9 items-center justify-center rounded-lg border-2 transition-colors",
+                      selected ? "border-primary" : "border-slate-200 dark:border-slate-700"
+                    )}
+                    style={{ backgroundColor: c }}
+                    suppressHydrationWarning
+                  >
+                    <motion.span
+                      initial={false}
+                      animate={{ scale: selected ? 1 : 0, opacity: selected ? 1 : 0 }}
+                      transition={SPRING_SNAPPY}
+                      className="material-symbols-outlined text-[14px] leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                      style={{ color: contrastTextColor(c) }}
+                    >
+                      check
+                    </motion.span>
+                  </motion.button>
+                );
+              })}
               <label
                 className="size-8 md:size-9 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
                 title="Custom color"
@@ -830,9 +884,12 @@ export default function SettingsPage() {
                 <p className="text-sm font-semibold">{t("settings.notificationsEnabled")}</p>
                 <p className="text-xs text-slate-400">{t("settings.notificationsEnabledDesc")}</p>
               </div>
-              <button type="button" onClick={() => settings.notifications.enabled ? void notificationApi.disableNotifications() : void notificationApi.enableNotifications()} disabled={notificationApi.busy} aria-pressed={settings.notifications.enabled} className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50", settings.notifications.enabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700")}>
-                <div className={cn("absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform", settings.notifications.enabled ? "translate-x-[1.375rem]" : "translate-x-0.5")} />
-              </button>
+              <Switch
+                checked={settings.notifications.enabled}
+                onChange={(checked) => (checked ? void notificationApi.enableNotifications() : void notificationApi.disableNotifications())}
+                disabled={notificationApi.busy}
+                ariaLabel={t("settings.notificationsEnabled")}
+              />
             </div>
 
             <div className={cn("rounded-2xl border px-4 py-4", notificationApi.supported ? "border-slate-100 dark:border-slate-800" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20")}>
@@ -892,9 +949,11 @@ export default function SettingsPage() {
                   <p className="text-sm font-semibold">{t("settings.notificationPreview")}</p>
                   <p className="text-xs text-slate-400">{t("settings.notificationPreviewDesc")}</p>
                 </div>
-                <button type="button" onClick={() => updateSettings({ notifications: { ...settings.notifications, showPreview: !settings.notifications.showPreview } })} aria-pressed={settings.notifications.showPreview} className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors", settings.notifications.showPreview ? "bg-primary" : "bg-slate-300 dark:bg-slate-700")}>
-                  <div className={cn("absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform", settings.notifications.showPreview ? "translate-x-[1.375rem]" : "translate-x-0.5")} />
-                </button>
+                <Switch
+                  checked={settings.notifications.showPreview}
+                  onChange={(checked) => updateSettings({ notifications: { ...settings.notifications, showPreview: checked } })}
+                  ariaLabel={t("settings.notificationPreview")}
+                />
               </div>
             </div>
 
@@ -909,22 +968,16 @@ export default function SettingsPage() {
         <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "language" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.language")}</h3>
           <p className="mb-4 text-sm text-slate-500">{t("settings.languageDesc")}</p>
-          <div className="grid grid-cols-1 gap-2 md:gap-3 sm:grid-cols-2">
-            {(["en", "es"] as const).map((lng) => (
-              <button
-                key={lng}
-                onClick={() => setLanguage(lng)}
-                className={cn(
-                  "flex-1 py-2.5 md:py-3 rounded-xl text-sm font-semibold border-2 transition-all",
-                  language === lng
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
-                )}
-              >
-                {lng === "en" ? t("settings.langEnglish") : t("settings.langSpanish")}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            fullWidth
+            options={[
+              { value: "en", label: t("settings.langEnglish") },
+              { value: "es", label: t("settings.langSpanish") },
+            ]}
+            value={language}
+            onChange={(value) => setLanguage(value)}
+            ariaLabel={t("settings.language")}
+          />
         </div>
 
         {/* ── Entry Defaults ───────────────────────────────────────────────── */}
@@ -936,47 +989,24 @@ export default function SettingsPage() {
                 <p className="text-sm font-semibold">{t("settings.planMode")}</p>
                 <p className="text-xs text-slate-400">{t("settings.planModeDesc")}</p>
               </div>
-              <button
-                onClick={() => updateSettings({ planModeEnabled: !settings.planModeEnabled })}
-                className={cn(
-                  "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-                  settings.planModeEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
-                )}
-              >
-                <div
-                  className={cn(
-                    "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
-                    settings.planModeEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                  )}
-                />
-              </button>
+              <Switch
+                checked={settings.planModeEnabled}
+                onChange={(checked) => updateSettings({ planModeEnabled: checked })}
+                ariaLabel={t("settings.planMode")}
+              />
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.defaultMode")}</p>
-              <div className="grid grid-cols-1 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 sm:grid-cols-2">
-                <button
-                  onClick={() => updateSettings({ defaultEntryMode: "duration" })}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                    settings.defaultEntryMode === "duration"
-                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500"
-                  )}
-                >
-                  {t("entry.manualDuration")}
-                </button>
-                <button
-                  onClick={() => updateSettings({ defaultEntryMode: "range" })}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                    settings.defaultEntryMode === "range"
-                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500"
-                  )}
-                >
-                  {t("entry.startEnd")}
-                </button>
-              </div>
+              <SegmentedControl
+                fullWidth
+                options={[
+                  { value: "duration", label: t("entry.manualDuration") },
+                  { value: "range", label: t("entry.startEnd") },
+                ]}
+                value={settings.defaultEntryMode}
+                onChange={(value) => updateSettings({ defaultEntryMode: value })}
+                ariaLabel={t("settings.defaultMode")}
+              />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
@@ -1008,30 +1038,16 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("settings.weekLayout")}</p>
-              <div className="grid grid-cols-1 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 sm:grid-cols-2">
-                <button
-                  onClick={() => updateSettings({ weekStartsOn: "sunday" })}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                    settings.weekStartsOn === "sunday"
-                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500"
-                  )}
-                >
-                  {t("settings.sunSat")}
-                </button>
-                <button
-                  onClick={() => updateSettings({ weekStartsOn: "monday" })}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                    settings.weekStartsOn === "monday"
-                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500"
-                  )}
-                >
-                  {t("settings.monSun")}
-                </button>
-              </div>
+              <SegmentedControl
+                fullWidth
+                options={[
+                  { value: "sunday", label: t("settings.sunSat") },
+                  { value: "monday", label: t("settings.monSun") },
+                ]}
+                value={settings.weekStartsOn}
+                onChange={(value) => updateSettings({ weekStartsOn: value })}
+                ariaLabel={t("settings.weekLayout")}
+              />
               <p className="mt-2 text-xs text-slate-400">
                 {t("settings.weekNote")}
               </p>
@@ -1047,18 +1063,11 @@ export default function SettingsPage() {
               <p className="text-sm font-semibold">{t("settings.showYearTotals")}</p>
               <p className="text-xs text-slate-400">{t("settings.showYearTotalsDesc")}</p>
             </div>
-            <button
-              onClick={() => updateSettings({ showYearTotals: !settings.showYearTotals })}
-              className={cn(
-                "relative w-11 h-6 rounded-full transition-colors shrink-0",
-                settings.showYearTotals ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
-              )}
-            >
-              <div className={cn(
-                "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
-                settings.showYearTotals ? "translate-x-[1.375rem]" : "translate-x-0.5"
-              )} />
-            </button>
+            <Switch
+              checked={settings.showYearTotals}
+              onChange={(checked) => updateSettings({ showYearTotals: checked })}
+              ariaLabel={t("settings.showYearTotals")}
+            />
           </div>
 
           {/* Monthly Hour Cap */}
@@ -1068,18 +1077,11 @@ export default function SettingsPage() {
                 <p className="text-sm font-semibold">{t("settings.monthlyCap")}</p>
                 <p className="text-xs text-slate-400">{t("settings.monthlyCapDesc")}</p>
               </div>
-              <button
-                onClick={() => updateSettings({ monthlyCapEnabled: !settings.monthlyCapEnabled })}
-                className={cn(
-                  "relative w-11 h-6 rounded-full transition-colors shrink-0",
-                  settings.monthlyCapEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
-                )}
-              >
-                <div className={cn(
-                  "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
-                  settings.monthlyCapEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                )} />
-              </button>
+              <Switch
+                checked={settings.monthlyCapEnabled}
+                onChange={(checked) => updateSettings({ monthlyCapEnabled: checked })}
+                ariaLabel={t("settings.monthlyCap")}
+              />
             </div>
             {settings.monthlyCapEnabled && (
               <div>
@@ -1222,32 +1224,16 @@ export default function SettingsPage() {
 
             <div>
               <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.serviceEntryType")}</p>
-              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-                <button
-                  type="button"
-                  onClick={() => setNewEntryType("time")}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                    newEntryType === "time"
-                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500"
-                  )}
-                >
-                  {t("settings.entryTypeTime")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNewEntryType("units")}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                    newEntryType === "units"
-                      ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500"
-                  )}
-                >
-                  {t("settings.entryTypeUnits")}
-                </button>
-              </div>
+              <SegmentedControl
+                fullWidth
+                options={[
+                  { value: "time", label: t("settings.entryTypeTime") },
+                  { value: "units", label: t("settings.entryTypeUnits") },
+                ]}
+                value={newEntryType}
+                onChange={(value) => setNewEntryType(value)}
+                ariaLabel={t("settings.serviceEntryType")}
+              />
             </div>
 
             {/* Color picker */}
@@ -1354,20 +1340,11 @@ export default function SettingsPage() {
                <p className="text-sm font-semibold">{t("settings.interestedTimestampShortcut")}</p>
                <p className="text-xs text-slate-400">{t("settings.interestedTimestampShortcutDesc")}</p>
              </div>
-             <button
-               type="button"
-               onClick={() => updateSettings({ interestedCommentsTimestampShortcutEnabled: !settings.interestedCommentsTimestampShortcutEnabled })}
-               aria-pressed={settings.interestedCommentsTimestampShortcutEnabled}
-               className={cn(
-                 "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-                 settings.interestedCommentsTimestampShortcutEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
-               )}
-             >
-               <div className={cn(
-                 "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
-                 settings.interestedCommentsTimestampShortcutEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
-               )} />
-             </button>
+             <Switch
+               checked={settings.interestedCommentsTimestampShortcutEnabled}
+               onChange={(checked) => updateSettings({ interestedCommentsTimestampShortcutEnabled: checked })}
+               ariaLabel={t("settings.interestedTimestampShortcut")}
+             />
            </div>
 
            <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 mb-6 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
@@ -1449,24 +1426,17 @@ export default function SettingsPage() {
 
           <div className="space-y-3">
             {/* Enable/Disable toggle */}
-            <button
-              onClick={() => updateSettings({ programEnabled: !settings.programEnabled })}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left"
-            >
+            <div className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
               <div>
                 <p className="text-sm font-semibold">{t("settings.enableProgram")}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{t("settings.enableProgramDesc")}</p>
               </div>
-              <div className={cn(
-                "relative h-6 w-11 rounded-full transition-colors",
-                settings.programEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"
-              )}>
-                <div className={cn(
-                  "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
-                  settings.programEnabled ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                )} />
-              </div>
-            </button>
+              <Switch
+                checked={settings.programEnabled}
+                onChange={(checked) => updateSettings({ programEnabled: checked })}
+                ariaLabel={t("settings.enableProgram")}
+              />
+            </div>
 
             {/* Chairman / president expected count */}
             <div className="pt-2">
@@ -1610,8 +1580,10 @@ export default function SettingsPage() {
         <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-slate-200 dark:border-slate-800 shadow-sm", activeCategory !== "data" && "hidden")}>
           <h3 className="font-bold text-lg mb-4">{t("settings.dataManagement")}</h3>
           <div className="space-y-3">
-            <button
+            <motion.button
               onClick={handleExport}
+              whileTap={{ scale: 0.99 }}
+              transition={SPRING_SNAPPY}
               className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left"
             >
               <span className="material-symbols-outlined text-primary">download</span>
@@ -1619,10 +1591,12 @@ export default function SettingsPage() {
                 <p className="text-sm font-semibold">{t("settings.exportJson")}</p>
                 <p className="text-xs text-slate-400 truncate">{t("settings.exportDesc")}</p>
               </div>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={handleImport}
+              whileTap={{ scale: 0.99 }}
+              transition={SPRING_SNAPPY}
               className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left"
             >
               <span className="material-symbols-outlined text-primary">upload</span>
@@ -1630,7 +1604,7 @@ export default function SettingsPage() {
                 <p className="text-sm font-semibold">{t("settings.importJson")}</p>
                 <p className="text-xs text-slate-400 truncate">{t("settings.importDesc")}</p>
               </div>
-            </button>
+            </motion.button>
           </div>
         </div>
 
@@ -1676,20 +1650,11 @@ export default function SettingsPage() {
                 <p className="text-sm font-semibold">{t("settings.autoSync")}</p>
                 <p className="text-xs text-slate-400">{t("settings.autoSyncDesc")}</p>
               </div>
-              <button
-                onClick={() => updateSettings({ autoSync: !settings.autoSync })}
-                className={cn(
-                  "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-                  settings.autoSync ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
-                )}
-              >
-                <div
-                  className={cn(
-                    "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
-                    settings.autoSync ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                  )}
-                />
-              </button>
+              <Switch
+                checked={settings.autoSync}
+                onChange={(checked) => updateSettings({ autoSync: checked })}
+                ariaLabel={t("settings.autoSync")}
+              />
             </div>
 
             <div className="space-y-4">
@@ -1728,9 +1693,11 @@ export default function SettingsPage() {
               {/* Manual sync */}
               <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("settings.manual")}</p>
-                <button
+                <motion.button
                   onClick={handleSyncNow}
                   disabled={isDriveBusy || !isConfigured || !user}
+                  whileTap={{ scale: 0.99 }}
+                  transition={SPRING_SNAPPY}
                   className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-green-500">cloud_upload</span>
@@ -1738,7 +1705,7 @@ export default function SettingsPage() {
                     <p className="text-sm font-semibold">Sync Now</p>
                     <p className="text-xs text-slate-400 truncate">Push local changes to Supabase</p>
                   </div>
-                </button>
+                </motion.button>
               </div>
             </div>
           </div>
@@ -1748,8 +1715,10 @@ export default function SettingsPage() {
         <div className={cn("bg-surface rounded-2xl p-4 md:p-6 border border-red-200 dark:border-red-900/50 shadow-sm", activeCategory !== "danger" && "hidden")}>
           <h3 className="font-bold text-lg mb-4 text-red-500">{t("settings.dangerZone")}</h3>
           {!showResetConfirm ? (
-            <button
+            <motion.button
               onClick={() => setShowResetConfirm(true)}
+              whileTap={{ scale: 0.99 }}
+              transition={SPRING_SNAPPY}
               className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border-2 border-red-200 dark:border-red-900/50 font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-red-600 dark:text-red-400"
             >
               <span className="material-symbols-outlined">delete_forever</span>
@@ -1757,25 +1726,29 @@ export default function SettingsPage() {
                 <p className="text-sm font-semibold">{t("settings.resetAll")}</p>
                 <p className="text-xs opacity-70 truncate">{t("settings.resetAllDesc")}</p>
               </div>
-            </button>
+            </motion.button>
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-red-500 font-medium">
                 {t("settings.resetConfirm")}
               </p>
               <div className="flex gap-3">
-                <button
+                <motion.button
                   onClick={() => setShowResetConfirm(false)}
+                  whileTap={{ scale: 0.99 }}
+                  transition={SPRING_SNAPPY}
                   className="flex-1 py-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
                   {t("settings.cancel")}
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   onClick={handleReset}
+                  whileTap={{ scale: 0.99 }}
+                  transition={SPRING_SNAPPY}
                   className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors"
                 >
                   {t("settings.deleteEverything")}
-                </button>
+                </motion.button>
               </div>
             </div>
           )}
@@ -2361,32 +2334,16 @@ function SortableServiceTypeItem({
           />
           <div>
             <p className="text-xs font-semibold text-slate-500 mb-2">{t("settings.serviceEntryType")}</p>
-            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-              <button
-                type="button"
-                onClick={() => setEditEntryType("time")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                  editEntryType === "time"
-                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500"
-                )}
-              >
-                {t("settings.entryTypeTime")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditEntryType("units")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                  editEntryType === "units"
-                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500"
-                )}
-              >
-                {t("settings.entryTypeUnits")}
-              </button>
-            </div>
+            <SegmentedControl
+              fullWidth
+              options={[
+                { value: "time", label: t("settings.entryTypeTime") },
+                { value: "units", label: t("settings.entryTypeUnits") },
+              ]}
+              value={editEntryType}
+              onChange={(value) => setEditEntryType(value)}
+              ariaLabel={t("settings.serviceEntryType")}
+            />
           </div>
           <ColorPickerField
             label={t("settings.color")}
@@ -2415,19 +2372,12 @@ function SortableServiceTypeItem({
           </div>
           <div className="flex items-center justify-between gap-3 py-1">
             <p className="text-xs font-semibold text-slate-500">{t("settings.capExempt")}</p>
-            <button
-              type="button"
-              onClick={() => setEditCapExempt(!editCapExempt)}
-              className={cn(
-                "relative w-11 h-6 rounded-full transition-colors shrink-0",
-                editCapExempt ? "bg-green-500" : "bg-slate-300 dark:bg-slate-700"
-              )}
-            >
-              <div className={cn(
-                "absolute top-0.5 size-5 bg-white rounded-full shadow transition-transform",
-                editCapExempt ? "translate-x-[1.375rem]" : "translate-x-0.5"
-              )} />
-            </button>
+            <Switch
+              checked={editCapExempt}
+              onChange={(checked) => setEditCapExempt(checked)}
+              checkedClassName="bg-green-500"
+              ariaLabel={t("settings.capExempt")}
+            />
           </div>
           <div className="flex gap-2">
             <button

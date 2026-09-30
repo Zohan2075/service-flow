@@ -8,6 +8,10 @@ import { computeDurationSeconds, isPlannedEntry, isUnitsEntry } from "@/types/da
 import { cn } from "@/lib/utils";
 import { longDate, useT } from "@/lib/i18n";
 import toast from "react-hot-toast";
+import { motion } from "motion/react";
+import OptionChip from "@/components/ui/OptionChip";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import Switch from "@/components/ui/Switch";
 
 type EntryType = "time" | "units";
 type TimeMode = "range" | "duration";
@@ -311,25 +315,16 @@ export default function AddEntryModal({
             <label className="block text-sm font-semibold mb-1">{t("entry.serviceType")} *</label>
             <div className="flex flex-wrap gap-2">
               {compatibleServiceTypes.map((st) => (
-                <button
+                <OptionChip
                   key={st.id}
-                  type="button"
+                  selected={serviceTypeId === st.id}
                   onClick={() => setServiceTypeId(st.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition-all",
-                    serviceTypeId === st.id
-                      ? "border-transparent text-white"
-                      : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
-                  )}
-                  style={
-                    serviceTypeId === st.id
-                      ? { backgroundColor: st.color, borderColor: st.color }
-                      : {}
-                  }
+                  variant="solid"
+                  color={st.color}
+                  icon={st.icon}
                 >
-                  <span className="material-symbols-outlined text-sm">{st.icon}</span>
                   {st.name}
-                </button>
+                </OptionChip>
               ))}
             </div>
           </div>
@@ -366,21 +361,12 @@ export default function AddEntryModal({
                   <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">{t("entry.planMode")}</p>
                   <p className="text-xs text-amber-700/80 dark:text-amber-200/70">{t("entry.planModeDesc")}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsPlanned((currentValue) => !currentValue)}
-                  className={cn(
-                    "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-                    isPlanned ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-700"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
-                      isPlanned ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                    )}
-                  />
-                </button>
+                <Switch
+                  checked={isPlanned}
+                  onChange={setIsPlanned}
+                  ariaLabel={t("entry.planMode")}
+                  checkedClassName="bg-amber-500"
+                />
               </div>
             </div>
           )}
@@ -389,32 +375,16 @@ export default function AddEntryModal({
           {effectiveEntryType === "time" && (
           <div>
             <label className="block text-sm font-semibold mb-1">{t("entry.timeSubMode")}</label>
-            <div className="grid grid-cols-1 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setMode("duration")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                  mode === "duration"
-                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500"
-                )}
-              >
-                {t("entry.manualDuration")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("range")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                  mode === "range"
-                    ? "bg-surface text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500"
-                )}
-              >
-                {t("entry.startEnd")}
-              </button>
-            </div>
+            <SegmentedControl
+              fullWidth
+              ariaLabel={t("entry.timeSubMode")}
+              options={[
+                { value: "duration", label: t("entry.manualDuration") },
+                { value: "range", label: t("entry.startEnd") },
+              ]}
+              value={mode}
+              onChange={(v) => setMode(v)}
+            />
           </div>
           )}
 
@@ -514,13 +484,14 @@ export default function AddEntryModal({
             />
           </div>
 
-          <button
+          <motion.button
             type="submit"
             disabled={saving}
-            className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60"
+            whileTap={{ scale: 0.98 }}
+            className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-60"
           >
             {saving ? t("entry.saving") : isEditing ? t("entry.update") : t("entry.add")}
-          </button>
+          </motion.button>
         </form>
       </div>
     </div>

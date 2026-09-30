@@ -3,11 +3,19 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import { useT } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import { SPRING_SNAPPY, SPRING_SOFT } from "@/components/ui/motion";
+
+const THEME_OPTIONS = (["light", "dark", "system"] as const).map((value) => ({
+  value,
+  label: <span className="capitalize">{value}</span>,
+}));
 
 export default function Sidebar() {
   const pathname = usePathname() ?? "";
@@ -58,14 +66,29 @@ export default function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-colors",
+                "relative flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-colors",
                 active
-                  ? "text-primary bg-primary/10"
+                  ? "text-primary"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               )}
             >
-              <span className="material-symbols-outlined">{icon}</span>
-              {labelKey === "nav.interested" && interestedNavLabel ? interestedNavLabel : t(labelKey)}
+              {active && (
+                <motion.span
+                  layoutId="sidebar-active-indicator"
+                  transition={SPRING_SOFT}
+                  className="absolute inset-0 rounded-xl bg-primary/10"
+                />
+              )}
+              <motion.span
+                whileHover={{ scale: 1.05 }}
+                transition={SPRING_SNAPPY}
+                className="material-symbols-outlined relative z-10"
+              >
+                {icon}
+              </motion.span>
+              <span className="relative z-10">
+                {labelKey === "nav.interested" && interestedNavLabel ? interestedNavLabel : t(labelKey)}
+              </span>
             </Link>
           );
         })}
@@ -73,21 +96,15 @@ export default function Sidebar() {
 
       {/* Theme toggle + User */}
       <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
-        <div className="flex items-center gap-2 justify-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1" suppressHydrationWarning>
-          {(["light", "dark", "system"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTheme(t)}
-              className={cn(
-                "flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors",
-                theme === t
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              )}
-            >
-              {t}
-            </button>
-          ))}
+        <div suppressHydrationWarning>
+          <SegmentedControl
+            options={THEME_OPTIONS}
+            value={theme}
+            onChange={(value) => setTheme(value)}
+            size="sm"
+            fullWidth
+            ariaLabel={t("settings.theme")}
+          />
         </div>
 
         {user ? (
@@ -112,13 +129,15 @@ export default function Sidebar() {
                 {user.email ?? ""}
               </p>
             </div>
-            <button
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              transition={SPRING_SNAPPY}
               onClick={handleSignOut}
               className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               title="Sign out"
             >
               <span className="material-symbols-outlined text-base">logout</span>
-            </button>
+            </motion.button>
           </div>
         ) : (
           <Link
