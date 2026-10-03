@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents, CircleMarker } from "react-leaflet";
 import { useEffect, useRef, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -271,7 +272,9 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
     onClose();
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-[60]"
       style={{ top: "var(--app-vv-top, 0px)", height: "var(--app-vv-height, 100dvh)" }}
@@ -659,6 +662,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

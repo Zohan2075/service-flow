@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { format, startOfMonth } from "date-fns";
 import { useStore } from "@/lib/store";
 import type { TimeEntry } from "@/types/data";
@@ -277,7 +278,9 @@ export default function AddEntryModal({
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-[60]"
       style={{ top: "var(--app-vv-top, 0px)", height: "var(--app-vv-height, 100dvh)" }}
@@ -499,6 +502,7 @@ export default function AddEntryModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

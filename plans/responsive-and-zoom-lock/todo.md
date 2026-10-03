@@ -28,7 +28,8 @@ updated: "2026-09-30"
 
 - [x] Phase 1: Modal pinned footers + zoom lock <!-- completed: 2026-09-30 -->
 - [x] Phase 2: Visual viewport anchoring (save button regression fix) <!-- completed: 2026-09-30 --> — `ViewportSync` CSS vars, overlay sizing, safe-area calc fix, `interactiveWidget`
-- [x] Verification: type-check + build + route smoke + live puppeteer (button visible at 640px and shrunk 380px viewport) <!-- completed: 2026-09-30 -->
+- [x] Phase 3: Fixed-positioning containing block fix (root cause) <!-- completed: 2026-09-30 --> — removed transform fill residue; portaled AddEntryModal/InterestedPersonModal/ConfirmDialog to body; verified Add + Update flows live
+- [x] Verification: type-check + build + route smoke + live puppeteer (Add Entry, Update Entry, 380px keyboard simulation) <!-- completed: 2026-09-30 -->
 
 ### Blocked
 

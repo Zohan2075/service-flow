@@ -73,6 +73,7 @@ Fix small-viewport usability problems reported by the user:
 |-------|-------|-------|--------|
 | 1 | Modal footers + zoom lock | Modal restructure, ZoomLock, viewport/CSS | completed |
 | 2 | Visual viewport anchoring | Fix save button hidden by mobile browser UI/keyboard | completed |
+| 3 | Fixed-positioning containing block fix | Transform residue + modals portaled to body (root cause) | completed |
 
 ## Risks & Open Questions
 
@@ -90,3 +91,4 @@ Fix small-viewport usability problems reported by the user:
 - Plan created from user report (save button visibility + zoom lock request).
 - Phase 1 completed: AddEntryModal + InterestedPersonModal now use fixed header / scrollable fields / pinned safe-area footer; zoom lock added (viewport `maximumScale`/`userScalable`, `ZoomLock` component for Ctrl/Cmd+`+`/`-`/`0`, ctrl+wheel & Safari gestures, `touch-action: pan-x pan-y`, mobile 16px inputs); Leaflet map pinch preserved. type-check + build + route smoke green.
 - Phase 2 completed (user-reported regression: save button still hidden on device): root cause = `fixed inset-0` overlays anchor to the layout viewport, so mobile browser UI / iOS keyboard cover the pinned footer. Fix: `ViewportSync` mirrors `visualViewport` into `--app-vv-height`/`--app-vv-top`; both modal overlays size from those vars; safe-area padding calc fixed (was invalid CSS, now `calc(env(safe-area-inset-bottom) + 1rem)`); `interactiveWidget: "resizes-content"` added. Live puppeteer verification: submit visible at 640px and when the visual viewport shrinks to 380px (keyboard simulation). Build + route smoke green.
+- Phase 3 completed (user report persisted): true root cause = the page-transition wrapper retained a CSS `transform` (animation fill-mode `both`) → containing block for `position: fixed` → modals rendered relative to the wrapper inside `main` (`overflow-hidden`), clipping/misplacing them on devices. Fix: removed fill-mode residue (animation tokens; keyframes end at `transform: none`) + portaled all three fixed overlays (`AddEntryModal`, `InterestedPersonModal`, `ConfirmDialog`) to `document.body`. Live verification: wrapper transform `none` after animation, overlays viewport-anchored, Add Entry + Update Entry buttons visible (incl. 380px keyboard simulation), entry submission works. type-check + build green.

@@ -39,17 +39,17 @@ const config: Config = {
         },
         "scale-in": {
           from: { opacity: "0", transform: "scale(0.96)" },
-          to: { opacity: "1", transform: "scale(1)" },
+          to: { opacity: "1", transform: "none" },
         },
         "slide-up": {
           from: { opacity: "0", transform: "translateY(8px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
+          to: { opacity: "1", transform: "none" },
         },
       },
       animation: {
         "fade-in": "fade-in 0.2s ease-out both",
-        "scale-in": "scale-in 0.15s cubic-bezier(0.22, 1, 0.36, 1) both",
-        "slide-up": "slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "scale-in": "scale-in 0.15s cubic-bezier(0.22, 1, 0.36, 1)",
+        "slide-up": "slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },
