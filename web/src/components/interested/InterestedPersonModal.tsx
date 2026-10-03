@@ -274,6 +274,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-[60]"
+      style={{ top: "var(--app-vv-top, 0px)", height: "var(--app-vv-height, 100dvh)" }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-surface rounded-t-2xl md:rounded-2xl w-full max-w-lg md:mx-4 shadow-2xl max-h-[92dvh] md:max-h-[90dvh] flex flex-col overflow-hidden">
@@ -647,7 +648,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           )}
         </div>
 
-          <div className="shrink-0 border-t border-slate-100 dark:border-slate-800 bg-surface p-4 md:p-6 pt-3 md:pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:pb-6">
+          <div className="shrink-0 border-t border-slate-100 dark:border-slate-800 bg-surface p-4 md:p-6 pt-3 md:pt-4 pb-[calc(env(safe-area-inset-bottom)_+_1rem)] md:pb-6">
             <button
               type="submit"
               disabled={saving}

@@ -9,27 +9,26 @@ updated: "2026-09-30"
 
 > Tracking [responsive-and-zoom-lock](plan.md)
 
-## Active Phase: — (complete)
+## Active Phase: — (all phases complete)
 
 ### Phase Context
 
 - **Scope**: [Plan](plan.md) — completed
-- **Implementation**: inline in phase doc
+- **Implementation**: inline in phase docs
 - **Latest Handover**: N/A
 - **Relevant Docs**: N/A
 
 ### Pending
 
-- [ ] (Manual) Device QA: iOS Safari + Android Chrome pinch, desktop Ctrl+wheel/Ctrl±, map pinch in Interested modal, 320×568 footer visibility
+- [ ] (Manual) Device QA: confirm Add Entry Save button visible on phone (with keyboard), pinch/zoom lock behavior, map pinch in Interested modal
 
 ### In Progress
 
 ### Completed
 
-- [x] AddEntryModal pinned submit footer <!-- completed: 2026-09-30 -->
-- [x] InterestedPersonModal pinned save footer <!-- completed: 2026-09-30 -->
-- [x] ZoomLock (viewport + CSS + JS) preserving Leaflet pinch-zoom <!-- completed: 2026-09-30 -->
-- [x] Verification: `npm run type-check` + `npm run build` + route smoke (6 routes 200) <!-- completed: 2026-09-30 -->
+- [x] Phase 1: Modal pinned footers + zoom lock <!-- completed: 2026-09-30 -->
+- [x] Phase 2: Visual viewport anchoring (save button regression fix) <!-- completed: 2026-09-30 --> — `ViewportSync` CSS vars, overlay sizing, safe-area calc fix, `interactiveWidget`
+- [x] Verification: type-check + build + route smoke + live puppeteer (button visible at 640px and shrunk 380px viewport) <!-- completed: 2026-09-30 -->
 
 ### Blocked
 
@@ -38,4 +37,6 @@ updated: "2026-09-30"
 ### 2026-09-30
 
 - Plan created from user report (save button not visible on some devices; disable zoom mobile + PC)
-- Phase 1 completed; static checks + build + smoke green; manual device QA pending
+- Phase 1 completed; static checks + build + smoke green
+- User reported save button still absent on device; live-app diagnosis (puppeteer-core) pinpointed layout-viewport anchoring
+- Phase 2 completed: visual-viewport anchoring; live verification passed; manual device QA pending
