@@ -7,6 +7,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { SyncProvider } from "@/lib/sync";
 import { InterestedNotificationsProvider } from "@/components/InterestedNotificationsProvider";
 import SyncGuard from "@/components/SyncGuard";
+import ZoomLock from "@/components/ZoomLock";
 import { SPRING_SOFT } from "@/components/ui/motion";
 
 import { Toaster } from "react-hot-toast";
@@ -27,6 +28,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                   }}
                 />
                 <SyncGuard />
+                <ZoomLock />
               </InterestedNotificationsProvider>
             </SyncProvider>
           </I18nProvider>

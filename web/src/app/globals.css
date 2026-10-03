@@ -105,3 +105,21 @@ body {
 body {
   transition: background-color 300ms ease, color 300ms ease;
 }
+
+/* ── Zoom lock (responsive-and-zoom-lock Phase 1) ─────────────────────── */
+
+/* Prevent pinch/double-tap page zoom; Leaflet containers override with
+   touch-action: none/pinch-zoom (leaflet.css), preserving map pinch-zoom. */
+html,
+body {
+  touch-action: pan-x pan-y;
+}
+
+/* Prevent iOS auto-zoom when focusing inputs (font-size < 16px). */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

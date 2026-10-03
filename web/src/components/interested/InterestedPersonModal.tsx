@@ -276,9 +276,9 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
       className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-[60]"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-surface rounded-t-2xl md:rounded-2xl w-full max-w-lg md:mx-4 shadow-2xl max-h-[90dvh] overflow-y-auto">
+      <div className="bg-surface rounded-t-2xl md:rounded-2xl w-full max-w-lg md:mx-4 shadow-2xl max-h-[92dvh] md:max-h-[90dvh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-surface z-10">
+        <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-surface">
           <h3 className="text-lg font-bold">
             {isEditing ? t("interested.edit") : t("interested.addNew")}
           </h3>
@@ -290,7 +290,8 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 md:p-6 pb-8 md:pb-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="p-4 md:p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
           {/* Name + Last Name */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -608,14 +609,6 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             </button>
           )}
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60"
-          >
-            {t("interested.save")}
-          </button>
-
           {isEditing && (
             <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
               {!confirmDelete ? (
@@ -652,6 +645,17 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
               )}
             </div>
           )}
+        </div>
+
+          <div className="shrink-0 border-t border-slate-100 dark:border-slate-800 bg-surface p-4 md:p-6 pt-3 md:pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:pb-6">
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60"
+            >
+              {t("interested.save")}
+            </button>
+          </div>
         </form>
       </div>
     </div>

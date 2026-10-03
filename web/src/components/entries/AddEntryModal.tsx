@@ -282,9 +282,9 @@ export default function AddEntryModal({
       className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-[60]"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-surface rounded-t-2xl md:rounded-2xl w-full max-w-lg md:mx-4 shadow-2xl max-h-[85dvh] overflow-y-auto">
+      <div className="bg-surface rounded-t-2xl md:rounded-2xl w-full max-w-lg md:mx-4 shadow-2xl max-h-[92dvh] md:max-h-[85dvh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-surface z-10">
+        <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-surface">
           <div>
             <h3 className="text-lg font-bold">{isEditing ? t("entry.edit") : t("entry.new")}</h3>
             <p className="text-xs text-slate-500">{longDate(selectedDate, language)}</p>
@@ -297,7 +297,8 @@ export default function AddEntryModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 md:p-6 pb-8 md:pb-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="p-4 md:p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
           {/* Title */}
           <div>
             <label className="block text-sm font-semibold mb-1">{t("entry.title")}</label>
@@ -483,15 +484,18 @@ export default function AddEntryModal({
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             />
           </div>
+          </div>
 
-          <motion.button
-            type="submit"
-            disabled={saving}
-            whileTap={{ scale: 0.98 }}
-            className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-60"
-          >
-            {saving ? t("entry.saving") : isEditing ? t("entry.update") : t("entry.add")}
-          </motion.button>
+          <div className="shrink-0 border-t border-slate-100 dark:border-slate-800 bg-surface p-4 md:p-6 pt-3 md:pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:pb-6">
+            <motion.button
+              type="submit"
+              disabled={saving}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-60"
+            >
+              {saving ? t("entry.saving") : isEditing ? t("entry.update") : t("entry.add")}
+            </motion.button>
+          </div>
         </form>
       </div>
     </div>
