@@ -8,8 +8,9 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
+import { cn, copyTextToClipboard } from "@/lib/utils";
 import { commentTimestamp, useT } from "@/lib/i18n";
+import { buildInterestedPersonShareText } from "@/lib/share";
 import toast from "react-hot-toast";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import OptionChip from "@/components/ui/OptionChip";
@@ -272,6 +273,21 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
     onClose();
   };
 
+  const handleCopyInfo = async () => {
+    if (!person) return;
+    const statusName =
+      statusOptions.find((s) => s.id === person.status)?.name ?? person.status;
+    const text = buildInterestedPersonShareText({
+      person,
+      statusName,
+      language,
+      t,
+    });
+    const copied = await copyTextToClipboard(text);
+    if (copied) toast.success(t("interested.copied"));
+    else toast.error(t("interested.copyFailed"));
+  };
+
   if (typeof document === "undefined") return null;
 
   return createPortal(
@@ -286,12 +302,24 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
           <h3 className="text-lg font-bold">
             {isEditing ? t("interested.edit") : t("interested.addNew")}
           </h3>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
+          <div className="flex items-center gap-1">
+            {isEditing && person && (
+              <button
+                onClick={handleCopyInfo}
+                title={t("interested.copyInfo")}
+                aria-label={t("interested.copyInfo")}
+                className="text-slate-400 hover:text-primary p-2 rounded-lg hover:bg-primary/10"
+              >
+                <span className="material-symbols-outlined">content_copy</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
@@ -605,7 +633,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
             >
               <span className={cn(
                 "material-symbols-outlined text-xl",
-                completed ? "text-green-500" : "text-slate-300 dark:text-slate-600"
+                completed ? "text-green-500" : "text-slate-400 dark:text-slate-500"
               )}>
                 {completed ? "check_circle" : "radio_button_unchecked"}
               </span>

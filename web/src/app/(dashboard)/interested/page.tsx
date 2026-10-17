@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
 import { useStore } from "@/lib/store";
 import { isInterestedPersonCompleted } from "@/lib/isoWeek";
-import { cn } from "@/lib/utils";
+import { buildInterestedPersonShareText } from "@/lib/share";
+import { cn, copyTextToClipboard } from "@/lib/utils";
 import { useT, dateTimeString } from "@/lib/i18n";
 import toast from "react-hot-toast";
 import { motion } from "motion/react";
@@ -124,6 +125,21 @@ function InterestedDashboard() {
     if (!window.confirm(t("interested.deleteConfirm"))) return;
     deleteInterestedPerson(person.id);
     toast.success(t("interested.deleted"));
+  };
+
+  const handleCopyPerson = async (
+    person: InterestedPerson,
+    statusInfo: { name: string },
+  ) => {
+    const text = buildInterestedPersonShareText({
+      person,
+      statusName: statusInfo.name,
+      language: settings.language,
+      t,
+    });
+    const copied = await copyTextToClipboard(text);
+    if (copied) toast.success(t("interested.copied"));
+    else toast.error(t("interested.copyFailed"));
   };
 
   return (
@@ -267,6 +283,14 @@ function InterestedDashboard() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button
+                        onClick={(e) => { e.stopPropagation(); handleCopyPerson(person, statusInfo); }}
+                        title={t("interested.copyInfo")}
+                        aria-label={t("interested.copyInfo")}
+                        className="inline-flex items-center justify-center size-9 rounded-lg border border-slate-300/60 dark:border-slate-600/60 bg-slate-500/5 text-slate-500 hover:text-primary hover:border-primary/40 hover:bg-primary/10 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">content_copy</span>
+                      </button>
+                      <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(person); }}
                         title={t("interested.delete")}
                         className="inline-flex items-center justify-center size-8 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 transition-colors"
@@ -340,12 +364,13 @@ function InterestedDashboard() {
                         toggleInterestedPersonCompleted(person.id);
                       }}
                       className={cn(
-                        "inline-flex items-center justify-center size-7 rounded-full transition-colors cursor-pointer",
+                        "inline-flex items-center justify-center size-9 rounded-full border-2 transition-colors cursor-pointer",
                         completed
-                          ? "bg-green-500 text-white"
-                          : "text-slate-300 dark:text-slate-600 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                          ? "border-green-500 bg-green-500 text-white"
+                          : "border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 hover:border-green-500 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
                       )}
                       title={completed ? t("interested.markActive") : t("interested.markCompleted")}
+                      aria-label={completed ? t("interested.markActive") : t("interested.markCompleted")}
                     >
                       <motion.span
                         className="material-symbols-outlined text-base"
@@ -361,12 +386,26 @@ function InterestedDashboard() {
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center justify-center size-8 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                        title="Ver ubicación"
+                        className="inline-flex items-center justify-center size-9 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300 hover:bg-blue-500/20 transition-colors"
+                        title={t("interested.viewLocation")}
                       >
                         <span className="material-symbols-outlined text-lg">location_on</span>
                       </a>
                     )}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); handleCopyPerson(person, statusInfo); } }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyPerson(person, statusInfo);
+                      }}
+                      className="inline-flex items-center justify-center size-9 rounded-lg border border-slate-300/60 dark:border-slate-600/60 bg-slate-500/5 text-slate-500 hover:text-primary hover:border-primary/40 hover:bg-primary/10 transition-colors"
+                      title={t("interested.copyInfo")}
+                      aria-label={t("interested.copyInfo")}
+                    >
+                      <span className="material-symbols-outlined text-lg">content_copy</span>
+                    </span>
                     <div className="text-right shrink-0">
                       {person.next_visit_weekly_day != null ? (
                         <div className="flex items-center gap-1">

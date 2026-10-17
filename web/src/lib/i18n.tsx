@@ -369,6 +369,10 @@ const translations = {
     "interested.tabFinished": "Finished",
     "interested.finishedEmpty": "No finished visits yet",
     "interested.reactivate": "Reactivate",
+    "interested.viewLocation": "View location",
+    "interested.copyInfo": "Copy info",
+    "interested.copied": "Copied to clipboard",
+    "interested.copyFailed": "Couldn't copy",
 
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
@@ -736,6 +740,10 @@ const translations = {
     "interested.tabFinished": "Finalizadas",
     "interested.finishedEmpty": "Aún no hay visitas finalizadas",
     "interested.reactivate": "Reactivar",
+    "interested.viewLocation": "Ver ubicación",
+    "interested.copyInfo": "Copiar información",
+    "interested.copied": "Copiado al portapapeles",
+    "interested.copyFailed": "No se pudo copiar",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",
