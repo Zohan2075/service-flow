@@ -14,6 +14,7 @@ import { buildInterestedPersonShareText } from "@/lib/share";
 import toast from "react-hot-toast";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import OptionChip from "@/components/ui/OptionChip";
+import CopyFeedbackIcon from "@/components/ui/CopyFeedbackIcon";
 
 // Fix Leaflet default marker icon for Next.js/webpack
 L.Icon.Default.mergeOptions({
@@ -105,6 +106,8 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
   const [completed, setCompleted] = useState(person?.completed ?? false);
   const [lat, setLat] = useState<number | null>(person?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(person?.longitude ?? null);
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLng, setUserLng] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -283,9 +286,15 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
       language,
       t,
     });
-    const copied = await copyTextToClipboard(text);
-    if (copied) toast.success(t("interested.copied"));
-    else toast.error(t("interested.copyFailed"));
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      toast.success(t("interested.copied"));
+      setCopied(true);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1200);
+    } else {
+      toast.error(t("interested.copyFailed"));
+    }
   };
 
   if (typeof document === "undefined") return null;
@@ -310,7 +319,7 @@ export default function InterestedPersonModal({ person, onClose }: Props) {
                 aria-label={t("interested.copyInfo")}
                 className="text-slate-400 hover:text-primary p-2 rounded-lg hover:bg-primary/10"
               >
-                <span className="material-symbols-outlined">content_copy</span>
+                <CopyFeedbackIcon copied={copied} />
               </button>
             )}
             <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { InterestedPerson, InterestedPersonStatus } from "@/types/data";
@@ -12,6 +12,7 @@ import { useT, dateTimeString } from "@/lib/i18n";
 import toast from "react-hot-toast";
 import { motion } from "motion/react";
 import SegmentedControl from "@/components/ui/SegmentedControl";
+import CopyFeedbackIcon from "@/components/ui/CopyFeedbackIcon";
 import OptionChip from "@/components/ui/OptionChip";
 import { StaggerGroup, fadeUp, SPRING_SOFT, EASE_OUT } from "@/components/ui/motion";
 
@@ -54,6 +55,8 @@ function InterestedDashboard() {
   const toggleInterestedPersonCompleted = useStore((s) => s.toggleInterestedPersonCompleted);
   const deleteInterestedPerson = useStore((s) => s.deleteInterestedPerson);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [copiedPersonId, setCopiedPersonId] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editingPerson, setEditingPerson] = useState<InterestedPerson | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -137,9 +140,15 @@ function InterestedDashboard() {
       language: settings.language,
       t,
     });
-    const copied = await copyTextToClipboard(text);
-    if (copied) toast.success(t("interested.copied"));
-    else toast.error(t("interested.copyFailed"));
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      toast.success(t("interested.copied"));
+      setCopiedPersonId(person.id);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopiedPersonId(null), 1200);
+    } else {
+      toast.error(t("interested.copyFailed"));
+    }
   };
 
   return (
@@ -288,7 +297,7 @@ function InterestedDashboard() {
                         aria-label={t("interested.copyInfo")}
                         className="inline-flex items-center justify-center size-9 rounded-lg border border-slate-300/60 dark:border-slate-600/60 bg-slate-500/5 text-slate-500 hover:text-primary hover:border-primary/40 hover:bg-primary/10 transition-colors"
                       >
-                        <span className="material-symbols-outlined text-lg">content_copy</span>
+                        <CopyFeedbackIcon copied={copiedPersonId === person.id} className="text-lg" />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(person); }}
@@ -364,10 +373,10 @@ function InterestedDashboard() {
                         toggleInterestedPersonCompleted(person.id);
                       }}
                       className={cn(
-                        "inline-flex items-center justify-center size-9 rounded-full border-2 transition-colors cursor-pointer",
+                        "inline-flex items-center justify-center size-8 rounded-full transition-colors cursor-pointer",
                         completed
-                          ? "border-green-500 bg-green-500 text-white"
-                          : "border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 hover:border-green-500 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                          ? "bg-green-500 text-white"
+                          : "text-slate-300 dark:text-slate-600 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
                       )}
                       title={completed ? t("interested.markActive") : t("interested.markCompleted")}
                       aria-label={completed ? t("interested.markActive") : t("interested.markCompleted")}
@@ -404,7 +413,7 @@ function InterestedDashboard() {
                       title={t("interested.copyInfo")}
                       aria-label={t("interested.copyInfo")}
                     >
-                      <span className="material-symbols-outlined text-lg">content_copy</span>
+                      <CopyFeedbackIcon copied={copiedPersonId === person.id} className="text-lg" />
                     </span>
                     <div className="text-right shrink-0">
                       {person.next_visit_weekly_day != null ? (
