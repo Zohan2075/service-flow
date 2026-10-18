@@ -6,7 +6,16 @@ import { useStore } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import ProgramView, { ActiveTimerBar, useProgramTimers } from "@/components/presiding/ProgramView";
 import CommentsView from "@/components/comments/CommentsView";
+import TimeView from "@/components/presiding/TimeView";
 import SegmentedControl from "@/components/ui/SegmentedControl";
+
+type PresidingTab = "program" | "comments" | "time";
+
+function tabFromParam(value: string | null): PresidingTab {
+  if (value === "comments") return "comments";
+  if (value === "time") return "time";
+  return "program";
+}
 
 export default function PresidingPage() {
   return (
@@ -54,18 +63,16 @@ function PresidingDashboard() {
   // Tab state, synced with the ?tab= URL search param so deep links work.
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [tab, setTab] = useState<"program" | "comments">(() =>
-    searchParams.get("tab") === "comments" ? "comments" : "program",
-  );
+  const [tab, setTab] = useState<PresidingTab>(() => tabFromParam(searchParams.get("tab")));
 
   useEffect(() => {
-    setTab(searchParams.get("tab") === "comments" ? "comments" : "program");
+    setTab(tabFromParam(searchParams.get("tab")));
   }, [searchParams]);
 
   const selectTab = useCallback(
-    (next: "program" | "comments") => {
+    (next: PresidingTab) => {
       setTab(next);
-      router.replace(next === "comments" ? "/presiding?tab=comments" : "/presiding", { scroll: false });
+      router.replace(next === "program" ? "/presiding" : `/presiding?tab=${next}`, { scroll: false });
     },
     [router],
   );
@@ -106,6 +113,7 @@ function PresidingDashboard() {
     prefs.chairmanExpectedCount,
     prefs.chairmanExpectedSeconds,
   );
+
   if (!activeWeek?.sections?.length) {
     return <div className="flex items-center justify-center h-full text-sm text-slate-400">Loading program...</div>;
   }
@@ -138,6 +146,15 @@ function PresidingDashboard() {
                 </span>
               ),
             },
+            {
+              value: "time",
+              label: (
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <span className="material-symbols-outlined text-base shrink-0">timer</span>
+                  <span className="truncate">{t("nav.time")}</span>
+                </span>
+              ),
+            },
           ]}
         />
       </div>
@@ -163,13 +180,15 @@ function PresidingDashboard() {
           onDeleteLog={deleteLogEntry}
           timerProps={timer}
         />
-      ) : (
+      ) : tab === "comments" ? (
         <CommentsView
           lang={lang === "es" ? "es" : "en"}
           weekId={activeWeek?.weekId ?? "default"}
           config={commentsConfig}
           onConfigChange={setCommentsConfig}
         />
+      ) : (
+        <TimeView />
       )}
     </div>
   );

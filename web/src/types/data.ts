@@ -160,6 +160,23 @@ export interface CalendarDay {
   planned_units: number;
 }
 
+// ─── Time tools (Tiempo tab — persisted locally) ─────────────────────────────
+
+export interface TimeToolsState {
+  stopwatch: { running: boolean; startedAtMs: number | null; accumulatedMs: number };
+  countdown: {
+    running: boolean;
+    endsAtMs: number | null;
+    remainingMs: number;
+    totalMs: number;
+    finishedAtMs: number | null;
+  };
+  countryTz: string | null;      // IANA, e.g. "America/Santo_Domingo"
+  countryLabel: string | null;   // e.g. "República Dominicana"
+  widgetVisible: boolean;
+  widgetScale: number;           // 0.8 – 1.6
+}
+
 // ─── Backup file schema ──────────────────────────────────────────────────────
 
 export interface BackupFile {

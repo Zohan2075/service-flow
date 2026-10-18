@@ -12,6 +12,7 @@ import type {
   InterestedPerson,
   InterestedStatusConfig,
   NotificationPreferences,
+  TimeToolsState,
 } from "@/types/data";
 import { DEFAULT_INTERESTED_STATUSES } from "@/types/data";
 import { isoWeekKey, isInterestedPersonCompleted } from "@/lib/isoWeek";
@@ -279,6 +280,9 @@ interface AppState {
   // comments
   commentsConfig: CommentsConfig;
 
+  // time tools (Tiempo tab)
+  timeTools: TimeToolsState;
+
   // auth actions
   setProfile: (p: UserProfile | null) => void;
   signOut: () => void;
@@ -343,6 +347,18 @@ resetPresidingConfig: () => void;
   setCommentsConfig: (cfg: CommentsConfig) => void;
   updateCommentBox: (weekId: string, boxId: string, patch: Partial<CommentsConfig["boxesByWeek"][string][number]>) => void;
   resetCommentsConfig: () => void;
+
+  // time tools actions
+  stopwatchStart: () => void;
+  stopwatchPause: () => void;
+  stopwatchReset: () => void;
+  countdownStart: (totalMs: number) => void;
+  countdownPause: () => void;
+  countdownReset: () => void;
+  finishCountdown: () => void;
+  setCountryClock: (tz: string | null, label: string | null) => void;
+  setWidgetVisible: (visible: boolean) => void;
+  setWidgetScale: (scale: number) => void;
 }
 
 interface SyncMetadata {
@@ -764,6 +780,53 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
   return { categories, boxesByWeek: {} };
 }
 
+// ─── Time tools (Tiempo tab) ────────────────────────────────────────────────
+
+const TIME_WIDGET_SCALE_MIN = 0.8;
+const TIME_WIDGET_SCALE_MAX = 1.6;
+
+function getDefaultTimeTools(): TimeToolsState {
+  return {
+    stopwatch: { running: false, startedAtMs: null, accumulatedMs: 0 },
+    countdown: { running: false, endsAtMs: null, remainingMs: 0, totalMs: 0, finishedAtMs: null },
+    countryTz: null,
+    countryLabel: null,
+    widgetVisible: false,
+    widgetScale: 1,
+  };
+}
+
+function clampWidgetScale(scale: number): number {
+  if (!Number.isFinite(scale)) return 1;
+  return Math.min(TIME_WIDGET_SCALE_MAX, Math.max(TIME_WIDGET_SCALE_MIN, scale));
+}
+
+function normalizeTimeTools(raw?: Partial<TimeToolsState> | null): TimeToolsState {
+  const defaults = getDefaultTimeTools();
+  const stopwatch = raw?.stopwatch ?? defaults.stopwatch;
+  const countdown = raw?.countdown ?? defaults.countdown;
+  const positiveMs = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+  return {
+    stopwatch: {
+      running: Boolean(stopwatch.running),
+      startedAtMs: typeof stopwatch.startedAtMs === "number" ? stopwatch.startedAtMs : null,
+      accumulatedMs: positiveMs(stopwatch.accumulatedMs),
+    },
+    countdown: {
+      running: Boolean(countdown.running),
+      endsAtMs: typeof countdown.endsAtMs === "number" ? countdown.endsAtMs : null,
+      remainingMs: positiveMs(countdown.remainingMs),
+      totalMs: positiveMs(countdown.totalMs),
+      finishedAtMs: typeof countdown.finishedAtMs === "number" ? countdown.finishedAtMs : null,
+    },
+    countryTz: typeof raw?.countryTz === "string" ? raw.countryTz : null,
+    countryLabel: typeof raw?.countryLabel === "string" ? raw.countryLabel : null,
+    widgetVisible: Boolean(raw?.widgetVisible),
+    widgetScale: clampWidgetScale(typeof raw?.widgetScale === "number" ? raw.widgetScale : defaults.widgetScale),
+  };
+}
+
 function preserveLocalAssigneeNames(local: PresidingConfig, remote: PresidingConfig): PresidingConfig {
   const names = new Map<string, string>();
   local.weeks.forEach((week) => {
@@ -1033,6 +1096,7 @@ presidingConfig: getDefaultPresidingConfig(),
       presidingSessions: [],
       presidingTombstones: [],
       commentsConfig: getDefaultCommentsConfig(),
+      timeTools: getDefaultTimeTools(),
 
       // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       setProfile: (p) =>
@@ -1824,6 +1888,109 @@ resetPresidingConfig: () =>
           commentsConfig: getDefaultCommentsConfig(),
         })),
 
+      // ── Time tools (Tiempo tab) ───────────────────────────────────────────
+      stopwatchStart: () =>
+        set((s) => {
+          if (s.timeTools.stopwatch.running) return {};
+          return {
+            timeTools: {
+              ...s.timeTools,
+              widgetVisible: true,
+              stopwatch: {
+                running: true,
+                startedAtMs: Date.now(),
+                accumulatedMs: s.timeTools.stopwatch.accumulatedMs,
+              },
+            },
+          };
+        }),
+      stopwatchPause: () =>
+        set((s) => {
+          const sw = s.timeTools.stopwatch;
+          if (!sw.running || sw.startedAtMs == null) return {};
+          return {
+            timeTools: {
+              ...s.timeTools,
+              stopwatch: {
+                running: false,
+                startedAtMs: null,
+                accumulatedMs: sw.accumulatedMs + Math.max(0, Date.now() - sw.startedAtMs),
+              },
+            },
+          };
+        }),
+      stopwatchReset: () =>
+        set((s) => ({
+          timeTools: {
+            ...s.timeTools,
+            stopwatch: { running: false, startedAtMs: null, accumulatedMs: 0 },
+          },
+        })),
+      countdownStart: (totalMs) =>
+        set((s) => {
+          const total = Math.max(0, Math.floor(totalMs));
+          if (total <= 0) return {};
+          return {
+            timeTools: {
+              ...s.timeTools,
+              widgetVisible: true,
+              countdown: {
+                running: true,
+                endsAtMs: Date.now() + total,
+                remainingMs: 0,
+                totalMs: total,
+                finishedAtMs: null,
+              },
+            },
+          };
+        }),
+      countdownPause: () =>
+        set((s) => {
+          const cd = s.timeTools.countdown;
+          if (!cd.running || cd.endsAtMs == null) return {};
+          return {
+            timeTools: {
+              ...s.timeTools,
+              countdown: {
+                ...cd,
+                running: false,
+                endsAtMs: null,
+                remainingMs: Math.max(0, cd.endsAtMs - Date.now()),
+              },
+            },
+          };
+        }),
+      countdownReset: () =>
+        set((s) => ({
+          timeTools: {
+            ...s.timeTools,
+            countdown: { running: false, endsAtMs: null, remainingMs: 0, totalMs: 0, finishedAtMs: null },
+          },
+        })),
+      finishCountdown: () =>
+        set((s) => {
+          const cd = s.timeTools.countdown;
+          if (!cd.running) return {};
+          return {
+            timeTools: {
+              ...s.timeTools,
+              countdown: { ...cd, running: false, endsAtMs: null, remainingMs: 0, finishedAtMs: Date.now() },
+            },
+          };
+        }),
+      setCountryClock: (tz, label) =>
+        set((s) => ({
+          timeTools: { ...s.timeTools, countryTz: tz, countryLabel: label },
+        })),
+      setWidgetVisible: (visible) =>
+        set((s) => ({
+          timeTools: { ...s.timeTools, widgetVisible: visible },
+        })),
+      setWidgetScale: (scale) =>
+        set((s) => ({
+          timeTools: { ...s.timeTools, widgetScale: clampWidgetScale(scale) },
+        })),
+
       resetData: () =>
         set(
            withPendingSync({
@@ -1863,6 +2030,7 @@ presidingConfig: state.presidingConfig,
           presidingSessions: state.presidingSessions,
           presidingTombstones: state.presidingTombstones,
           commentsConfig: state.commentsConfig,
+          timeTools: state.timeTools,
       }) as unknown as AppState,
       // CRITICAL: Prevent stale IndexedDB data from overwriting freshly-synced
       // Supabase data. If current state has real data (sync already imported),
@@ -1910,6 +2078,7 @@ presidingConfig: migratePresidingConfig(p.presidingConfig ?? current.presidingCo
              presidingSessions: migratePresidingSessions(p.presidingSessions, migratePresidingSession(p.presidingSession ?? current.presidingSession)),
              presidingTombstones: migrateProgramTombstones(p.presidingTombstones ?? current.presidingTombstones),
              commentsConfig: migrateCommentsConfig(p.commentsConfig ?? current.commentsConfig),
+             timeTools: normalizeTimeTools(p.timeTools ?? current.timeTools),
         };
       },
     }

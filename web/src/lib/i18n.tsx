@@ -15,6 +15,7 @@ const translations = {
     "nav.comments": "Comments",
     "nav.settings": "Settings",
     "nav.interested": "Interested People",
+    "nav.time": "Time",
 
     // Sync guard
     "sync.saving": "Saving changes...",
@@ -374,6 +375,33 @@ const translations = {
     "interested.copied": "Copied to clipboard",
     "interested.copyFailed": "Couldn't copy",
 
+    // Time tab (Tiempo)
+    "time.title": "Time",
+    "time.stopwatch": "Stopwatch",
+    "time.countdown": "Countdown",
+    "time.localClock": "Local Clock",
+    "time.countryClock": "Country Time",
+    "time.start": "Start",
+    "time.pause": "Pause",
+    "time.resume": "Resume",
+    "time.reset": "Reset",
+    "time.minutes": "Minutes",
+    "time.seconds": "Seconds",
+    "time.presets": "Presets",
+    "time.detect": "Detect my country",
+    "time.detecting": "Detecting…",
+    "time.detected": "Country detected",
+    "time.denied": "Location permission denied — using your device time zone",
+    "time.failed": "Couldn't detect your country — using your device time zone",
+    "time.changeTz": "Change time zone",
+    "time.deviceZone": "My device time zone",
+    "time.done": "Time's up!",
+    "time.offset": "UTC offset",
+    "time.noZone": "No time zone selected",
+    "time.widget": "Mini clock",
+    "time.hide": "Hide",
+    "time.resize": "Resize",
+
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
     "offline.syncPending": "Changes will sync when you're back online",
@@ -386,6 +414,7 @@ const translations = {
     "nav.comments": "Comentarios",
     "nav.settings": "Ajustes",
     "nav.interested": "Estudios y Revisitas",
+    "nav.time": "Tiempo",
 
     // Sync guard
     "sync.saving": "Guardando...",
@@ -744,6 +773,33 @@ const translations = {
     "interested.copyInfo": "Copiar información",
     "interested.copied": "Copiado al portapapeles",
     "interested.copyFailed": "No se pudo copiar",
+
+    // Time tab (Tiempo)
+    "time.title": "Tiempo",
+    "time.stopwatch": "Cronómetro",
+    "time.countdown": "Cuenta regresiva",
+    "time.localClock": "Reloj local",
+    "time.countryClock": "Hora del país",
+    "time.start": "Iniciar",
+    "time.pause": "Pausar",
+    "time.resume": "Reanudar",
+    "time.reset": "Reiniciar",
+    "time.minutes": "Minutos",
+    "time.seconds": "Segundos",
+    "time.presets": "Preajustes",
+    "time.detect": "Detectar mi país",
+    "time.detecting": "Detectando…",
+    "time.detected": "País detectado",
+    "time.denied": "Permiso de ubicación denegado — se usa la zona horaria del dispositivo",
+    "time.failed": "No se pudo detectar tu país — se usa la zona horaria del dispositivo",
+    "time.changeTz": "Cambiar zona horaria",
+    "time.deviceZone": "Zona horaria de mi dispositivo",
+    "time.done": "¡Se acabó el tiempo!",
+    "time.offset": "Desfase UTC",
+    "time.noZone": "Ninguna zona horaria seleccionada",
+    "time.widget": "Mini reloj",
+    "time.hide": "Ocultar",
+    "time.resize": "Redimensionar",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",

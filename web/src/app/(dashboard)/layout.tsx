@@ -1,6 +1,7 @@
 import Sidebar from "@/components/layout/Sidebar";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import OfflineBanner from "@/components/OfflineBanner";
+import TimeWidget from "@/components/TimeWidget";
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,7 @@ export default function DashboardLayout({
         {children}
       </main>
       <MobileNavBar />
+      <TimeWidget />
     </div>
   );
 }

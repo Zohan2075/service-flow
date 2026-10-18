@@ -350,19 +350,19 @@ export function ActiveTimerBar({ activeTimer, accentColor, isEs, onStop }: {
             <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
           </span>
           <div className="text-center shrink-0 min-w-[4.5rem]">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">{barL.master}</p>
-            <p className="font-mono text-2xl font-black leading-none tabular-nums">{fmtTime(activeTimer.elapsedSec)}</p>
+            <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">{barL.master}</p>
+            <p className="font-mono text-3xl font-black leading-none tabular-nums">{fmtTime(activeTimer.elapsedSec)}</p>
           </div>
         </div>
         <div className="flex-1 min-w-0 text-center">
-          <p className="text-[10px] uppercase tracking-wider font-bold truncate text-emerald-600">{barL.current}</p>
-          <p className="text-sm font-bold tabular-nums truncate text-slate-700 dark:text-slate-100">
+          <p className="text-xs uppercase tracking-wider font-bold truncate text-emerald-600">{barL.current}</p>
+          <p className="text-base font-bold tabular-nums truncate text-slate-700 dark:text-slate-100">
             {isEs ? (activeTimer.titleEs || activeTimer.titleEn) : (activeTimer.titleEn || activeTimer.titleEs)}
           </p>
         </div>
         <span
           className={cn(
-            "rounded-full px-3 py-1 text-[11px] font-bold",
+            "rounded-full px-3 py-1 text-xs font-bold",
             activeTimer.role === "presiding"
               ? "text-white"
               : activeTimer.role === "assignee"
@@ -620,7 +620,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
         {/* Week info is catalog-driven; only the selector above changes weeks. */}
         <div className="text-center">
           <div className="space-y-0.5">
-            <h2 className="text-lg md:text-xl font-black tracking-wide text-slate-800 dark:text-slate-100">{weekDisplay}</h2>
+            <h2 className="text-xl md:text-2xl font-black tracking-wide text-slate-800 dark:text-slate-100">{weekDisplay}</h2>
             {bibleReading && <p className="text-xs font-semibold tracking-wider text-slate-500 dark:text-slate-400">{bibleReading}</p>}
           </div>
         </div>
@@ -695,7 +695,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
                       <SectionIcon icon={icon} className="text-sm" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-base font-black uppercase tracking-wide" style={{ color: col }}>
+                      <h3 className="text-lg font-black uppercase tracking-wide" style={{ color: col }}>
                         {isEs ? (sec.titleEs || sec.titleEn) : (sec.titleEn || sec.titleEs)}
                       </h3>
                     </div>
@@ -761,7 +761,7 @@ export default function ProgramView({ lang, config, prefs, sessionLog, sessionHi
         </button>
 
         {/* Totals */}
-        <p className="text-center text-xs text-slate-500 dark:text-slate-400 pt-1">
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400 pt-1 tabular-nums">
           {lbl.totalTime}: {totalMin} {lbl.min} · {clock(startMinTotal)} → {clock(cascadeEndMin)}
         </p>
       </div>
@@ -817,7 +817,7 @@ function SaveStatus({ lbl }: { lbl: typeof L.en }) {
 
   return (
     <div role="status" aria-live="polite" title={isError ? (error ?? lbl.saveError) : text}
-      className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold", isError ? "text-red-500" : isOffline ? "text-amber-600" : isSaving ? "text-primary" : "text-emerald-600")}>
+      className={cn("inline-flex items-center gap-1.5 text-xs font-semibold", isError ? "text-red-500" : isOffline ? "text-amber-600" : isSaving ? "text-primary" : "text-emerald-600")}>
       <span className={cn("material-symbols-outlined text-sm", isSaving && "animate-spin")}>{icon}</span>
       <span>{text}</span>
       {isError && (
@@ -842,20 +842,20 @@ function TimerButton({ role, label, elapsedSec, running, onClick, onReset, actio
         whileTap={{ scale: 0.92 }}
         transition={SPRING_SNAPPY}
         className={cn(
-          "size-12 sm:size-14 rounded-full flex flex-col items-center justify-center gap-0 shadow-sm transition-colors shrink-0",
+          "size-14 sm:size-16 rounded-full flex flex-col items-center justify-center gap-0 shadow-sm transition-colors shrink-0",
           running ? "bg-amber-500 text-black" : presiding ? "bg-violet-600" : "bg-primary",
           !running && (presiding ? "active:bg-violet-800" : "active:bg-primary/80"),
         )}
         aria-label={`${label} ${actionLabel}`} aria-pressed={running}>
-        <span className="material-symbols-outlined text-xs sm:text-sm leading-none">{running ? "stop" : "play_arrow"}</span>
-        <span className="font-mono text-[10px] sm:text-[11px] font-bold leading-none tabular-nums">{fmtTime(elapsedSec)}</span>
+        <span className="material-symbols-outlined text-sm sm:text-base leading-none">{running ? "stop" : "play_arrow"}</span>
+        <span className="font-mono text-[11px] sm:text-xs font-bold leading-none tabular-nums">{fmtTime(elapsedSec)}</span>
       </motion.button>
       <motion.button type="button" onClick={(event) => { event.stopPropagation(); onReset(); }}
         whileTap={{ scale: 0.92 }}
         transition={SPRING_SNAPPY}
-        className="size-11 rounded-full border border-slate-200 bg-surface text-slate-400 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:hover:border-red-800 dark:hover:bg-red-950/20"
+        className="size-12 rounded-full border border-slate-200 bg-surface text-slate-400 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:hover:border-red-800 dark:hover:bg-red-950/20"
         aria-label={`${actionLabels.resetUnsaved}: ${label}`} title={actionLabels.resetUnsaved}>
-        <span className="material-symbols-outlined text-base leading-none">restart_alt</span>
+        <span className="material-symbols-outlined text-lg leading-none">restart_alt</span>
       </motion.button>
     </div>
   );
@@ -863,7 +863,7 @@ function TimerButton({ role, label, elapsedSec, running, onClick, onReset, actio
 
 function TimerLegend({ isEs, lbl, accentColor }: { isEs: boolean; lbl: typeof L.en; accentColor: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
       <span className="uppercase tracking-wider">{lbl.legend}</span>
       <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-primary" />{isEs ? lbl.assigneeRole : lbl.assigneeRole}</span>
       <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full" style={{ backgroundColor: accentColor }} />{isEs ? lbl.presidingRole : lbl.presidingRole}</span>
@@ -984,13 +984,13 @@ function InterventionRow({
           <span className="font-bold text-sm shrink-0 w-6" style={{ color }}>{num}.</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1.5 flex-wrap">
-              <span className="font-bold text-sm truncate" style={{ color }}>{title}</span>
+              <span className="font-bold text-base truncate" style={{ color }}>{title}</span>
                 <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-semibold tabular-nums shrink-0 whitespace-nowrap">{startTime} → {endTime}</span>
             </div>
             <div className="mt-0.5 flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{section.duration} {lbl.min}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">{section.duration} {lbl.min}</span>
               {section.assigneeName && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full text-slate-500 dark:text-slate-400"
+                <span className="text-xs font-medium px-1.5 py-0.5 rounded-full text-slate-500 dark:text-slate-400"
                   style={{ backgroundColor: color + "15" }}>
                   {section.assigneeName}
                 </span>
@@ -1109,15 +1109,15 @@ function SessionReview({ sessionLog, sessionHistory, activeWeekId, prefs, isEs, 
                      <LogEditor entry={entry} lbl={lbl} chairmanExpectedCount={prefs.chairmanExpectedCount} chairmanExpectedSeconds={prefs.chairmanExpectedSeconds} onCancel={() => setEditingId(null)} onSave={(patch) => { onUpdateLog(entry.id!, patch); setEditingId(null); }} />
                    ) : (
                      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
-                       <span className="text-slate-500 dark:text-slate-400 text-[10px]">{i + 1}.</span>
-                       <div className="min-w-0 break-words">{date && <span className="mr-2 text-[10px] text-slate-500 dark:text-slate-400">{date}</span>}<span>{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span></div>
+                       <span className="text-slate-500 dark:text-slate-400 text-xs">{i + 1}.</span>
+                       <div className="min-w-0 break-words">{date && <span className="mr-2 text-xs text-slate-500 dark:text-slate-400">{date}</span>}<span>{isEs ? (entry.titleEs || entry.titleEn) : (entry.titleEn || entry.titleEs)}</span></div>
                        <div className="flex flex-wrap justify-end gap-1">
-                         <span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ color: chipColor, backgroundColor: chipColor + "15" }}>{roleName(entry)}</span>
+                         <span className="rounded-full px-2 py-1 text-xs font-bold" style={{ color: chipColor, backgroundColor: chipColor + "15" }}>{roleName(entry)}</span>
                          {entry.id && onUpdateLog && <button type="button" onClick={() => setEditingId(entry.id!)} aria-label={`${lbl.editLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-primary/10 hover:text-primary"><span className="material-symbols-outlined text-base">edit</span></button>}
                          {onDeleteLog && entry.id && <button type="button" onClick={() => setPendingLogDeleteId(entry.id!)} aria-label={`${lbl.deleteLog}: ${entry.titleEn}`} className="min-h-8 min-w-8 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"><span className="material-symbols-outlined text-base">delete</span></button>}
                        </div>
-                       <span className="col-span-2 font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
-                        <span className={cn("justify-self-end font-mono font-semibold", isOvertime ? "text-red-500" : "text-emerald-600")}>
+                       <span className="col-span-2 font-mono text-xs text-slate-500 dark:text-slate-400 tabular-nums">{cf(entry.actualStartISO)} - {cf(entry.actualEndISO)}</span>
+                        <span className={cn("justify-self-end font-mono font-semibold tabular-nums", isOvertime ? "text-red-500" : "text-emerald-600")}>
                       {fmtTime(durSec)}{isOvertime ? ` (+${overage > 0 ? fmtTime(overage) : "0:00"})` : ""}
                         </span>
                      </div>
@@ -1130,7 +1130,7 @@ function SessionReview({ sessionLog, sessionHistory, activeWeekId, prefs, isEs, 
       )}
       <button type="button" onClick={() => setShow((current) => !current)} aria-expanded={show}
         aria-controls="session-review-log"
-        className="w-full flex items-center justify-between px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 active:bg-slate-50 dark:active:bg-slate-800/50 sticky bottom-0 z-10 bg-surface/95">
+        className="w-full flex items-center justify-between px-5 py-4 text-base font-bold text-slate-700 dark:text-slate-200 active:bg-slate-50 dark:active:bg-slate-800/50 sticky bottom-0 z-10 bg-surface/95">
         <span>⏱ {lbl.sessionLog} {reviewEntries.length > 0 && `(${reviewEntries.length})`}</span>
         <span className="text-slate-400 text-lg leading-none">{show ? "▲" : "▼"}</span>
       </button>
