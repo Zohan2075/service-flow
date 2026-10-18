@@ -70,6 +70,7 @@ updated: "2026-10-17"
 | 1 | Program typography + timer circles | ProgramView/ActiveTimerBar size bumps | completed |
 | 2 | Time tab (clocks) | Store slice, TimeView, 3rd tab, i18n | completed |
 | 3 | Global floating widget | TimeWidget, resize, alerts, layout mount | completed |
+| 4 | Widget move + arc resize + tab dividers | Grip moves widget; arc resizes to 200%; tab separators | completed |
 
 ## Risks & Open Questions
 
@@ -91,3 +92,6 @@ updated: "2026-10-17"
 - Phase 2 completed: `timeTools` slice, `TimeView` (4 clocks, detection via BigDataCloud + timeapi.io with fallback + manual selector), 3rd tab with `?tab=time`, 23 i18n keys. Live-verified (stopwatch persistence, countdown alert, real detection pipeline). type-check + build green.
 - Phase 3 started: global floating mini-clock (resizable, alert owner).
 - Phase 3 completed: resizable floating pill on every dashboard page (focus priority, pause/resume, tap-to-open, hide, drag-grip resize persisted 0.8–1.6, global countdown alert); fixed a `widgetVisible` nesting bug found during live verification. Full live pass green (persistence across reload, cross-page alert, resize, hide). type-check + build green. **Plan complete — awaiting user manual QA.**
+- Phase 4 started (user follow-up): grip button becomes move-drag (free position, persisted); corner arc handle resizes up to 200%; Program/Comments/Time tabs get divider lines.
+- Phase 4 completed: grip moves the widget anywhere (viewport-clamped, persisted, dblclick reset); arc handle resizes 0.8–2.0 with live % badge; tab dividers live. Root bug found & fixed during live instrumentation: double-minus in the transform template (`translate(--72px)`) = silently-dropped invalid CSS (why the pill seemed stuck); plus native window listeners for gestures, finite-value sanitization, and free-move clamp for oversized widgets. All verified live (move/resize/persist/resets/hide). type-check + build green. **Awaiting user manual QA.**
+- Phase 4 follow-up: device-adaptive resize cap (`min(200%, space that fits the screen)`; recomputed per position/rotation) — mobile default anchor tops at ~140%, at the right edge ~175%, desktop reaches 200%; verified fits-in-viewport in all cases.

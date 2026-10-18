@@ -18,6 +18,8 @@ interface SegmentedControlProps<T extends string> {
   fullWidth?: boolean;
   className?: string;
   ariaLabel?: string;
+  /** Show a divider line between options (after the first one). */
+  dividers?: boolean;
 }
 
 export default function SegmentedControl<T extends string = string>({
@@ -28,6 +30,7 @@ export default function SegmentedControl<T extends string = string>({
   fullWidth = false,
   className,
   ariaLabel,
+  dividers = false,
 }: SegmentedControlProps<T>) {
   const layoutId = useId();
 
@@ -41,7 +44,7 @@ export default function SegmentedControl<T extends string = string>({
         className,
       )}
     >
-      {options.map((option) => {
+      {options.map((option, index) => {
         const selected = option.value === value;
         return (
           <button
@@ -51,6 +54,7 @@ export default function SegmentedControl<T extends string = string>({
             aria-pressed={selected}
             className={cn(
               "relative flex items-center justify-center rounded-lg font-semibold transition-colors",
+              dividers && index > 0 && "border-l border-slate-300 dark:border-slate-600",
               size === "sm"
                 ? "px-3 py-1.5 text-xs min-h-7"
                 : size === "lg"

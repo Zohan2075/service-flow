@@ -174,7 +174,8 @@ export interface TimeToolsState {
   countryTz: string | null;      // IANA, e.g. "America/Santo_Domingo"
   countryLabel: string | null;   // e.g. "República Dominicana"
   widgetVisible: boolean;
-  widgetScale: number;           // 0.8 – 1.6
+  widgetScale: number;           // 0.8 – 2.0
+  widgetOffset: { x: number; y: number }; // px away from the default right/bottom anchor
 }
 
 // ─── Backup file schema ──────────────────────────────────────────────────────

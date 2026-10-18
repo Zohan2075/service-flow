@@ -401,6 +401,7 @@ const translations = {
     "time.widget": "Mini clock",
     "time.hide": "Hide",
     "time.resize": "Resize",
+    "time.move": "Move",
 
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
@@ -800,6 +801,7 @@ const translations = {
     "time.widget": "Mini reloj",
     "time.hide": "Ocultar",
     "time.resize": "Redimensionar",
+    "time.move": "Mover",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",

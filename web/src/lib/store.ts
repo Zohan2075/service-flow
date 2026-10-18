@@ -359,6 +359,7 @@ resetPresidingConfig: () => void;
   setCountryClock: (tz: string | null, label: string | null) => void;
   setWidgetVisible: (visible: boolean) => void;
   setWidgetScale: (scale: number) => void;
+  setWidgetOffset: (x: number, y: number) => void;
 }
 
 interface SyncMetadata {
@@ -783,7 +784,7 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
 // ─── Time tools (Tiempo tab) ────────────────────────────────────────────────
 
 const TIME_WIDGET_SCALE_MIN = 0.8;
-const TIME_WIDGET_SCALE_MAX = 1.6;
+const TIME_WIDGET_SCALE_MAX = 2.0;
 
 function getDefaultTimeTools(): TimeToolsState {
   return {
@@ -793,12 +794,20 @@ function getDefaultTimeTools(): TimeToolsState {
     countryLabel: null,
     widgetVisible: false,
     widgetScale: 1,
+    widgetOffset: { x: 0, y: 0 },
   };
 }
 
 function clampWidgetScale(scale: number): number {
   if (!Number.isFinite(scale)) return 1;
   return Math.min(TIME_WIDGET_SCALE_MAX, Math.max(TIME_WIDGET_SCALE_MIN, scale));
+}
+
+const WIDGET_OFFSET_LIMIT = 10_000;
+
+function clampWidgetOffsetComponent(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(WIDGET_OFFSET_LIMIT, Math.max(-WIDGET_OFFSET_LIMIT, value));
 }
 
 function normalizeTimeTools(raw?: Partial<TimeToolsState> | null): TimeToolsState {
@@ -824,6 +833,10 @@ function normalizeTimeTools(raw?: Partial<TimeToolsState> | null): TimeToolsStat
     countryLabel: typeof raw?.countryLabel === "string" ? raw.countryLabel : null,
     widgetVisible: Boolean(raw?.widgetVisible),
     widgetScale: clampWidgetScale(typeof raw?.widgetScale === "number" ? raw.widgetScale : defaults.widgetScale),
+    widgetOffset: {
+      x: clampWidgetOffsetComponent(raw?.widgetOffset?.x),
+      y: clampWidgetOffsetComponent(raw?.widgetOffset?.y),
+    },
   };
 }
 
@@ -1989,6 +2002,13 @@ resetPresidingConfig: () =>
       setWidgetScale: (scale) =>
         set((s) => ({
           timeTools: { ...s.timeTools, widgetScale: clampWidgetScale(scale) },
+        })),
+      setWidgetOffset: (x, y) =>
+        set((s) => ({
+          timeTools: {
+            ...s.timeTools,
+            widgetOffset: { x: clampWidgetOffsetComponent(x), y: clampWidgetOffsetComponent(y) },
+          },
         })),
 
       resetData: () =>

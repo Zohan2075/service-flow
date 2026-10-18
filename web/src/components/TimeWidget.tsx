@@ -20,8 +20,9 @@ import { playAlertBeep } from "@/lib/alertSound";
 // dashboard page bundle.
 
 const WIDGET_SCALE_MIN = 0.8;
-const WIDGET_SCALE_MAX = 1.6;
+const WIDGET_SCALE_MAX = 2.0;
 const SCALE_DRAG_PX_PER_UNIT = 120;
+const VIEWPORT_MARGIN_PX = 8;
 
 function clampWidgetScale(scale: number): number {
   if (!Number.isFinite(scale)) return 1;
@@ -113,6 +114,7 @@ export default function TimeWidget() {
 
   const widgetVisible = useStore((s) => s.timeTools.widgetVisible);
   const widgetScale = useStore((s) => s.timeTools.widgetScale);
+  const widgetOffset = useStore((s) => s.timeTools.widgetOffset);
   const stopwatch = useStore((s) => s.timeTools.stopwatch);
   const countdown = useStore((s) => s.timeTools.countdown);
   const countryTz = useStore((s) => s.timeTools.countryTz);
@@ -123,6 +125,7 @@ export default function TimeWidget() {
   const countdownPause = useStore((s) => s.countdownPause);
   const setWidgetVisible = useStore((s) => s.setWidgetVisible);
   const setWidgetScale = useStore((s) => s.setWidgetScale);
+  const setWidgetOffset = useStore((s) => s.setWidgetOffset);
 
   // Global countdown alert: must tick even while the pill is hidden.
   useCountdownAlert();
@@ -184,59 +187,194 @@ export default function TimeWidget() {
     }
   };
 
-  /* ----- resize (drag grip; live preview, persisted on release) ----- */
+  /* ----- move (grip drag; live preview, persisted on release) ----- */
+  type MoveDrag = {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startOffset: { x: number; y: number };
+    scaleAtStart: number;
+    minDx: number;
+    maxDx: number;
+    minDy: number;
+    maxDy: number;
+  };
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const moveDragRef = useRef<MoveDrag | null>(null);
+
+  // Sanitized mirrors of the store values (never NaN/undefined).
+  const safeOffset = {
+    x: Number.isFinite(widgetOffset?.x) ? widgetOffset.x : 0,
+    y: Number.isFinite(widgetOffset?.y) ? widgetOffset.y : 0,
+  };
+  const safeScale = Number.isFinite(widgetScale) ? widgetScale : 1;
+  const safeOffsetRef = useRef(safeOffset);
+  useEffect(() => {
+    safeOffsetRef.current = safeOffset;
+  });
+
+  // Imperative preview during gestures: React state updates from native
+  // window listeners proved unreliable here (observed live), so drags write
+  // the transform straight to the DOM; the store commit on release re-renders
+  // with the same final pose.
+  const applyPreview = (offset: { x: number; y: number }, scale: number) => {
+    const el = rootRef.current;
+    if (el) el.style.transform = `translate(${-offset.x}px, ${-offset.y}px) scale(${scale})`;
+  };
+
+  // Device-adaptive resize cap: the widget may never exceed the viewport, so
+  // the effective max scale depends on the current screen AND anchor position
+  // (capped at 200%). offsetWidth/Height are layout sizes (transform-safe);
+  // the rect's right/bottom edges are scale-invariant (origin: bottom right).
+  const [viewportMaxScale, setViewportMaxScale] = useState(WIDGET_SCALE_MAX);
+  const viewportMaxScaleRef = useRef(viewportMaxScale);
+  useEffect(() => {
+    const update = () => {
+      const el = rootRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const fit = Math.min(
+        (rect.right - VIEWPORT_MARGIN_PX) / Math.max(1, el.offsetWidth),
+        (rect.bottom - VIEWPORT_MARGIN_PX) / Math.max(1, el.offsetHeight),
+      );
+      const rounded = Math.floor(fit * 20) / 20; // 5% steps, round down
+      const next = Math.min(WIDGET_SCALE_MAX, Math.max(WIDGET_SCALE_MIN, rounded));
+      viewportMaxScaleRef.current = next;
+      setViewportMaxScale(next);
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [widgetVisible, widgetOffset.x, widgetOffset.y]);
+
+  const computeDragOffset = (drag: MoveDrag, dx: number, dy: number): { x: number; y: number } => {
+    // Clamp the delta into the allowed movement range. When the widget is
+    // larger than the viewport (min > max), let it move freely instead of
+    // forcing a shift — this keeps plain clicks (delta 0) inert and lets the
+    // user drag an oversized widget back into view.
+    const clampDelta = (delta: number, min: number, max: number) =>
+      min > max ? delta : Math.min(max, Math.max(min, delta));
+    const clampedDx = clampDelta(dx, drag.minDx, drag.maxDx);
+    const clampedDy = clampDelta(dy, drag.minDy, drag.maxDy);
+    // The widget is translated by (-x, -y), so the pointer delta maps inversely.
+    return { x: drag.startOffset.x - clampedDx, y: drag.startOffset.y - clampedDy };
+  };
+
+  // Native window listeners (not pointer capture + React delegation): captured
+  // pointer move/up events are not reliably delivered through React's root
+  // delegation (observed live), while window listeners always receive them.
+  const startMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!event.isPrimary || moveDragRef.current) return;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const drag: MoveDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffset: safeOffset,
+      scaleAtStart: safeScale,
+      minDx: VIEWPORT_MARGIN_PX - rect.left,
+      maxDx: window.innerWidth - VIEWPORT_MARGIN_PX - rect.right,
+      minDy: VIEWPORT_MARGIN_PX - rect.top,
+      maxDy: window.innerHeight - VIEWPORT_MARGIN_PX - rect.bottom,
+    };
+    moveDragRef.current = drag;
+
+    const onDragMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== drag.pointerId) return;
+      applyPreview(computeDragOffset(drag, ev.clientX - drag.startX, ev.clientY - drag.startY), drag.scaleAtStart);
+    };
+    const finish = (ev: PointerEvent) => {
+      if (ev.pointerId !== drag.pointerId) return;
+      window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      moveDragRef.current = null;
+      const final = computeDragOffset(drag, ev.clientX - drag.startX, ev.clientY - drag.startY);
+      applyPreview(final, drag.scaleAtStart);
+      setWidgetOffset(final.x, final.y);
+    };
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  };
+
+  const resetOffset = () => {
+    moveDragRef.current = null;
+    setWidgetOffset(0, 0);
+  };
+
+  /* ----- resize (arc handle; live preview, persisted on release) ----- */
   const [previewScale, setPreviewScale] = useState<number | null>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; startScale: number } | null>(null);
+  const resizeDragRef = useRef<{ pointerId: number; startX: number; startScale: number } | null>(null);
 
   const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!event.isPrimary) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startScale: widgetScale };
+    if (!event.isPrimary || resizeDragRef.current) return;
+    const drag = { pointerId: event.pointerId, startX: event.clientX, startScale: widgetScale };
+    resizeDragRef.current = drag;
     setPreviewScale(widgetScale);
-  };
 
-  const moveResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    setPreviewScale(
-      clampWidgetScale(drag.startScale + (event.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT),
-    );
-  };
-
-  const endResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    dragRef.current = null;
-    const final = clampWidgetScale(
-      drag.startScale + (event.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT,
-    );
-    setPreviewScale(null);
-    setWidgetScale(final);
+    const onDragMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== drag.pointerId) return;
+      const next = Math.min(
+        clampWidgetScale(drag.startScale + (ev.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT),
+        viewportMaxScaleRef.current,
+      );
+      applyPreview(safeOffsetRef.current, next);
+      setPreviewScale(next);
+    };
+    const finish = (ev: PointerEvent) => {
+      if (ev.pointerId !== drag.pointerId) return;
+      window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      resizeDragRef.current = null;
+      const final = Math.min(
+        clampWidgetScale(drag.startScale + (ev.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT),
+        viewportMaxScaleRef.current,
+      );
+      applyPreview(safeOffsetRef.current, final);
+      setPreviewScale(null);
+      setWidgetScale(final);
+    };
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
   };
 
   const resetScale = () => {
-    dragRef.current = null;
+    resizeDragRef.current = null;
     setPreviewScale(null);
     setWidgetScale(1);
   };
 
   if (!widgetVisible) return null;
 
-  const displayScale = previewScale ?? widgetScale;
+  // Defensive: never emit an invalid transform ("translate(-NaNpx …)" is
+  // silently dropped by browsers, which made the pill unreachable).
+  // Also clamp to the device-adaptive cap so it always fits the screen.
+  const rawDisplayScale = Number.isFinite(previewScale ?? widgetScale) ? (previewScale ?? widgetScale) : 1;
+  const displayScale = Math.min(Math.max(rawDisplayScale, WIDGET_SCALE_MIN), viewportMaxScale);
+  const displayOffset = safeOffset;
 
   return (
     <div
+      ref={rootRef}
       role="group"
       aria-label={t("time.widget")}
       className="fixed z-40 right-20 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] md:right-4 md:bottom-4"
-      style={{ transform: `scale(${displayScale})`, transformOrigin: "bottom right" }}
+      style={{
+        transform: `translate(${-displayOffset.x}px, ${-displayOffset.y}px) scale(${displayScale})`,
+        transformOrigin: "bottom right",
+      }}
     >
       {previewScale != null && (
         <div className="pointer-events-none absolute -top-7 right-0 rounded-full bg-slate-900/90 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-white dark:bg-slate-100/90 dark:text-slate-900">
           {Math.round(displayScale * 100)}%
         </div>
       )}
-      <div className="flex items-center gap-0.5 rounded-full border border-slate-200 bg-surface/95 py-0.5 pl-1 pr-0.5 shadow-card backdrop-blur-md dark:border-slate-700">
+      <div className="relative flex items-center gap-0.5 rounded-full border border-slate-200 bg-surface/95 py-0.5 pl-1 pr-0.5 shadow-card backdrop-blur-md dark:border-slate-700">
         {/* Main time → open the Time tab */}
         <button
           type="button"
@@ -265,16 +403,13 @@ export default function TimeWidget() {
           </button>
         )}
 
-        {/* Resize grip: horizontal drag scales 0.8–1.6; double-click resets */}
+        {/* Move grip: drag moves the widget; double-click resets to the default corner */}
         <button
           type="button"
-          aria-label={t("time.resize")}
-          onPointerDown={startResize}
-          onPointerMove={moveResize}
-          onPointerUp={endResize}
-          onPointerCancel={endResize}
-          onDoubleClick={resetScale}
-          className={`${ICON_BUTTON_CLASS} cursor-ew-resize touch-none`}
+          aria-label={t("time.move")}
+          onPointerDown={startMove}
+          onDoubleClick={resetOffset}
+          className={`${ICON_BUTTON_CLASS} cursor-move touch-none`}
         >
           <span className="material-symbols-outlined text-base leading-none">drag_indicator</span>
         </button>
@@ -286,6 +421,20 @@ export default function TimeWidget() {
           className={ICON_BUTTON_CLASS}
         >
           <span className="material-symbols-outlined text-base leading-none">close</span>
+        </button>
+
+        {/* Arc resize handle on the pill's bottom-right rounded edge */}
+        <button
+          type="button"
+          aria-label={t("time.resize")}
+          onPointerDown={startResize}
+          onDoubleClick={resetScale}
+          className="group absolute -bottom-0.5 -right-0.5 flex size-6 touch-none cursor-nwse-resize items-end justify-end bg-transparent"
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none mb-px mr-px size-4 rounded-br-[12px] border-b-2 border-r-2 border-slate-300/80 transition-colors group-hover:border-primary dark:border-slate-500/80"
+          />
         </button>
       </div>
     </div>

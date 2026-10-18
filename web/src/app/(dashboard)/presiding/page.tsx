@@ -124,6 +124,7 @@ function PresidingDashboard() {
       <div className="shrink-0 px-4 pt-4 pb-2">
         <SegmentedControl
           fullWidth
+          dividers
           size="lg"
           value={tab}
           onChange={(v) => selectTab(v)}
