@@ -106,7 +106,7 @@ const FOCUS_ICON: Record<FocusClock, string> = {
 };
 
 const ICON_BUTTON_CLASS =
-  "flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
+  "flex size-8 md:size-10 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
 
 export default function TimeWidget() {
   const router = useRouter();
@@ -126,6 +126,7 @@ export default function TimeWidget() {
   const setWidgetVisible = useStore((s) => s.setWidgetVisible);
   const setWidgetScale = useStore((s) => s.setWidgetScale);
   const setWidgetOffset = useStore((s) => s.setWidgetOffset);
+  const widgetMode = useStore((s) => s.timeTools.widgetMode);
 
   // Global countdown alert: must tick even while the pill is hidden.
   useCountdownAlert();
@@ -142,15 +143,27 @@ export default function TimeWidget() {
   const hour12 = timeFormat === "12h";
   const deviceTz = useMemo(() => getDeviceTimeZone(), []);
 
-  /* ----- focus clock priority: countdown → stopwatch → country → local ----- */
+  /* ----- focus resolution: widgetMode forces a clock; "auto" prefers live ----- */
+  // Auto: a running timer wins; otherwise the ticking clock shows — a paused
+  // timer never freezes the pill (it is offered as a resume button instead).
+  const pausedStopwatch = !stopwatch.running && stopwatch.accumulatedMs > 0;
+  const pausedCountdown = !countdown.running && countdown.remainingMs > 0 && countdown.finishedAtMs == null;
+
+  const clockFocus: FocusClock = countryTz ? "country" : "local";
   const focus: FocusClock =
-    countdown.totalMs > 0
-      ? "countdown"
-      : stopwatch.running || stopwatch.accumulatedMs > 0
+    widgetMode === "clock"
+      ? clockFocus
+      : widgetMode === "stopwatch"
         ? "stopwatch"
-        : countryTz
-          ? "country"
-          : "local";
+        : widgetMode === "countdown"
+          ? countdown.running || countdown.remainingMs > 0
+            ? "countdown"
+            : clockFocus
+          : countdown.running
+            ? "countdown"
+            : stopwatch.running
+              ? "stopwatch"
+              : clockFocus;
 
   const stopwatchElapsedMs =
     stopwatch.accumulatedMs +
@@ -170,21 +183,33 @@ export default function TimeWidget() {
         ? fmtHMS(stopwatchElapsedMs)
         : fmtClock(now, focus === "country" ? (countryTz ?? deviceTz) : deviceTz, hour12, locale);
 
-  const toggleRunning = focus === "stopwatch" ? stopwatch.running : countdown.running;
-  const canToggleCountdown =
-    countdown.running || (countdown.finishedAtMs == null && countdown.remainingMs > 0);
-  const showToggle = focus === "stopwatch" || (focus === "countdown" && canToggleCountdown);
+  // Toggle button: "pause" while the focused timer runs; otherwise a play
+  // button to resume/start — always in forced modes, and offered next to the
+  // clock in auto mode when a paused timer exists.
+  const focusRunning =
+    (focus === "stopwatch" && stopwatch.running) || (focus === "countdown" && countdown.running);
+  const focusResumable =
+    (focus === "stopwatch" && !stopwatch.running) ||
+    (focus === "countdown" && !countdown.running && countdown.remainingMs > 0 && countdown.finishedAtMs == null);
+  const toggleTarget: "pause" | "resume" | null = focusRunning
+    ? "pause"
+    : focusResumable
+      ? "resume"
+      : widgetMode === "auto" && (focus === "country" || focus === "local") && (pausedStopwatch || pausedCountdown)
+        ? "resume"
+        : null;
 
-  const toggleFocusTimer = () => {
-    if (focus === "stopwatch") {
-      if (stopwatch.running) stopwatchPause();
-      else stopwatchStart();
+  const handleToggle = () => {
+    if (toggleTarget === "pause") {
+      if (focus === "stopwatch") stopwatchPause();
+      else if (focus === "countdown") countdownPause();
       return;
     }
-    if (focus === "countdown") {
-      if (countdown.running) countdownPause();
-      else countdownStart(countdown.remainingMs);
-    }
+    if (toggleTarget !== "resume") return;
+    if (focus === "stopwatch") stopwatchStart();
+    else if (focus === "countdown") countdownStart(countdown.remainingMs);
+    else if (pausedStopwatch) stopwatchStart();
+    else if (pausedCountdown) countdownStart(countdown.remainingMs);
   };
 
   /* ----- move (grip drag; live preview, persisted on release) ----- */
@@ -223,20 +248,18 @@ export default function TimeWidget() {
     if (el) el.style.transform = `translate(${-offset.x}px, ${-offset.y}px) scale(${scale})`;
   };
 
-  // Device-adaptive resize cap: the widget may never exceed the viewport, so
-  // the effective max scale depends on the current screen AND anchor position
-  // (capped at 200%). offsetWidth/Height are layout sizes (transform-safe);
-  // the rect's right/bottom edges are scale-invariant (origin: bottom right).
+  // Device-adaptive resize cap: the widget may grow up to the full viewport
+  // (capped at 200%); while growing, the gesture auto-shifts it to stay on
+  // screen. offsetWidth/Height are layout sizes (transform-independent).
   const [viewportMaxScale, setViewportMaxScale] = useState(WIDGET_SCALE_MAX);
   const viewportMaxScaleRef = useRef(viewportMaxScale);
   useEffect(() => {
     const update = () => {
       const el = rootRef.current;
       if (!el) return;
-      const rect = el.getBoundingClientRect();
       const fit = Math.min(
-        (rect.right - VIEWPORT_MARGIN_PX) / Math.max(1, el.offsetWidth),
-        (rect.bottom - VIEWPORT_MARGIN_PX) / Math.max(1, el.offsetHeight),
+        (window.innerWidth - VIEWPORT_MARGIN_PX * 2) / Math.max(1, el.offsetWidth),
+        (window.innerHeight - VIEWPORT_MARGIN_PX * 2) / Math.max(1, el.offsetHeight),
       );
       const rounded = Math.floor(fit * 20) / 20; // 5% steps, round down
       const next = Math.min(WIDGET_SCALE_MAX, Math.max(WIDGET_SCALE_MIN, rounded));
@@ -246,7 +269,7 @@ export default function TimeWidget() {
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [widgetVisible, widgetOffset.x, widgetOffset.y]);
+  }, [widgetVisible]);
 
   const computeDragOffset = (drag: MoveDrag, dx: number, dy: number): { x: number; y: number } => {
     // Clamp the delta into the allowed movement range. When the widget is
@@ -307,21 +330,49 @@ export default function TimeWidget() {
 
   /* ----- resize (arc handle; live preview, persisted on release) ----- */
   const [previewScale, setPreviewScale] = useState<number | null>(null);
-  const resizeDragRef = useRef<{ pointerId: number; startX: number; startScale: number } | null>(null);
+  const resizeDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startScale: number;
+    startOffset: { x: number; y: number };
+    startRight: number;
+  } | null>(null);
 
   const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!event.isPrimary || resizeDragRef.current) return;
-    const drag = { pointerId: event.pointerId, startX: event.clientX, startScale: widgetScale };
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScale: widgetScale,
+      startOffset: safeOffset,
+      startRight: rect.right,
+    };
     resizeDragRef.current = drag;
     setPreviewScale(widgetScale);
 
-    const onDragMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== drag.pointerId) return;
-      const next = Math.min(
+    const computeScale = (ev: PointerEvent) =>
+      Math.min(
         clampWidgetScale(drag.startScale + (ev.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT),
         viewportMaxScaleRef.current,
       );
-      applyPreview(safeOffsetRef.current, next);
+    // While growing, nudge the widget so it stays fully on screen: the right
+    // edge moves toward the viewport edge only as much as needed.
+    const computeOffset = (scale: number): { x: number; y: number } => {
+      const width = Math.max(1, el.offsetWidth) * scale;
+      const maxRight = window.innerWidth - VIEWPORT_MARGIN_PX;
+      const minRight = Math.min(width + VIEWPORT_MARGIN_PX, maxRight);
+      const targetRight = Math.min(Math.max(drag.startRight, minRight), maxRight);
+      // translate(-x): shifting the right edge by d changes x by -d.
+      return { x: drag.startOffset.x - (targetRight - drag.startRight), y: drag.startOffset.y };
+    };
+
+    const onDragMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== drag.pointerId) return;
+      const next = computeScale(ev);
+      applyPreview(computeOffset(next), next);
       setPreviewScale(next);
     };
     const finish = (ev: PointerEvent) => {
@@ -330,13 +381,14 @@ export default function TimeWidget() {
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
       resizeDragRef.current = null;
-      const final = Math.min(
-        clampWidgetScale(drag.startScale + (ev.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT),
-        viewportMaxScaleRef.current,
-      );
-      applyPreview(safeOffsetRef.current, final);
+      const final = computeScale(ev);
+      const finalOffset = computeOffset(final);
+      applyPreview(finalOffset, final);
       setPreviewScale(null);
       setWidgetScale(final);
+      if (finalOffset.x !== drag.startOffset.x || finalOffset.y !== drag.startOffset.y) {
+        setWidgetOffset(finalOffset.x, finalOffset.y);
+      }
     };
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", finish);
@@ -374,31 +426,31 @@ export default function TimeWidget() {
           {Math.round(displayScale * 100)}%
         </div>
       )}
-      <div className="relative flex items-center gap-0.5 rounded-full border border-slate-200 bg-surface/95 py-0.5 pl-1 pr-0.5 shadow-card backdrop-blur-md dark:border-slate-700">
+      <div className="relative flex items-center gap-0.5 rounded-full border border-slate-200 bg-surface/95 py-0.5 md:py-1 pl-1 md:pl-1.5 pr-0.5 md:pr-1 shadow-card backdrop-blur-md dark:border-slate-700">
         {/* Main time → open the Time tab */}
         <button
           type="button"
           onClick={() => router.push("/presiding?tab=time")}
           title={t("time.title")}
-          className="flex items-center gap-1.5 rounded-full px-2 py-1.5 text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700/60"
+          className="flex items-center gap-1.5 md:gap-2 rounded-full px-2 md:px-3 py-1.5 md:py-2 text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700/60"
         >
-          <span className="material-symbols-outlined text-base leading-none text-primary">
+          <span className="material-symbols-outlined text-base md:text-xl leading-none text-primary">
             {FOCUS_ICON[focus]}
           </span>
-          <span className="font-mono text-sm font-bold leading-none tabular-nums" suppressHydrationWarning>
+          <span className="font-mono text-sm md:text-base font-bold leading-none tabular-nums" suppressHydrationWarning>
             {displayText}
           </span>
         </button>
 
-        {showToggle && (
+        {toggleTarget && (
           <button
             type="button"
-            onClick={toggleFocusTimer}
-            aria-label={toggleRunning ? t("time.pause") : t("time.resume")}
+            onClick={handleToggle}
+            aria-label={toggleTarget === "pause" ? t("time.pause") : t("time.resume")}
             className={ICON_BUTTON_CLASS}
           >
             <span className="material-symbols-outlined text-base leading-none">
-              {toggleRunning ? "pause" : "play_arrow"}
+              {toggleTarget === "pause" ? "pause" : "play_arrow"}
             </span>
           </button>
         )}
@@ -429,11 +481,11 @@ export default function TimeWidget() {
           aria-label={t("time.resize")}
           onPointerDown={startResize}
           onDoubleClick={resetScale}
-          className="group absolute -bottom-0.5 -right-0.5 flex size-6 touch-none cursor-nwse-resize items-end justify-end bg-transparent"
+          className="group absolute -bottom-0.5 -right-0.5 flex size-6 md:size-7 touch-none cursor-nwse-resize items-end justify-end bg-transparent"
         >
           <span
             aria-hidden
-            className="pointer-events-none mb-px mr-px size-4 rounded-br-[12px] border-b-2 border-r-2 border-slate-300/80 transition-colors group-hover:border-primary dark:border-slate-500/80"
+            className="pointer-events-none mb-px mr-px size-4 md:size-5 rounded-br-[12px] border-b-2 border-r-2 border-slate-300/80 transition-colors group-hover:border-primary dark:border-slate-500/80"
           />
         </button>
       </div>

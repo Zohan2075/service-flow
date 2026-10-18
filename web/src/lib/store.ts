@@ -360,6 +360,7 @@ resetPresidingConfig: () => void;
   setWidgetVisible: (visible: boolean) => void;
   setWidgetScale: (scale: number) => void;
   setWidgetOffset: (x: number, y: number) => void;
+  setWidgetMode: (mode: TimeToolsState["widgetMode"]) => void;
 }
 
 interface SyncMetadata {
@@ -795,6 +796,7 @@ function getDefaultTimeTools(): TimeToolsState {
     widgetVisible: false,
     widgetScale: 1,
     widgetOffset: { x: 0, y: 0 },
+    widgetMode: "auto",
   };
 }
 
@@ -837,6 +839,10 @@ function normalizeTimeTools(raw?: Partial<TimeToolsState> | null): TimeToolsStat
       x: clampWidgetOffsetComponent(raw?.widgetOffset?.x),
       y: clampWidgetOffsetComponent(raw?.widgetOffset?.y),
     },
+    widgetMode:
+      raw?.widgetMode === "clock" || raw?.widgetMode === "stopwatch" || raw?.widgetMode === "countdown"
+        ? raw.widgetMode
+        : "auto",
   };
 }
 
@@ -2009,6 +2015,10 @@ resetPresidingConfig: () =>
             ...s.timeTools,
             widgetOffset: { x: clampWidgetOffsetComponent(x), y: clampWidgetOffsetComponent(y) },
           },
+        })),
+      setWidgetMode: (mode) =>
+        set((s) => ({
+          timeTools: { ...s.timeTools, widgetMode: mode },
         })),
 
       resetData: () =>

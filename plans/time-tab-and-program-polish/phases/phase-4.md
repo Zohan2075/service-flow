@@ -75,4 +75,11 @@ Follow-up UX polish requested by the user:
   - Double-click grip → offset reset; double-click arc → scale reset (handlers verified wired + working via synthetic dispatch)
   - Hide (X) works; single instance; no page errors
 - **Device-adaptive resize cap** (user follow-up "que el resize se adapte a cada pantalla"): the max scale is `min(200%, available space / base size)`, computed from the widget's current anchor position (rect edges are scale-invariant with the bottom-right origin) and recomputed on viewport resize and on every move. Verified live: mobile 390px at default anchor → max **1.40** (fits); mobile after dragging right → **1.75** (fits); desktop 1280px fresh → reaches **2.00** (fits). Persisted scales display clamped per device.
+- **Follow-up 2** (user: "la hora no avanza en la píldora" + "el % es muy poco"):
+  - Pill focus priority now shows **only running** timers — a paused/finished stopwatch or countdown no longer occupies the pill, so it always displays something live (running timer or ticking clock). Verified live: after pausing, the pill shows the live clock advancing (`23:28:33 → 23:28:35`).
+  - Resize cap now uses the **full viewport** and the gesture **auto-shifts** the widget to keep it on screen while growing: mobile 390px reaches **175%** (fits: true), desktop reaches **200%** (fits: true).
+- **Follow-up 3** (user: cronómetro flotante + "flotar la hora real" + tamaño PC):
+  - Pill now supports **resume from the pill**: pausing a running timer shows the live clock **plus a ▶ button** that resumes it (verified: pause → `schedule 23:39:40` + Resume; resume → stopwatch continues).
+  - NEW **"Floating widget shows" mode selector** in the Time tab (Automatic / **Real time** / Stopwatch / Countdown): with "Real time" the pill always floats the live clock, even while a stopwatch/countdown runs (verified live) — directly satisfies "be able to float a real time". Persisted (`widgetMode` in the store, normalized).
+  - **PC size increase**: pill content scales up at `md+` — base **260×54** on desktop vs 210×38 on mobile (icons 40px, bigger time/arc).
 - `type-check` + `build` green.

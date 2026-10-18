@@ -402,6 +402,9 @@ const translations = {
     "time.hide": "Hide",
     "time.resize": "Resize",
     "time.move": "Move",
+    "time.widgetMode": "Floating widget shows",
+    "time.modeAuto": "Automatic",
+    "time.modeClock": "Real time",
 
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
@@ -802,6 +805,9 @@ const translations = {
     "time.hide": "Ocultar",
     "time.resize": "Redimensionar",
     "time.move": "Mover",
+    "time.widgetMode": "La ventana flotante muestra",
+    "time.modeAuto": "Automático",
+    "time.modeClock": "Hora real",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",

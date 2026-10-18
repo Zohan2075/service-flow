@@ -180,6 +180,8 @@ export default function TimeView() {
   const countdown = useStore((s) => s.timeTools.countdown);
   const countryTz = useStore((s) => s.timeTools.countryTz);
   const countryLabel = useStore((s) => s.timeTools.countryLabel);
+  const widgetMode = useStore((s) => s.timeTools.widgetMode);
+  const setWidgetMode = useStore((s) => s.setWidgetMode);
   const stopwatchStart = useStore((s) => s.stopwatchStart);
   const stopwatchPause = useStore((s) => s.stopwatchPause);
   const stopwatchReset = useStore((s) => s.stopwatchReset);
@@ -327,6 +329,27 @@ export default function TimeView() {
       aria-label={t("time.title")}
       className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 overscroll-contain"
     >
+      {/* ===== Floating widget display mode ===== */}
+      <section className={CARD_CLASS}>
+        <h3 className={CARD_HEADER_CLASS}>
+          <span className="material-symbols-outlined text-base">pip</span>
+          {t("time.widgetMode")}
+        </h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(["auto", "clock", "stopwatch", "countdown"] as const).map((mode) => (
+            <OptionChip key={mode} selected={widgetMode === mode} onClick={() => setWidgetMode(mode)}>
+              {mode === "auto"
+                ? t("time.modeAuto")
+                : mode === "clock"
+                  ? t("time.modeClock")
+                  : mode === "stopwatch"
+                    ? t("time.stopwatch")
+                    : t("time.countdown")}
+            </OptionChip>
+          ))}
+        </div>
+      </section>
+
       {/* ===== Cronómetro ===== */}
       <section className={CARD_CLASS}>
         <h3 className={CARD_HEADER_CLASS}>

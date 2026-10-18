@@ -176,6 +176,7 @@ export interface TimeToolsState {
   widgetVisible: boolean;
   widgetScale: number;           // 0.8 – 2.0
   widgetOffset: { x: number; y: number }; // px away from the default right/bottom anchor
+  widgetMode: "auto" | "clock" | "stopwatch" | "countdown"; // what the floating pill shows
 }
 
 // ─── Backup file schema ──────────────────────────────────────────────────────
