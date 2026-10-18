@@ -182,6 +182,8 @@ export default function TimeView() {
   const countryLabel = useStore((s) => s.timeTools.countryLabel);
   const widgetMode = useStore((s) => s.timeTools.widgetMode);
   const setWidgetMode = useStore((s) => s.setWidgetMode);
+  const widgetVisible = useStore((s) => s.timeTools.widgetVisible);
+  const setWidgetVisible = useStore((s) => s.setWidgetVisible);
   const stopwatchStart = useStore((s) => s.stopwatchStart);
   const stopwatchPause = useStore((s) => s.stopwatchPause);
   const stopwatchReset = useStore((s) => s.stopwatchReset);
@@ -247,12 +249,51 @@ export default function TimeView() {
       ? t("time.resume")
       : t("time.start");
   const countdownCanStart = canResume || configuredMs > 0;
+  const pausedStopwatch = !stopwatch.running && stopwatchElapsedMs > 0;
+
+  // Mutual exclusion: while the floating pill is open it "presents" one
+  // clock — starting or floating a different one is blocked until it is
+  // closed (×). Controlling the presented timer itself stays enabled.
+  const floatedKind: "clock" | "stopwatch" | "countdown" | null = !widgetVisible
+    ? null
+    : widgetMode === "clock"
+      ? "clock"
+      : widgetMode === "stopwatch"
+        ? "stopwatch"
+        : widgetMode === "countdown"
+          ? "countdown"
+          : countdown.running
+            ? "countdown"
+            : stopwatch.running
+              ? "stopwatch"
+              : canResume
+                ? "countdown"
+                : pausedStopwatch
+                  ? "stopwatch"
+                  : "clock";
+  const stopwatchBlocked = floatedKind !== null && floatedKind !== "stopwatch";
+  const countdownBlocked = floatedKind !== null && floatedKind !== "countdown";
+
+  const toggleStopwatch = () => {
+    if (stopwatch.running) {
+      stopwatchPause();
+      return;
+    }
+    // The pill would otherwise keep showing the previously pinned clock.
+    if (!widgetVisible && (widgetMode === "clock" || widgetMode === "countdown")) setWidgetMode("auto");
+    stopwatchStart();
+  };
   const toggleCountdown = () => {
     if (countdown.running) {
       countdownPause();
       return;
     }
+    if (!widgetVisible && (widgetMode === "clock" || widgetMode === "stopwatch")) setWidgetMode("auto");
     countdownStart(canResume ? countdown.remainingMs : configuredMs);
+  };
+  const floatClock = () => {
+    setWidgetMode("clock");
+    setWidgetVisible(true);
   };
   const selectPreset = (min: number) => {
     setPresetMin(min);
@@ -348,6 +389,12 @@ export default function TimeView() {
             </OptionChip>
           ))}
         </div>
+        {widgetVisible && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+            <span className="material-symbols-outlined text-base leading-none">pip</span>
+            {t("time.closeWidgetFirst")}
+          </p>
+        )}
       </section>
 
       {/* ===== Cronómetro ===== */}
@@ -361,10 +408,11 @@ export default function TimeView() {
         </p>
         <div className="mt-4 flex items-center justify-center gap-3">
           <ActionButton
-            onClick={() => (stopwatch.running ? stopwatchPause() : stopwatchStart())}
+            onClick={toggleStopwatch}
             active={stopwatch.running}
             icon={stopwatch.running ? "pause" : "play_arrow"}
             label={stopwatchActionLabel}
+            disabled={stopwatchBlocked}
           />
           <ResetButton onClick={stopwatchReset} label={t("time.reset")} />
         </div>
@@ -439,7 +487,7 @@ export default function TimeView() {
             active={countdown.running}
             icon={countdown.running ? "pause" : "play_arrow"}
             label={countdownActionLabel}
-            disabled={!countdownCanStart}
+            disabled={!countdownCanStart || countdownBlocked}
           />
           <ResetButton onClick={countdownReset} label={t("time.reset")} />
         </div>
@@ -460,6 +508,14 @@ export default function TimeView() {
         >
           {fmtZoneDate(now, deviceTz, locale)}
         </p>
+        <div className="mt-4 flex items-center justify-center">
+          <ActionButton
+            onClick={floatClock}
+            icon="pip"
+            label={t("time.float")}
+            disabled={widgetVisible}
+          />
+        </div>
       </section>
 
       {/* ===== Hora del país ===== */}
@@ -486,12 +542,18 @@ export default function TimeView() {
             {t("time.offset")}: {tzOffsetLabel(now, effectiveTz) || "—"}
           </span>
         </div>
-        <div className="mt-4 flex items-center justify-center">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
           <ActionButton
             onClick={detectCountry}
             icon={detecting ? "progress_activity" : "my_location"}
             label={detecting ? t("time.detecting") : t("time.detect")}
             disabled={detecting}
+          />
+          <ActionButton
+            onClick={floatClock}
+            icon="pip"
+            label={t("time.float")}
+            disabled={widgetVisible}
           />
         </div>
         <label className="mt-4 block">
