@@ -1910,7 +1910,7 @@ resetPresidingConfig: () =>
       // ── Time tools (Tiempo tab) ───────────────────────────────────────────
       stopwatchStart: () =>
         set((s) => {
-          if (s.timeTools.stopwatch.running) return {};
+          if (s.timeTools.stopwatch.running || s.timeTools.countdown.running) return {};
           return {
             timeTools: {
               ...s.timeTools,
@@ -1948,7 +1948,7 @@ resetPresidingConfig: () =>
       countdownStart: (totalMs) =>
         set((s) => {
           const total = Math.max(0, Math.floor(totalMs));
-          if (total <= 0) return {};
+          if (total <= 0 || s.timeTools.stopwatch.running) return {};
           return {
             timeTools: {
               ...s.timeTools,

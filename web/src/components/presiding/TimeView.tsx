@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import OptionChip from "@/components/ui/OptionChip";
 import { SPRING_SNAPPY } from "@/components/ui/motion";
+import FullscreenClock from "@/components/presiding/FullscreenClock";
 
 /* ---------- constants + helpers ---------- */
 
@@ -200,6 +201,9 @@ export default function TimeView() {
   }, []);
   const now = useMemo(() => new Date(nowMs), [nowMs]);
 
+  // Fullscreen display overlay (pseudo-fullscreen on browsers without the API).
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+
   const locale = language === "es" ? "es-ES" : "en-US";
   const hour12 = prefsTimeFormat === "12h";
   const deviceTz = useMemo(() => getDeviceTimeZone(), []);
@@ -274,6 +278,12 @@ export default function TimeView() {
   const stopwatchBlocked = floatedKind !== null && floatedKind !== "stopwatch";
   const countdownBlocked = floatedKind !== null && floatedKind !== "countdown";
 
+  // Runtime mutual exclusion: the two timers cannot run at the same time.
+  // Only start/resume is blocked — the pause action of a running timer stays
+  // enabled (its flag is false while that timer runs).
+  const stopwatchBusy = !stopwatch.running && countdown.running;
+  const countdownBusy = !countdown.running && stopwatch.running;
+
   const toggleStopwatch = () => {
     if (stopwatch.running) {
       stopwatchPause();
@@ -294,6 +304,25 @@ export default function TimeView() {
   const floatClock = () => {
     setWidgetMode("clock");
     setWidgetVisible(true);
+  };
+  const openFullscreen = () => {
+    // Must stay synchronous (user gesture); iOS Safari has no element
+    // fullscreen — the overlay alone acts as pseudo-fullscreen there.
+    try {
+      const request = document.documentElement.requestFullscreen?.();
+      request?.catch(() => {});
+    } catch {
+      // Fullscreen API unavailable — keep going with the overlay.
+    }
+    setFullscreenOpen(true);
+  };
+  const closeFullscreen = () => {
+    setFullscreenOpen(false);
+    try {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    } catch {
+      // Exit is best-effort (the browser may already have exited).
+    }
   };
   const selectPreset = (min: number) => {
     setPresetMin(min);
@@ -370,6 +399,14 @@ export default function TimeView() {
       aria-label={t("time.title")}
       className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 overscroll-contain"
     >
+      <div className="flex justify-end">
+        <ActionButton
+          onClick={openFullscreen}
+          icon="fullscreen"
+          label={t("time.fullscreen")}
+        />
+      </div>
+
       {/* ===== Cronómetro ===== */}
       <section className={CARD_CLASS}>
         <h3 className={CARD_HEADER_CLASS}>
@@ -379,13 +416,16 @@ export default function TimeView() {
         <p className={TIME_TEXT_CLASS} suppressHydrationWarning>
           {fmtHMS(stopwatchElapsedMs)}
         </p>
+        {stopwatchBusy && (
+          <p className="mt-1 text-center text-xs font-bold text-amber-500">{t("time.timerBusy")}</p>
+        )}
         <div className="mt-4 flex items-center justify-center gap-3">
           <ActionButton
             onClick={toggleStopwatch}
             active={stopwatch.running}
             icon={stopwatch.running ? "pause" : "play_arrow"}
             label={stopwatchActionLabel}
-            disabled={stopwatchBlocked}
+            disabled={stopwatchBlocked || stopwatchBusy}
           />
           <ResetButton onClick={stopwatchReset} label={t("time.reset")} />
         </div>
@@ -405,6 +445,9 @@ export default function TimeView() {
         </p>
         {countdownFinished && (
           <p className="mt-1 text-center text-xs font-bold text-red-500">{t("time.done")}</p>
+        )}
+        {countdownBusy && (
+          <p className="mt-1 text-center text-xs font-bold text-amber-500">{t("time.timerBusy")}</p>
         )}
         <p className="mt-4 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
           {t("time.presets")}
@@ -460,7 +503,7 @@ export default function TimeView() {
             active={countdown.running}
             icon={countdown.running ? "pause" : "play_arrow"}
             label={countdownActionLabel}
-            disabled={!countdownCanStart || countdownBlocked}
+            disabled={!countdownCanStart || countdownBlocked || countdownBusy}
           />
           <ResetButton onClick={countdownReset} label={t("time.reset")} />
         </div>
@@ -550,6 +593,8 @@ export default function TimeView() {
           </select>
         </label>
       </section>
+
+      {fullscreenOpen && <FullscreenClock onClose={closeFullscreen} />}
     </div>
   );
 }

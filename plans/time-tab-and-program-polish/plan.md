@@ -71,6 +71,7 @@ updated: "2026-10-17"
 | 2 | Time tab (clocks) | Store slice, TimeView, 3rd tab, i18n | completed |
 | 3 | Global floating widget | TimeWidget, resize, alerts, layout mount | completed |
 | 4 | Widget move + arc resize + tab dividers | Grip moves widget; arc resizes to 200%; tab separators | completed |
+| 5 | Fullscreen display + timer mutual exclusion | Big landscape display (clock/timers); stopwatch↔countdown exclusivity | completed |
 
 ## Risks & Open Questions
 
@@ -97,3 +98,5 @@ updated: "2026-10-17"
 - Phase 4 follow-up: device-adaptive resize cap (`min(200%, space that fits the screen)`; recomputed per position/rotation) — mobile default anchor tops at ~140%, at the right edge ~175%, desktop reaches 200%; verified fits-in-viewport in all cases.
 - Phase 4 follow-up 2 (user): pill focus now shows only RUNNING timers (paused timers no longer freeze the pill — it always displays something live); resize cap raised to the full viewport with auto-shift while growing → mobile reaches **175%**, desktop **200%**, always fitting the screen. type-check + build green.
 - Phase 4 follow-up 3 (user): resume-from-pill (play button when a paused timer exists), "Floating widget shows" mode selector (Automatic/Real time/Stopwatch/Countdown; "Real time" pins the live clock in the pill even while timers run), desktop pill size increased (260×54 vs 210×38). Verified live; type-check + build green.
+- Phase 5 started (user): fullscreen display mode (clock + timers, landscape orientation-lock attempt, wake lock, auto-hiding controls) + stopwatch↔countdown mutual exclusion. Note: the user removed the "Floating widget shows" selector section; their `floatedKind` pill-exclusivity logic stays intact.
+- Phase 5 completed: store-level mutual exclusion (stopwatch↔countdown), TimeView blocked states + amber hints, fullscreen launcher, `FullscreenClock` (tap-to-cycle modes, giant controls, wake lock, orientation lock attempt, auto-hide + tap reveal, single exit owner). Live-verified end-to-end (real fullscreen, both exclusion directions, auto-hide/reveal, mode cycle, close). type-check + build green.

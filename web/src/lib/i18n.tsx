@@ -407,6 +407,10 @@ const translations = {
     "time.widgetMode": "Floating widget shows",
     "time.modeAuto": "Automatic",
     "time.modeClock": "Real time",
+    "time.fullscreen": "Full screen",
+    "time.exitFullscreen": "Exit",
+    "time.tapToCycle": "Tap the time to switch clock",
+    "time.timerBusy": "Another timer is running — stop it first",
 
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
@@ -812,6 +816,10 @@ const translations = {
     "time.widgetMode": "La ventana flotante muestra",
     "time.modeAuto": "Automático",
     "time.modeClock": "Hora real",
+    "time.fullscreen": "Pantalla completa",
+    "time.exitFullscreen": "Salir",
+    "time.tapToCycle": "Toca la hora para cambiar de reloj",
+    "time.timerBusy": "Otro temporizador está en marcha — deténlo primero",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",
