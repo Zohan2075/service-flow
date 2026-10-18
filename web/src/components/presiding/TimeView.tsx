@@ -370,33 +370,6 @@ export default function TimeView() {
       aria-label={t("time.title")}
       className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 overscroll-contain"
     >
-      {/* ===== Floating widget display mode ===== */}
-      <section className={CARD_CLASS}>
-        <h3 className={CARD_HEADER_CLASS}>
-          <span className="material-symbols-outlined text-base">pip</span>
-          {t("time.widgetMode")}
-        </h3>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(["auto", "clock", "stopwatch", "countdown"] as const).map((mode) => (
-            <OptionChip key={mode} selected={widgetMode === mode} onClick={() => setWidgetMode(mode)}>
-              {mode === "auto"
-                ? t("time.modeAuto")
-                : mode === "clock"
-                  ? t("time.modeClock")
-                  : mode === "stopwatch"
-                    ? t("time.stopwatch")
-                    : t("time.countdown")}
-            </OptionChip>
-          ))}
-        </div>
-        {widgetVisible && (
-          <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-            <span className="material-symbols-outlined text-base leading-none">pip</span>
-            {t("time.closeWidgetFirst")}
-          </p>
-        )}
-      </section>
-
       {/* ===== Cronómetro ===== */}
       <section className={CARD_CLASS}>
         <h3 className={CARD_HEADER_CLASS}>
