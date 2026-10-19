@@ -73,6 +73,7 @@ updated: "2026-10-17"
 | 4 | Widget move + arc resize + tab dividers | Grip moves widget; arc resizes to 200%; tab separators | completed |
 | 5 | Fullscreen display + timer mutual exclusion | Big landscape display (clock/timers); stopwatch↔countdown exclusivity | completed |
 | 6 | Pill close-stop + paused focus + dedicated fullscreens | X pauses; paused timers keep the pill; no timer buttons on clock; per-card locked fullscreen (overlay-only) | completed |
+| 7 | Crop-style resize + fullscreen exit pauses | TL handle resizes like a crop box (px window, undistorted content); leaving fullscreen pauses the timer | completed |
 
 ## Risks & Open Questions
 
@@ -102,3 +103,4 @@ updated: "2026-10-17"
 - Phase 5 started (user): fullscreen display mode (clock + timers, landscape orientation-lock attempt, wake lock, auto-hiding controls) + stopwatch↔countdown mutual exclusion. Note: the user removed the "Floating widget shows" selector section; their `floatedKind` pill-exclusivity logic stays intact.
 - Phase 5 completed: store-level mutual exclusion (stopwatch↔countdown), TimeView blocked states + amber hints, fullscreen launcher, `FullscreenClock` (tap-to-cycle modes, giant controls, wake lock, orientation lock attempt, auto-hide + tap reveal, single exit owner). Live-verified end-to-end (real fullscreen, both exclusion directions, auto-hide/reveal, mode cycle, close). type-check + build green.
 - Phase 6 completed (user batch): pill X = close + pause (time kept); paused timers keep the pill with frozen time + ▶; clock pill shows no timer buttons; **zero native Fullscreen API** (no browser notice) with per-card LOCKED dedicated fullscreens; independent X/Y widget sizing (square-able, per-axis caps, persisted, legacy migration). All five live-verified; type-check + build green.
+- Phase 7 completed (user): **crop-style resize** — TL handle drags 1:1 with the pointer while the bottom-right stays fixed; the widget is a real px-sized `rounded-3xl` window (content undistorted, live px badge, auto reset on double-click, persists, window-resize re-clamp); legacy sizes reset to auto. **Leaving fullscreen pauses** the running timer. All live-verified; type-check + build green.

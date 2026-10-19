@@ -146,8 +146,12 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   const requestClose = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
+    // Leaving fullscreen pauses the running timer (value kept) — same as the
+    // pill's X. Single exit owner covers X, Escape and any other path.
+    if (stopwatch.running) stopwatchPause();
+    else if (countdown.running) countdownPause();
     onClose();
-  }, [onClose]);
+  }, [onClose, stopwatch.running, countdown.running, stopwatchPause, countdownPause]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

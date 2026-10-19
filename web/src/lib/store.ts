@@ -358,7 +358,7 @@ resetPresidingConfig: () => void;
   finishCountdown: () => void;
   setCountryClock: (tz: string | null, label: string | null) => void;
   setWidgetVisible: (visible: boolean) => void;
-  setWidgetScale: (x: number, y: number) => void;
+  setWidgetSize: (w: number | null, h: number | null) => void;
   setWidgetOffset: (x: number, y: number) => void;
   setWidgetMode: (mode: TimeToolsState["widgetMode"]) => void;
 }
@@ -784,8 +784,8 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
 
 // ─── Time tools (Tiempo tab) ────────────────────────────────────────────────
 
-const TIME_WIDGET_SCALE_MIN = 0.8;
-const TIME_WIDGET_SCALE_MAX = 2.0;
+const TIME_WIDGET_SIZE_MIN = 40;
+const TIME_WIDGET_SIZE_MAX = 4000;
 
 function getDefaultTimeTools(): TimeToolsState {
   return {
@@ -794,15 +794,16 @@ function getDefaultTimeTools(): TimeToolsState {
     countryTz: null,
     countryLabel: null,
     widgetVisible: false,
-    widgetScale: { x: 1, y: 1 },
+    widgetSize: { w: null, h: null },
     widgetOffset: { x: 0, y: 0 },
     widgetMode: "auto",
   };
 }
 
-function clampWidgetScale(scale: number): number {
-  if (!Number.isFinite(scale)) return 1;
-  return Math.min(TIME_WIDGET_SCALE_MAX, Math.max(TIME_WIDGET_SCALE_MIN, scale));
+/** Crop-style widget size component: finite px within 40–4000, or null (auto). */
+function clampWidgetSizeComponent(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(TIME_WIDGET_SIZE_MAX, Math.max(TIME_WIDGET_SIZE_MIN, value));
 }
 
 const WIDGET_OFFSET_LIMIT = 10_000;
@@ -812,7 +813,7 @@ function clampWidgetOffsetComponent(value: unknown): number {
   return Math.min(WIDGET_OFFSET_LIMIT, Math.max(-WIDGET_OFFSET_LIMIT, value));
 }
 
-type PersistedTimeTools = Partial<Omit<TimeToolsState, "widgetScale">> & { widgetScale?: unknown };
+type PersistedTimeTools = Partial<Omit<TimeToolsState, "widgetSize">> & { widgetSize?: unknown };
 
 function normalizeTimeTools(raw?: PersistedTimeTools | null): TimeToolsState {
   const defaults = getDefaultTimeTools();
@@ -820,16 +821,14 @@ function normalizeTimeTools(raw?: PersistedTimeTools | null): TimeToolsState {
   const countdown = raw?.countdown ?? defaults.countdown;
   const positiveMs = (value: unknown): number =>
     typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
-  // Legacy payloads stored a single number; migrate it to an equal pair.
-  const normalizeScalePair = (value: unknown): { x: number; y: number } => {
-    if (typeof value === "number") {
-      return { x: clampWidgetScale(value), y: clampWidgetScale(value) };
-    }
-    const pair = (value ?? {}) as { x?: unknown; y?: unknown };
-    return {
-      x: clampWidgetScale(typeof pair.x === "number" ? pair.x : defaults.widgetScale.x),
-      y: clampWidgetScale(typeof pair.y === "number" ? pair.y : defaults.widgetScale.y),
-    };
+  // Legacy payloads stored scale factors (a single number or an equal {x,y}
+  // pair). The resize mechanics changed to px dimensions, so legacy values
+  // reset to auto (null) instead of being converted.
+  const normalizeWidgetSize = (value: unknown): { w: number | null; h: number | null } => {
+    if (typeof value !== "object" || value === null) return { w: null, h: null };
+    const size = value as { w?: unknown; h?: unknown };
+    if (!("w" in size) && !("h" in size)) return { w: null, h: null };
+    return { w: clampWidgetSizeComponent(size.w), h: clampWidgetSizeComponent(size.h) };
   };
   return {
     stopwatch: {
@@ -847,7 +846,7 @@ function normalizeTimeTools(raw?: PersistedTimeTools | null): TimeToolsState {
     countryTz: typeof raw?.countryTz === "string" ? raw.countryTz : null,
     countryLabel: typeof raw?.countryLabel === "string" ? raw.countryLabel : null,
     widgetVisible: Boolean(raw?.widgetVisible),
-    widgetScale: normalizeScalePair(raw?.widgetScale),
+    widgetSize: normalizeWidgetSize(raw?.widgetSize),
     widgetOffset: {
       x: clampWidgetOffsetComponent(raw?.widgetOffset?.x),
       y: clampWidgetOffsetComponent(raw?.widgetOffset?.y),
@@ -2018,9 +2017,12 @@ resetPresidingConfig: () =>
         set((s) => ({
           timeTools: { ...s.timeTools, widgetVisible: visible },
         })),
-      setWidgetScale: (x, y) =>
+      setWidgetSize: (w, h) =>
         set((s) => ({
-          timeTools: { ...s.timeTools, widgetScale: { x: clampWidgetScale(x), y: clampWidgetScale(y) } },
+          timeTools: {
+            ...s.timeTools,
+            widgetSize: { w: clampWidgetSizeComponent(w), h: clampWidgetSizeComponent(h) },
+          },
         })),
       setWidgetOffset: (x, y) =>
         set((s) => ({
