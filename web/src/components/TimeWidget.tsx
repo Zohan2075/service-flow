@@ -371,6 +371,21 @@ export default function TimeWidget() {
     const writePreview = (size: { w: number; h: number }) => {
       pill.style.width = `${size.w}px`;
       pill.style.height = `${size.h}px`;
+      const content = contentRef.current;
+      const natural = contentNaturalRef.current;
+      if (content && natural) {
+        const s = Math.min(
+          5,
+          Math.max(
+            1,
+            Math.min(
+              (size.w - RESIZE_CONTENT_PAD_X) / natural.w,
+              (size.h - RESIZE_CONTENT_PAD_Y) / natural.h,
+            ),
+          ),
+        );
+        content.style.transform = s === 1 ? "" : `scale(${s})`;
+      }
     };
 
     const onDragMove = (ev: PointerEvent) => {
@@ -404,28 +419,32 @@ export default function TimeWidget() {
       pill.style.width = "";
       pill.style.height = "";
     }
+    const content = contentRef.current;
+    if (content) content.style.transform = "";
     setWidgetSize(null, null);
   };
 
-  // Natural (auto) pill size baseline so the time number scales with the window.
-  // Captured only while auto-sized (font unscaled then), so there is no feedback loop.
-  const naturalSizeRef = useRef<{ w: number; h: number } | null>(null);
+  // Natural CONTENT size (layout size: transform- and window-independent), so
+  // the whole content zooms uniformly with the window. Unlike measuring the
+  // pill, this can never be polluted by the imperative drag preview.
+  const contentNaturalRef = useRef<{ w: number; h: number } | null>(null);
   useEffect(() => {
-    if (safeSize.w == null && safeSize.h == null && pillRef.current) {
-      const pill = pillRef.current;
-      if (pill.offsetWidth > 0 && pill.offsetHeight > 0) {
-        naturalSizeRef.current = { w: pill.offsetWidth, h: pill.offsetHeight };
-      }
+    const content = contentRef.current;
+    if (content && content.offsetWidth > 0 && content.offsetHeight > 0) {
+      contentNaturalRef.current = { w: content.offsetWidth, h: content.offsetHeight };
     }
   });
   const customSized = safeSize.w != null || safeSize.h != null;
-  const timeFontSize = (() => {
-    if (!customSized) return undefined;
-    const natural = naturalSizeRef.current ?? { w: 200, h: 36 };
-    const ratioW = safeSize.w != null ? safeSize.w / natural.w : Number.POSITIVE_INFINITY;
-    const ratioH = safeSize.h != null ? safeSize.h / natural.h : Number.POSITIVE_INFINITY;
-    const scale = Math.min(5, Math.max(1, Math.min(ratioW, ratioH)));
-    return Math.min(64, Math.round(14 * scale));
+  const contentScale = (() => {
+    if (!customSized) return 1;
+    const natural = contentNaturalRef.current;
+    if (!natural) return 1;
+    const ratioW =
+      safeSize.w != null ? (safeSize.w - RESIZE_CONTENT_PAD_X) / natural.w : Number.POSITIVE_INFINITY;
+    const ratioH =
+      safeSize.h != null ? (safeSize.h - RESIZE_CONTENT_PAD_Y) / natural.h : Number.POSITIVE_INFINITY;
+    // Uniform zoom bounded by the tighter axis so nothing overflows the window.
+    return Math.min(5, Math.max(1, Math.min(ratioW, ratioH)));
   })();
 
   if (!widgetVisible) return null;
@@ -455,7 +474,11 @@ export default function TimeWidget() {
           height: safeSize.h ?? undefined,
         }}
       >
-        <div ref={contentRef} className="flex min-w-fit shrink-0 items-center gap-0.5">
+        <div
+          ref={contentRef}
+          className="flex min-w-fit shrink-0 items-center gap-0.5"
+          style={contentScale === 1 ? undefined : { transform: `scale(${contentScale})`, transformOrigin: "center center" }}
+        >
           {/* Main time → open the Time tab */}
           <button
             type="button"
@@ -466,7 +489,7 @@ export default function TimeWidget() {
             <span className="material-symbols-outlined text-base md:text-xl leading-none text-primary">
               {FOCUS_ICON[focus]}
             </span>
-            <span className="font-mono text-sm md:text-base font-bold leading-none tabular-nums" style={timeFontSize == null ? undefined : { fontSize: timeFontSize }} suppressHydrationWarning>
+            <span className="font-mono text-sm md:text-base font-bold leading-none tabular-nums" suppressHydrationWarning>
               {displayText}
             </span>
           </button>
