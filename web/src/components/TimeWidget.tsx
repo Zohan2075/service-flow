@@ -338,7 +338,7 @@ export default function TimeWidget() {
     setWidgetOffset(0, 0);
   };
 
-  /* ----- crop-style resize (TL handle; the BR corner stays fixed) ----- */
+  /* ----- crop-style resize (BR handle; the TL corner stays fixed) ----- */
   const [resizeBadge, setResizeBadge] = useState<{ w: number; h: number } | null>(null);
   const resizeActiveRef = useRef<{ pointerId: number } | null>(null);
 
@@ -353,9 +353,9 @@ export default function TimeWidget() {
       startY: event.clientY,
       startW: rect.width,
       startH: rect.height,
-      // Hard caps: the top-left corner stops 8px from the viewport edges.
-      maxW: rect.right - VIEWPORT_MARGIN_PX,
-      maxH: rect.bottom - VIEWPORT_MARGIN_PX,
+      // Hard caps: the bottom-right corner stops 8px from the viewport edges.
+      maxW: window.innerWidth - VIEWPORT_MARGIN_PX - rect.left,
+      maxH: window.innerHeight - VIEWPORT_MARGIN_PX - rect.top,
       // Content minimums: never shrink below the natural row size.
       minW: Math.max(RESIZE_MIN_W, (contentRef.current?.offsetWidth ?? 0) + RESIZE_CONTENT_PAD_X),
       minH: Math.max(RESIZE_MIN_H, (contentRef.current?.offsetHeight ?? 0) + RESIZE_CONTENT_PAD_Y),
@@ -363,11 +363,10 @@ export default function TimeWidget() {
     resizeActiveRef.current = { pointerId: drag.pointerId };
     setResizeBadge({ w: drag.startW, h: drag.startH });
 
-    // Grab-offset compensated: the corner follows the pointer 1:1
-    // (equivalent to `startRight - clientX` when grabbed exactly on the corner).
+    // Dragging the BR corner: right grows width, down grows height.
     const compute = (ev: PointerEvent): { w: number; h: number } => ({
-      w: clampResizeAxis(drag.startW + (drag.startX - ev.clientX), drag.minW, drag.maxW),
-      h: clampResizeAxis(drag.startH + (drag.startY - ev.clientY), drag.minH, drag.maxH),
+      w: clampResizeAxis(drag.startW + (ev.clientX - drag.startX), drag.minW, drag.maxW),
+      h: clampResizeAxis(drag.startH + (ev.clientY - drag.startY), drag.minH, drag.maxH),
     });
     const writePreview = (size: { w: number; h: number }) => {
       pill.style.width = `${size.w}px`;
@@ -408,6 +407,27 @@ export default function TimeWidget() {
     setWidgetSize(null, null);
   };
 
+  // Natural (auto) pill size baseline so the time number scales with the window.
+  // Captured only while auto-sized (font unscaled then), so there is no feedback loop.
+  const naturalSizeRef = useRef<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (safeSize.w == null && safeSize.h == null && pillRef.current) {
+      const pill = pillRef.current;
+      if (pill.offsetWidth > 0 && pill.offsetHeight > 0) {
+        naturalSizeRef.current = { w: pill.offsetWidth, h: pill.offsetHeight };
+      }
+    }
+  });
+  const customSized = safeSize.w != null || safeSize.h != null;
+  const timeFontSize = (() => {
+    if (!customSized) return undefined;
+    const natural = naturalSizeRef.current ?? { w: 200, h: 36 };
+    const ratioW = safeSize.w != null ? safeSize.w / natural.w : Number.POSITIVE_INFINITY;
+    const ratioH = safeSize.h != null ? safeSize.h / natural.h : Number.POSITIVE_INFINITY;
+    const scale = Math.min(5, Math.max(1, Math.min(ratioW, ratioH)));
+    return Math.min(64, Math.round(14 * scale));
+  })();
+
   if (!widgetVisible) return null;
 
   // Defensive: never emit an invalid transform ("translate(-NaNpx …)" is
@@ -446,7 +466,7 @@ export default function TimeWidget() {
             <span className="material-symbols-outlined text-base md:text-xl leading-none text-primary">
               {FOCUS_ICON[focus]}
             </span>
-            <span className="font-mono text-sm md:text-base font-bold leading-none tabular-nums" suppressHydrationWarning>
+            <span className="font-mono text-sm md:text-base font-bold leading-none tabular-nums" style={timeFontSize == null ? undefined : { fontSize: timeFontSize }} suppressHydrationWarning>
               {displayText}
             </span>
           </button>
@@ -485,17 +505,17 @@ export default function TimeWidget() {
           </button>
         </div>
 
-        {/* Crop-style resize handle at the pill's top-left; the BR corner stays fixed */}
+        {/* Crop-style resize handle on the pill's bottom-right rounded edge; the TL corner stays fixed */}
         <button
           type="button"
           aria-label={t("time.resize")}
           onPointerDown={startResize}
           onDoubleClick={resetSize}
-          className="group absolute -top-1.5 -left-1.5 flex size-6 touch-none cursor-nwse-resize items-start justify-start bg-transparent"
+          className="group absolute -bottom-0.5 -right-0.5 flex size-6 touch-none cursor-nwse-resize items-end justify-end bg-transparent"
         >
           <span
             aria-hidden
-            className="pointer-events-none size-3.5 rounded-tl-lg border-l-2 border-t-2 border-slate-400/80 transition-colors group-hover:border-primary"
+            className="pointer-events-none mb-px mr-px size-4 rounded-br-[12px] border-b-2 border-r-2 border-slate-300/80 transition-colors group-hover:border-primary dark:border-slate-500/80"
           />
         </button>
       </div>
