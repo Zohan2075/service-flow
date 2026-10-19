@@ -8,7 +8,7 @@ import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import OptionChip from "@/components/ui/OptionChip";
 import { SPRING_SNAPPY } from "@/components/ui/motion";
-import FullscreenClock from "@/components/presiding/FullscreenClock";
+import FullscreenClock, { type FullscreenMode } from "@/components/presiding/FullscreenClock";
 
 /* ---------- constants + helpers ---------- */
 
@@ -44,6 +44,8 @@ const CARD_CLASS =
   "bg-surface rounded-2xl border border-slate-200 dark:border-slate-800 shadow-card p-4 md:p-5";
 const CARD_HEADER_CLASS =
   "flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400";
+const CARD_FULLSCREEN_BUTTON_CLASS =
+  "ml-auto -my-1 flex size-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
 const TIME_TEXT_CLASS =
   "mt-4 text-center font-mono tabular-nums text-4xl font-black text-slate-800 dark:text-slate-100";
 const INPUT_CLASS =
@@ -201,8 +203,8 @@ export default function TimeView() {
   }, []);
   const now = useMemo(() => new Date(nowMs), [nowMs]);
 
-  // Fullscreen display overlay (pseudo-fullscreen on browsers without the API).
-  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  // Fullscreen display overlay, locked to one option at a time.
+  const [fullscreenMode, setFullscreenMode] = useState<FullscreenMode | null>(null);
 
   const locale = language === "es" ? "es-ES" : "en-US";
   const hour12 = prefsTimeFormat === "12h";
@@ -305,25 +307,6 @@ export default function TimeView() {
     setWidgetMode("clock");
     setWidgetVisible(true);
   };
-  const openFullscreen = () => {
-    // Must stay synchronous (user gesture); iOS Safari has no element
-    // fullscreen — the overlay alone acts as pseudo-fullscreen there.
-    try {
-      const request = document.documentElement.requestFullscreen?.();
-      request?.catch(() => {});
-    } catch {
-      // Fullscreen API unavailable — keep going with the overlay.
-    }
-    setFullscreenOpen(true);
-  };
-  const closeFullscreen = () => {
-    setFullscreenOpen(false);
-    try {
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    } catch {
-      // Exit is best-effort (the browser may already have exited).
-    }
-  };
   const selectPreset = (min: number) => {
     setPresetMin(min);
     setCustomMin("");
@@ -399,19 +382,19 @@ export default function TimeView() {
       aria-label={t("time.title")}
       className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 overscroll-contain"
     >
-      <div className="flex justify-end">
-        <ActionButton
-          onClick={openFullscreen}
-          icon="fullscreen"
-          label={t("time.fullscreen")}
-        />
-      </div>
-
       {/* ===== Cronómetro ===== */}
       <section className={CARD_CLASS}>
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">timer</span>
           {t("time.stopwatch")}
+          <button
+            type="button"
+            onClick={() => setFullscreenMode("stopwatch")}
+            aria-label={t("time.fullscreen")}
+            className={CARD_FULLSCREEN_BUTTON_CLASS}
+          >
+            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
+          </button>
         </h3>
         <p className={TIME_TEXT_CLASS} suppressHydrationWarning>
           {fmtHMS(stopwatchElapsedMs)}
@@ -436,6 +419,14 @@ export default function TimeView() {
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">hourglass_bottom</span>
           {t("time.countdown")}
+          <button
+            type="button"
+            onClick={() => setFullscreenMode("countdown")}
+            aria-label={t("time.fullscreen")}
+            className={CARD_FULLSCREEN_BUTTON_CLASS}
+          >
+            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
+          </button>
         </h3>
         <p
           className={cn(TIME_TEXT_CLASS, countdownFinished && "text-red-500 animate-pulse")}
@@ -514,6 +505,14 @@ export default function TimeView() {
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">schedule</span>
           {t("time.localClock")}
+          <button
+            type="button"
+            onClick={() => setFullscreenMode("local")}
+            aria-label={t("time.fullscreen")}
+            className={CARD_FULLSCREEN_BUTTON_CLASS}
+          >
+            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
+          </button>
         </h3>
         <p className={TIME_TEXT_CLASS} suppressHydrationWarning>
           {fmtZoneTime(now, deviceTz, hour12, locale)}
@@ -539,6 +538,14 @@ export default function TimeView() {
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">public</span>
           {t("time.countryClock")}
+          <button
+            type="button"
+            onClick={() => setFullscreenMode("country")}
+            aria-label={t("time.fullscreen")}
+            className={CARD_FULLSCREEN_BUTTON_CLASS}
+          >
+            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
+          </button>
         </h3>
         <p className={TIME_TEXT_CLASS} suppressHydrationWarning>
           {fmtZoneTime(now, effectiveTz, hour12, locale)}
@@ -594,7 +601,7 @@ export default function TimeView() {
         </label>
       </section>
 
-      {fullscreenOpen && <FullscreenClock onClose={closeFullscreen} />}
+      {fullscreenMode && <FullscreenClock mode={fullscreenMode} onClose={() => setFullscreenMode(null)} />}
     </div>
   );
 }

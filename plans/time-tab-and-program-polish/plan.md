@@ -72,6 +72,7 @@ updated: "2026-10-17"
 | 3 | Global floating widget | TimeWidget, resize, alerts, layout mount | completed |
 | 4 | Widget move + arc resize + tab dividers | Grip moves widget; arc resizes to 200%; tab separators | completed |
 | 5 | Fullscreen display + timer mutual exclusion | Big landscape display (clock/timers); stopwatch↔countdown exclusivity | completed |
+| 6 | Pill close-stop + paused focus + dedicated fullscreens | X pauses; paused timers keep the pill; no timer buttons on clock; per-card locked fullscreen (overlay-only) | completed |
 
 ## Risks & Open Questions
 
@@ -100,3 +101,4 @@ updated: "2026-10-17"
 - Phase 4 follow-up 3 (user): resume-from-pill (play button when a paused timer exists), "Floating widget shows" mode selector (Automatic/Real time/Stopwatch/Countdown; "Real time" pins the live clock in the pill even while timers run), desktop pill size increased (260×54 vs 210×38). Verified live; type-check + build green.
 - Phase 5 started (user): fullscreen display mode (clock + timers, landscape orientation-lock attempt, wake lock, auto-hiding controls) + stopwatch↔countdown mutual exclusion. Note: the user removed the "Floating widget shows" selector section; their `floatedKind` pill-exclusivity logic stays intact.
 - Phase 5 completed: store-level mutual exclusion (stopwatch↔countdown), TimeView blocked states + amber hints, fullscreen launcher, `FullscreenClock` (tap-to-cycle modes, giant controls, wake lock, orientation lock attempt, auto-hide + tap reveal, single exit owner). Live-verified end-to-end (real fullscreen, both exclusion directions, auto-hide/reveal, mode cycle, close). type-check + build green.
+- Phase 6 completed (user batch): pill X = close + pause (time kept); paused timers keep the pill with frozen time + ▶; clock pill shows no timer buttons; **zero native Fullscreen API** (no browser notice) with per-card LOCKED dedicated fullscreens; independent X/Y widget sizing (square-able, per-axis caps, persisted, legacy migration). All five live-verified; type-check + build green.

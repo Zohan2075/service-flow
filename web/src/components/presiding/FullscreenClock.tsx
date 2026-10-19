@@ -9,7 +9,7 @@ import { useT } from "@/lib/i18n";
 const QUICK_START_MIN = [5, 10, 15];
 const AUTO_HIDE_MS = 4000;
 
-type FullscreenMode = "clock" | "stopwatch" | "countdown";
+export type FullscreenMode = "stopwatch" | "countdown" | "local" | "country";
 
 /* Local API shapes: optional so the app still compiles (and runs) on DOM
  * libs / browsers without the Screen Orientation lock or Wake Lock APIs
@@ -90,7 +90,7 @@ const BIG_BUTTON_BASE =
 
 /* ---------- main component ---------- */
 
-export default function FullscreenClock({ onClose }: { onClose: () => void }) {
+export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMode; onClose: () => void }) {
   const { t, language } = useT();
 
   const stopwatch = useStore((s) => s.timeTools.stopwatch);
@@ -103,12 +103,6 @@ export default function FullscreenClock({ onClose }: { onClose: () => void }) {
   const countdownStart = useStore((s) => s.countdownStart);
   const countdownPause = useStore((s) => s.countdownPause);
   const countdownReset = useStore((s) => s.countdownReset);
-
-  // Initial mode follows whatever is already running; the time itself cycles.
-  const [mode, setMode] = useState<FullscreenMode>(() => {
-    const tools = useStore.getState().timeTools;
-    return tools.countdown.running ? "countdown" : tools.stopwatch.running ? "stopwatch" : "clock";
-  });
 
   // Single 1 s tick drives every displayed value (same pattern as TimeView).
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -146,7 +140,7 @@ export default function FullscreenClock({ onClose }: { onClose: () => void }) {
     countdown.finishedAtMs != null ||
     (!countdownResumable && countdown.totalMs === 0);
 
-  /* ----- exit handling (single close owner: TimeView does exitFullscreen) ----- */
+  /* ----- exit handling (single close owner; closes via onClose) ----- */
 
   const closingRef = useRef(false);
   const requestClose = useCallback(() => {
@@ -154,15 +148,6 @@ export default function FullscreenClock({ onClose }: { onClose: () => void }) {
     closingRef.current = true;
     onClose();
   }, [onClose]);
-
-  // System/browser fullscreen exit (Esc, gesture) closes the overlay too.
-  useEffect(() => {
-    const onFullscreenChange = () => {
-      if (!document.fullscreenElement) requestClose();
-    };
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, [requestClose]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -172,7 +157,7 @@ export default function FullscreenClock({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [requestClose]);
 
-  /* ----- orientation lock (Android fullscreen; unsupported on iOS) ----- */
+  /* ----- orientation lock (best-effort; silently no-ops without native fullscreen) ----- */
 
   useEffect(() => {
     const orientation = getOrientationLock();
@@ -259,21 +244,6 @@ export default function FullscreenClock({ onClose }: { onClose: () => void }) {
 
   /* ----- actions ----- */
 
-  const cycleMode = () =>
-    setMode((current) =>
-      current === "clock" ? "stopwatch" : current === "stopwatch" ? "countdown" : "clock",
-    );
-
-  const handleTimeTap = () => {
-    // While the controls are hidden, a tap only reveals them — switching the
-    // clock should be deliberate (controls visible).
-    if (!controlsVisible) {
-      wakeControls();
-      return;
-    }
-    cycleMode();
-  };
-
   const toggleStopwatch = () => {
     if (stopwatch.running) stopwatchPause();
     else if (!stopwatchBlocked) stopwatchStart();
@@ -289,19 +259,20 @@ export default function FullscreenClock({ onClose }: { onClose: () => void }) {
     countdownStart(ms);
   };
 
+  const displayTz = mode === "country" ? (countryTz ?? deviceTz) : deviceTz;
   const displayText =
     mode === "stopwatch"
       ? fmtHMS(stopwatchElapsedMs)
       : mode === "countdown"
         ? fmtHMS(countdownRemainingMs)
-        : fmtClock(now, countryTz ?? deviceTz, hour12, locale);
+        : fmtClock(now, displayTz, hour12, locale);
 
   const modeLabel =
     mode === "stopwatch"
       ? t("time.stopwatch")
       : mode === "countdown"
         ? t("time.countdown")
-        : countryTz
+        : mode === "country"
           ? t("time.countryClock")
           : t("time.localClock");
 
@@ -332,27 +303,20 @@ export default function FullscreenClock({ onClose }: { onClose: () => void }) {
 
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
         <p className="text-xs font-black uppercase tracking-[0.35em] text-white/45">{modeLabel}</p>
-        <button
-          type="button"
-          onClick={handleTimeTap}
-          aria-label={t("time.tapToCycle")}
-          title={t("time.tapToCycle")}
-          className="max-w-full font-mono text-[clamp(3.5rem,16vw,12rem)] font-black leading-none tabular-nums"
-        >
+        <div className="max-w-full font-mono text-[clamp(3.5rem,16vw,12rem)] font-black leading-none tabular-nums">
           <span suppressHydrationWarning>{displayText}</span>
-        </button>
-        {mode === "clock" && (
+        </div>
+        {(mode === "local" || mode === "country") && (
           <p className="text-sm font-semibold text-white/60" suppressHydrationWarning>
-            {fmtDate(now, countryTz ?? deviceTz, locale)}
+            {fmtDate(now, displayTz, locale)}
           </p>
         )}
         {busyHint && (
           <p className="text-sm font-bold text-amber-400">{t("time.timerBusy")}</p>
         )}
-        <p className="text-xs font-semibold text-white/30">{t("time.tapToCycle")}</p>
       </div>
 
-      {controlsVisible && (
+      {controlsVisible && (showStopwatchControls || showCountdownControls) && (
         <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-center gap-4 p-6 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]">
           {showStopwatchControls && (
             <>

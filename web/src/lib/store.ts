@@ -358,7 +358,7 @@ resetPresidingConfig: () => void;
   finishCountdown: () => void;
   setCountryClock: (tz: string | null, label: string | null) => void;
   setWidgetVisible: (visible: boolean) => void;
-  setWidgetScale: (scale: number) => void;
+  setWidgetScale: (x: number, y: number) => void;
   setWidgetOffset: (x: number, y: number) => void;
   setWidgetMode: (mode: TimeToolsState["widgetMode"]) => void;
 }
@@ -794,7 +794,7 @@ function getDefaultTimeTools(): TimeToolsState {
     countryTz: null,
     countryLabel: null,
     widgetVisible: false,
-    widgetScale: 1,
+    widgetScale: { x: 1, y: 1 },
     widgetOffset: { x: 0, y: 0 },
     widgetMode: "auto",
   };
@@ -812,12 +812,25 @@ function clampWidgetOffsetComponent(value: unknown): number {
   return Math.min(WIDGET_OFFSET_LIMIT, Math.max(-WIDGET_OFFSET_LIMIT, value));
 }
 
-function normalizeTimeTools(raw?: Partial<TimeToolsState> | null): TimeToolsState {
+type PersistedTimeTools = Partial<Omit<TimeToolsState, "widgetScale">> & { widgetScale?: unknown };
+
+function normalizeTimeTools(raw?: PersistedTimeTools | null): TimeToolsState {
   const defaults = getDefaultTimeTools();
   const stopwatch = raw?.stopwatch ?? defaults.stopwatch;
   const countdown = raw?.countdown ?? defaults.countdown;
   const positiveMs = (value: unknown): number =>
     typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+  // Legacy payloads stored a single number; migrate it to an equal pair.
+  const normalizeScalePair = (value: unknown): { x: number; y: number } => {
+    if (typeof value === "number") {
+      return { x: clampWidgetScale(value), y: clampWidgetScale(value) };
+    }
+    const pair = (value ?? {}) as { x?: unknown; y?: unknown };
+    return {
+      x: clampWidgetScale(typeof pair.x === "number" ? pair.x : defaults.widgetScale.x),
+      y: clampWidgetScale(typeof pair.y === "number" ? pair.y : defaults.widgetScale.y),
+    };
+  };
   return {
     stopwatch: {
       running: Boolean(stopwatch.running),
@@ -834,7 +847,7 @@ function normalizeTimeTools(raw?: Partial<TimeToolsState> | null): TimeToolsStat
     countryTz: typeof raw?.countryTz === "string" ? raw.countryTz : null,
     countryLabel: typeof raw?.countryLabel === "string" ? raw.countryLabel : null,
     widgetVisible: Boolean(raw?.widgetVisible),
-    widgetScale: clampWidgetScale(typeof raw?.widgetScale === "number" ? raw.widgetScale : defaults.widgetScale),
+    widgetScale: normalizeScalePair(raw?.widgetScale),
     widgetOffset: {
       x: clampWidgetOffsetComponent(raw?.widgetOffset?.x),
       y: clampWidgetOffsetComponent(raw?.widgetOffset?.y),
@@ -2005,9 +2018,9 @@ resetPresidingConfig: () =>
         set((s) => ({
           timeTools: { ...s.timeTools, widgetVisible: visible },
         })),
-      setWidgetScale: (scale) =>
+      setWidgetScale: (x, y) =>
         set((s) => ({
-          timeTools: { ...s.timeTools, widgetScale: clampWidgetScale(scale) },
+          timeTools: { ...s.timeTools, widgetScale: { x: clampWidgetScale(x), y: clampWidgetScale(y) } },
         })),
       setWidgetOffset: (x, y) =>
         set((s) => ({

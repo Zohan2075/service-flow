@@ -144,8 +144,8 @@ export default function TimeWidget() {
   const deviceTz = useMemo(() => getDeviceTimeZone(), []);
 
   /* ----- focus resolution: widgetMode forces a clock; "auto" prefers live ----- */
-  // Auto: a running timer wins; otherwise the ticking clock shows — a paused
-  // timer never freezes the pill (it is offered as a resume button instead).
+  // Auto: a running timer wins, then a paused timer with a kept value (frozen
+  // time + resume), and only otherwise does the ticking clock show.
   const pausedStopwatch = !stopwatch.running && stopwatch.accumulatedMs > 0;
   const pausedCountdown = !countdown.running && countdown.remainingMs > 0 && countdown.finishedAtMs == null;
 
@@ -163,7 +163,11 @@ export default function TimeWidget() {
             ? "countdown"
             : stopwatch.running
               ? "stopwatch"
-              : clockFocus;
+              : pausedCountdown
+                ? "countdown"
+                : pausedStopwatch
+                  ? "stopwatch"
+                  : clockFocus;
 
   const stopwatchElapsedMs =
     stopwatch.accumulatedMs +
@@ -184,8 +188,7 @@ export default function TimeWidget() {
         : fmtClock(now, focus === "country" ? (countryTz ?? deviceTz) : deviceTz, hour12, locale);
 
   // Toggle button: "pause" while the focused timer runs; otherwise a play
-  // button to resume/start — always in forced modes, and offered next to the
-  // clock in auto mode when a paused timer exists.
+  // button to resume/start. A clock focus (forced or auto) shows no toggle.
   const focusRunning =
     (focus === "stopwatch" && stopwatch.running) || (focus === "countdown" && countdown.running);
   const focusResumable =
@@ -195,9 +198,7 @@ export default function TimeWidget() {
     ? "pause"
     : focusResumable
       ? "resume"
-      : widgetMode === "auto" && (focus === "country" || focus === "local") && (pausedStopwatch || pausedCountdown)
-        ? "resume"
-        : null;
+      : null;
 
   const handleToggle = () => {
     if (toggleTarget === "pause") {
@@ -212,13 +213,20 @@ export default function TimeWidget() {
     else if (pausedCountdown) countdownStart(countdown.remainingMs);
   };
 
+  // X = close + pause the shown timer (value kept; resumable later with ▶).
+  const handleHide = () => {
+    if (focus === "stopwatch" && stopwatch.running) stopwatchPause();
+    else if (focus === "countdown" && countdown.running) countdownPause();
+    setWidgetVisible(false);
+  };
+
   /* ----- move (grip drag; live preview, persisted on release) ----- */
   type MoveDrag = {
     pointerId: number;
     startX: number;
     startY: number;
     startOffset: { x: number; y: number };
-    scaleAtStart: number;
+    scaleAtStart: { x: number; y: number };
     minDx: number;
     maxDx: number;
     minDy: number;
@@ -233,7 +241,8 @@ export default function TimeWidget() {
     x: Number.isFinite(widgetOffset?.x) ? widgetOffset.x : 0,
     y: Number.isFinite(widgetOffset?.y) ? widgetOffset.y : 0,
   };
-  const safeScale = Number.isFinite(widgetScale) ? widgetScale : 1;
+  const safeScaleX = Number.isFinite(widgetScale?.x) ? widgetScale.x : 1;
+  const safeScaleY = Number.isFinite(widgetScale?.y) ? widgetScale.y : 1;
   const safeOffsetRef = useRef(safeOffset);
   useEffect(() => {
     safeOffsetRef.current = safeOffset;
@@ -243,26 +252,29 @@ export default function TimeWidget() {
   // window listeners proved unreliable here (observed live), so drags write
   // the transform straight to the DOM; the store commit on release re-renders
   // with the same final pose.
-  const applyPreview = (offset: { x: number; y: number }, scale: number) => {
+  const applyPreview = (offset: { x: number; y: number }, sx: number, sy: number) => {
     const el = rootRef.current;
-    if (el) el.style.transform = `translate(${-offset.x}px, ${-offset.y}px) scale(${scale})`;
+    if (el) el.style.transform = `translate(${-offset.x}px, ${-offset.y}px) scale(${sx}, ${sy})`;
   };
 
   // Device-adaptive resize cap: the widget may grow up to the full viewport
   // (capped at 200%); while growing, the gesture auto-shifts it to stay on
   // screen. offsetWidth/Height are layout sizes (transform-independent).
-  const [viewportMaxScale, setViewportMaxScale] = useState(WIDGET_SCALE_MAX);
+  const [viewportMaxScale, setViewportMaxScale] = useState({ x: WIDGET_SCALE_MAX, y: WIDGET_SCALE_MAX });
   const viewportMaxScaleRef = useRef(viewportMaxScale);
   useEffect(() => {
     const update = () => {
       const el = rootRef.current;
       if (!el) return;
-      const fit = Math.min(
-        (window.innerWidth - VIEWPORT_MARGIN_PX * 2) / Math.max(1, el.offsetWidth),
-        (window.innerHeight - VIEWPORT_MARGIN_PX * 2) / Math.max(1, el.offsetHeight),
-      );
-      const rounded = Math.floor(fit * 20) / 20; // 5% steps, round down
-      const next = Math.min(WIDGET_SCALE_MAX, Math.max(WIDGET_SCALE_MIN, rounded));
+      const fitX = (window.innerWidth - VIEWPORT_MARGIN_PX * 2) / Math.max(1, el.offsetWidth);
+      const fitY = (window.innerHeight - VIEWPORT_MARGIN_PX * 2) / Math.max(1, el.offsetHeight);
+      // 5% steps, round down
+      const roundedX = Math.floor(fitX * 20) / 20;
+      const roundedY = Math.floor(fitY * 20) / 20;
+      const next = {
+        x: Math.min(WIDGET_SCALE_MAX, Math.max(WIDGET_SCALE_MIN, roundedX)),
+        y: Math.min(WIDGET_SCALE_MAX, Math.max(WIDGET_SCALE_MIN, roundedY)),
+      };
       viewportMaxScaleRef.current = next;
       setViewportMaxScale(next);
     };
@@ -296,7 +308,7 @@ export default function TimeWidget() {
       startX: event.clientX,
       startY: event.clientY,
       startOffset: safeOffset,
-      scaleAtStart: safeScale,
+      scaleAtStart: { x: safeScaleX, y: safeScaleY },
       minDx: VIEWPORT_MARGIN_PX - rect.left,
       maxDx: window.innerWidth - VIEWPORT_MARGIN_PX - rect.right,
       minDy: VIEWPORT_MARGIN_PX - rect.top,
@@ -306,7 +318,7 @@ export default function TimeWidget() {
 
     const onDragMove = (ev: PointerEvent) => {
       if (ev.pointerId !== drag.pointerId) return;
-      applyPreview(computeDragOffset(drag, ev.clientX - drag.startX, ev.clientY - drag.startY), drag.scaleAtStart);
+      applyPreview(computeDragOffset(drag, ev.clientX - drag.startX, ev.clientY - drag.startY), drag.scaleAtStart.x, drag.scaleAtStart.y);
     };
     const finish = (ev: PointerEvent) => {
       if (ev.pointerId !== drag.pointerId) return;
@@ -315,7 +327,7 @@ export default function TimeWidget() {
       window.removeEventListener("pointercancel", finish);
       moveDragRef.current = null;
       const final = computeDragOffset(drag, ev.clientX - drag.startX, ev.clientY - drag.startY);
-      applyPreview(final, drag.scaleAtStart);
+      applyPreview(final, drag.scaleAtStart.x, drag.scaleAtStart.y);
       setWidgetOffset(final.x, final.y);
     };
     window.addEventListener("pointermove", onDragMove);
@@ -329,11 +341,13 @@ export default function TimeWidget() {
   };
 
   /* ----- resize (arc handle; live preview, persisted on release) ----- */
-  const [previewScale, setPreviewScale] = useState<number | null>(null);
+  const [previewScale, setPreviewScale] = useState<{ x: number; y: number } | null>(null);
   const resizeDragRef = useRef<{
     pointerId: number;
     startX: number;
-    startScale: number;
+    startY: number;
+    startScaleX: number;
+    startScaleY: number;
     startOffset: { x: number; y: number };
     startRight: number;
   } | null>(null);
@@ -346,18 +360,26 @@ export default function TimeWidget() {
     const drag = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startScale: widgetScale,
+      startY: event.clientY,
+      startScaleX: safeScaleX,
+      startScaleY: safeScaleY,
       startOffset: safeOffset,
       startRight: rect.right,
     };
     resizeDragRef.current = drag;
-    setPreviewScale(widgetScale);
+    setPreviewScale({ x: safeScaleX, y: safeScaleY });
 
-    const computeScale = (ev: PointerEvent) =>
-      Math.min(
-        clampWidgetScale(drag.startScale + (ev.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT),
-        viewportMaxScaleRef.current,
-      );
+    // Per-axis: dragging right widens (dx), dragging down heightens (dy).
+    const computeScales = (ev: PointerEvent): { x: number; y: number } => ({
+      x: Math.min(
+        clampWidgetScale(drag.startScaleX + (ev.clientX - drag.startX) / SCALE_DRAG_PX_PER_UNIT),
+        viewportMaxScaleRef.current.x,
+      ),
+      y: Math.min(
+        clampWidgetScale(drag.startScaleY + (ev.clientY - drag.startY) / SCALE_DRAG_PX_PER_UNIT),
+        viewportMaxScaleRef.current.y,
+      ),
+    });
     // While growing, nudge the widget so it stays fully on screen: the right
     // edge moves toward the viewport edge only as much as needed.
     const computeOffset = (scale: number): { x: number; y: number } => {
@@ -371,8 +393,8 @@ export default function TimeWidget() {
 
     const onDragMove = (ev: PointerEvent) => {
       if (ev.pointerId !== drag.pointerId) return;
-      const next = computeScale(ev);
-      applyPreview(computeOffset(next), next);
+      const next = computeScales(ev);
+      applyPreview(computeOffset(next.x), next.x, next.y);
       setPreviewScale(next);
     };
     const finish = (ev: PointerEvent) => {
@@ -381,11 +403,11 @@ export default function TimeWidget() {
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
       resizeDragRef.current = null;
-      const final = computeScale(ev);
-      const finalOffset = computeOffset(final);
-      applyPreview(finalOffset, final);
+      const final = computeScales(ev);
+      const finalOffset = computeOffset(final.x);
+      applyPreview(finalOffset, final.x, final.y);
       setPreviewScale(null);
-      setWidgetScale(final);
+      setWidgetScale(final.x, final.y);
       if (finalOffset.x !== drag.startOffset.x || finalOffset.y !== drag.startOffset.y) {
         setWidgetOffset(finalOffset.x, finalOffset.y);
       }
@@ -398,16 +420,18 @@ export default function TimeWidget() {
   const resetScale = () => {
     resizeDragRef.current = null;
     setPreviewScale(null);
-    setWidgetScale(1);
+    setWidgetScale(1, 1);
   };
 
   if (!widgetVisible) return null;
 
   // Defensive: never emit an invalid transform ("translate(-NaNpx …)" is
   // silently dropped by browsers, which made the pill unreachable).
-  // Also clamp to the device-adaptive cap so it always fits the screen.
-  const rawDisplayScale = Number.isFinite(previewScale ?? widgetScale) ? (previewScale ?? widgetScale) : 1;
-  const displayScale = Math.min(Math.max(rawDisplayScale, WIDGET_SCALE_MIN), viewportMaxScale);
+  // Also clamp each axis to the device-adaptive cap so it always fits.
+  const rawDisplayScaleX = Number.isFinite(previewScale?.x ?? safeScaleX) ? (previewScale?.x ?? safeScaleX) : 1;
+  const rawDisplayScaleY = Number.isFinite(previewScale?.y ?? safeScaleY) ? (previewScale?.y ?? safeScaleY) : 1;
+  const displayScaleX = Math.min(Math.max(rawDisplayScaleX, WIDGET_SCALE_MIN), viewportMaxScale.x);
+  const displayScaleY = Math.min(Math.max(rawDisplayScaleY, WIDGET_SCALE_MIN), viewportMaxScale.y);
   const displayOffset = safeOffset;
 
   return (
@@ -417,13 +441,13 @@ export default function TimeWidget() {
       aria-label={t("time.widget")}
       className="fixed z-40 right-20 bottom-[calc(env(safe-area-inset-bottom,_0px)+4.5rem)] md:right-4 md:bottom-4"
       style={{
-        transform: `translate(${-displayOffset.x}px, ${-displayOffset.y}px) scale(${displayScale})`,
+        transform: `translate(${-displayOffset.x}px, ${-displayOffset.y}px) scale(${displayScaleX}, ${displayScaleY})`,
         transformOrigin: "bottom right",
       }}
     >
       {previewScale != null && (
         <div className="pointer-events-none absolute -top-7 right-0 rounded-full bg-slate-900/90 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-white dark:bg-slate-100/90 dark:text-slate-900">
-          {Math.round(displayScale * 100)}%
+          {Math.round(displayScaleX * 100)}×{Math.round(displayScaleY * 100)}%
         </div>
       )}
       <div className="relative flex items-center gap-0.5 rounded-full border border-slate-200 bg-surface/95 py-0.5 md:py-1 pl-1 md:pl-1.5 pr-0.5 md:pr-1 shadow-card backdrop-blur-md dark:border-slate-700">
@@ -468,7 +492,7 @@ export default function TimeWidget() {
 
         <button
           type="button"
-          onClick={() => setWidgetVisible(false)}
+          onClick={handleHide}
           aria-label={t("time.hide")}
           className={ICON_BUTTON_CLASS}
         >
