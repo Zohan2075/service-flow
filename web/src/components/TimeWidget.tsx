@@ -353,7 +353,8 @@ export default function TimeWidget() {
       startY: event.clientY,
       startW: rect.width,
       startH: rect.height,
-      // Hard caps: the bottom-right corner stops 8px from the viewport edges.
+      startOffset: safeOffset,
+      // The grabbed BR corner follows the pointer; the TL corner stays fixed.
       maxW: window.innerWidth - VIEWPORT_MARGIN_PX - rect.left,
       maxH: window.innerHeight - VIEWPORT_MARGIN_PX - rect.top,
       // Content minimums: never shrink below the natural row size.
@@ -363,14 +364,30 @@ export default function TimeWidget() {
     resizeActiveRef.current = { pointerId: drag.pointerId };
     setResizeBadge({ w: drag.startW, h: drag.startH });
 
-    // Dragging the BR corner: right grows width, down grows height.
-    const compute = (ev: PointerEvent): { w: number; h: number } => ({
-      w: clampResizeAxis(drag.startW + (ev.clientX - drag.startX), drag.minW, drag.maxW),
-      h: clampResizeAxis(drag.startH + (ev.clientY - drag.startY), drag.minH, drag.maxH),
-    });
-    const writePreview = (size: { w: number; h: number }) => {
-      pill.style.width = `${size.w}px`;
-      pill.style.height = `${size.h}px`;
+    // Crop-style: dragging the BR corner grows width/height AND moves that
+    // corner with the pointer (the TL corner is the fixed pivot), so the
+    // window grows/shrinks from exactly where it was grabbed.
+    const compute = (
+      ev: PointerEvent,
+    ): { w: number; h: number; offset: { x: number; y: number } } => {
+      const w = clampResizeAxis(drag.startW + (ev.clientX - drag.startX), drag.minW, drag.maxW);
+      const h = clampResizeAxis(drag.startH + (ev.clientY - drag.startY), drag.minH, drag.maxH);
+      return {
+        w,
+        h,
+        offset: {
+          x: drag.startOffset.x - (w - drag.startW),
+          y: drag.startOffset.y - (h - drag.startH),
+        },
+      };
+    };
+    const writePreview = (next: { w: number; h: number; offset: { x: number; y: number } }) => {
+      pill.style.width = `${next.w}px`;
+      pill.style.height = `${next.h}px`;
+      const root = rootRef.current;
+      if (root) {
+        root.style.transform = `translate(${-next.offset.x}px, ${-next.offset.y}px)`;
+      }
       const content = contentRef.current;
       const natural = contentNaturalRef.current;
       if (content && natural) {
@@ -379,8 +396,8 @@ export default function TimeWidget() {
           Math.max(
             1,
             Math.min(
-              (size.w - RESIZE_CONTENT_PAD_X) / natural.w,
-              (size.h - RESIZE_CONTENT_PAD_Y) / natural.h,
+              (next.w - RESIZE_CONTENT_PAD_X) / natural.w,
+              (next.h - RESIZE_CONTENT_PAD_Y) / natural.h,
             ),
           ),
         );
@@ -392,7 +409,7 @@ export default function TimeWidget() {
       if (ev.pointerId !== drag.pointerId) return;
       const next = compute(ev);
       writePreview(next);
-      setResizeBadge(next);
+      setResizeBadge({ w: next.w, h: next.h });
     };
     const finish = (ev: PointerEvent) => {
       if (ev.pointerId !== drag.pointerId) return;
@@ -403,15 +420,17 @@ export default function TimeWidget() {
       const final = compute(ev);
       writePreview(final);
       setResizeBadge(null);
-      // Persisting re-renders with the same px size, so the pill never jumps.
+      // Persisting re-renders with the same px size and position, so the pill
+      // never jumps.
       setWidgetSize(final.w, final.h);
+      setWidgetOffset(final.offset.x, final.offset.y);
     };
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", finish);
     window.addEventListener("pointercancel", finish);
   };
 
-  // Double-click the handle → back to automatic (natural) sizing.
+  // Double-click the handle → back to automatic (natural) sizing and default position.
   const resetSize = () => {
     resizeActiveRef.current = null;
     const pill = pillRef.current;
@@ -422,6 +441,7 @@ export default function TimeWidget() {
     const content = contentRef.current;
     if (content) content.style.transform = "";
     setWidgetSize(null, null);
+    setWidgetOffset(0, 0);
   };
 
   // Natural CONTENT size (layout size: transform- and window-independent), so

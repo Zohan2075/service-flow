@@ -78,3 +78,11 @@ Two user requests:
   - Grip move still works (`translate(60px, 0px)`); pill X closes + pauses (00:00:07 frozen)
   - Custom size 270×58 persists into a fresh page (same context)
 - `type-check` + `build` green.
+
+## Follow-up (2026-10-19, post-commit `6357a61`)
+
+- User moved the handle back to the BR corner (TL fixed) and had a time-only font bump; requested: resize must also scale **bigger numbers and everything** and the window, and the grabbed corner must follow the pointer.
+- Implemented on top of the user's code:
+  - **Uniform content zoom**: the whole content row (time, icon, buttons) scales by `min(ratioW, ratioH)` (bounded by the tighter axis → never overflows); measured from the CONTENT's natural layout size (immune to the drag preview — fixes the baseline-pollution bug that reverted the zoom to 1× on release).
+  - **Grab-follows gesture**: the BR corner now moves with the pointer while the TL stays fixed (offset adjustment during resize: `offset = startOffset − sizeGrowth`), persisted with the size (`setWidgetSize` + `setWidgetOffset`); double-click resets size AND position.
+- Live-verified: drag +80/+60 → window 210×38 → 282×98; **TL fixed (100/610), grabbed corner followed (right 382, bottom 708)**; content zoom 1.31× (time 62×14 → 81×18, buttons 32 → 42); reset restores default pose; size+position+zoom persist on a fresh page; grip move works. `type-check` + `build` green.
