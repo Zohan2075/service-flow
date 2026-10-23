@@ -411,6 +411,13 @@ const translations = {
     "time.exitFullscreen": "Exit",
     "time.tapToCycle": "Tap the time to switch clock",
     "time.timerBusy": "Another timer is running — stop it first",
+    "time.warning1m": "1 minute left",
+    "time.warning10s": "10 seconds left",
+    "time.repeat": "Repeat",
+    "time.stateReady": "Ready",
+    "time.stateRunning": "Running",
+    "time.statePaused": "Paused",
+    "time.stateFinished": "Finished",
 
     // Offline
     "offline.banner": "You're offline — changes are saved locally",
@@ -820,6 +827,13 @@ const translations = {
     "time.exitFullscreen": "Salir",
     "time.tapToCycle": "Toca la hora para cambiar de reloj",
     "time.timerBusy": "Otro temporizador está en marcha — deténlo primero",
+    "time.warning1m": "Queda 1 minuto",
+    "time.warning10s": "Quedan 10 segundos",
+    "time.repeat": "Repetir",
+    "time.stateReady": "Listo",
+    "time.stateRunning": "Corriendo",
+    "time.statePaused": "Pausado",
+    "time.stateFinished": "Terminado",
 
     // Offline
     "offline.banner": "Sin conexión — los cambios se guardan localmente",

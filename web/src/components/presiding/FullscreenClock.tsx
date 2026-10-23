@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/i18n";
+import { useWakeLock } from "@/lib/wakeLock";
+import TimerRing from "@/components/presiding/TimerRing";
 
 /* ---------- constants + helpers ---------- */
 
@@ -12,32 +14,16 @@ const AUTO_HIDE_MS = 4000;
 export type FullscreenMode = "stopwatch" | "countdown" | "local" | "country";
 
 /* Local API shapes: optional so the app still compiles (and runs) on DOM
- * libs / browsers without the Screen Orientation lock or Wake Lock APIs
- * (iOS Safari ships neither). No `any`. */
+ * libs / browsers without the Screen Orientation lock API (iOS Safari ships
+ * it late). No `any`. */
 
 interface OrientationLockLike {
   lock?: (orientation: "landscape") => Promise<void>;
 }
 
-interface WakeLockSentinelLike {
-  readonly released: boolean;
-  release: () => Promise<void>;
-  addEventListener: (type: "release", listener: () => void) => void;
-}
-
-interface WakeLockApiLike {
-  request: (type: "screen") => Promise<WakeLockSentinelLike>;
-}
-
 function getOrientationLock(): OrientationLockLike | null {
   if (typeof screen === "undefined" || !screen.orientation) return null;
   return screen.orientation as ScreenOrientation & OrientationLockLike;
-}
-
-function getWakeLockApi(): WakeLockApiLike | null {
-  if (typeof navigator === "undefined") return null;
-  const nav = navigator as Navigator & { wakeLock?: WakeLockApiLike };
-  return nav.wakeLock ?? null;
 }
 
 function fmtHMS(ms: number): string {
@@ -179,44 +165,9 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
     };
   }, []);
 
-  /* ----- wake lock (re-acquired when the tab becomes visible again) ----- */
+  /* ----- wake lock (shared hook: re-acquired when the tab becomes visible) ----- */
 
-  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const api = getWakeLockApi();
-    if (!api) return;
-
-    const acquire = async () => {
-      try {
-        const sentinel = await api.request("screen");
-        if (cancelled) {
-          void sentinel.release().catch(() => {});
-          return;
-        }
-        wakeLockRef.current = sentinel;
-        sentinel.addEventListener("release", () => {
-          if (wakeLockRef.current === sentinel) wakeLockRef.current = null;
-        });
-      } catch {
-        // Wake lock denied (e.g. low battery) — the display still works.
-      }
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible" && wakeLockRef.current == null) void acquire();
-    };
-
-    void acquire();
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      const sentinel = wakeLockRef.current;
-      wakeLockRef.current = null;
-      if (sentinel) void sentinel.release().catch(() => {});
-    };
-  }, []);
+  useWakeLock(true);
 
   /* ----- controls auto-hide while a timer runs ----- */
 
@@ -271,6 +222,12 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
         ? fmtHMS(countdownRemainingMs)
         : fmtClock(now, displayTz, hour12, locale);
 
+  // Countdown ring: remaining fraction of the last configured duration.
+  const countdownProgress =
+    countdown.totalMs > 0
+      ? Math.min(1, Math.max(0, countdownRemainingMs / countdown.totalMs))
+      : 1;
+
   const modeLabel =
     mode === "stopwatch"
       ? t("time.stopwatch")
@@ -307,9 +264,21 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
 
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
         <p className="text-xs font-black uppercase tracking-[0.35em] text-white/45">{modeLabel}</p>
-        <div className="max-w-full font-mono text-[clamp(3.5rem,16vw,12rem)] font-black leading-none tabular-nums">
-          <span suppressHydrationWarning>{displayText}</span>
-        </div>
+        {mode === "countdown" ? (
+          <TimerRing
+            progress={countdownProgress}
+            className="w-[min(72vw,58vh)] h-[min(72vw,58vh)]"
+            trackClassName="stroke-white/10"
+          >
+            <div className="font-mono text-[clamp(2rem,min(10vw,8vh),8rem)] font-black leading-none tabular-nums">
+              <span suppressHydrationWarning>{displayText}</span>
+            </div>
+          </TimerRing>
+        ) : (
+          <div className="max-w-full font-mono text-[clamp(3.5rem,16vw,12rem)] font-black leading-none tabular-nums">
+            <span suppressHydrationWarning>{displayText}</span>
+          </div>
+        )}
         {(mode === "local" || mode === "country") && (
           <p className="text-sm font-semibold text-white/60" suppressHydrationWarning>
             {fmtDate(now, displayTz, locale)}

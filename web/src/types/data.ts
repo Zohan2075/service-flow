@@ -170,6 +170,8 @@ export interface TimeToolsState {
     remainingMs: number;
     totalMs: number;
     finishedAtMs: number | null;
+    warned60: boolean;
+    warned10: boolean;
   };
   countryTz: string | null;      // IANA, e.g. "America/Santo_Domingo"
   countryLabel: string | null;   // e.g. "República Dominicana"

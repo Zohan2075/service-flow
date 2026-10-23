@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import toast from "react-hot-toast";
 import { useStore } from "@/lib/store";
-import { useT } from "@/lib/i18n";
+import { useT, type TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import OptionChip from "@/components/ui/OptionChip";
 import { SPRING_SNAPPY } from "@/components/ui/motion";
 import FullscreenClock, { type FullscreenMode } from "@/components/presiding/FullscreenClock";
+import TimerRing from "@/components/presiding/TimerRing";
 
 /* ---------- constants + helpers ---------- */
 
@@ -48,8 +49,26 @@ const CARD_FULLSCREEN_BUTTON_CLASS =
   "ml-auto -my-1 flex size-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
 const TIME_TEXT_CLASS =
   "mt-4 text-center font-mono tabular-nums text-4xl font-black text-slate-800 dark:text-slate-100";
+const STOPWATCH_TIME_CLASS =
+  "mt-4 text-center font-mono tabular-nums text-5xl font-black text-slate-800 dark:text-slate-100";
 const INPUT_CLASS =
   "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary";
+
+type TimerState = "ready" | "running" | "paused" | "finished";
+
+const STATE_CHIP_CLASS: Record<TimerState, string> = {
+  ready: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+  running: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+  paused: "bg-primary/10 text-primary",
+  finished: "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+};
+
+const STATE_LABEL_KEY: Record<TimerState, TranslationKey> = {
+  ready: "time.stateReady",
+  running: "time.stateRunning",
+  paused: "time.statePaused",
+  finished: "time.stateFinished",
+};
 
 function fmtHMS(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -133,12 +152,14 @@ function ActionButton({
   icon,
   label,
   disabled = false,
+  size = "md",
 }: {
   onClick: () => void;
   active?: boolean;
   icon: string;
   label: string;
   disabled?: boolean;
+  size?: "md" | "lg";
 }) {
   return (
     <motion.button
@@ -149,7 +170,8 @@ function ActionButton({
       whileTap={disabled ? undefined : { scale: 0.92 }}
       transition={SPRING_SNAPPY}
       className={cn(
-        "inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-sm font-black shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center gap-2 rounded-xl px-5 text-sm font-black shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        size === "lg" ? "min-h-12" : "min-h-11",
         active ? "bg-amber-500 text-black" : "bg-primary text-white",
       )}
     >
@@ -166,10 +188,37 @@ function ResetButton({ onClick, label }: { onClick: () => void; label: string })
       onClick={onClick}
       whileTap={{ scale: 0.92 }}
       transition={SPRING_SNAPPY}
-      className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-surface px-5 text-sm font-semibold text-slate-500 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:hover:border-red-800 dark:hover:bg-red-950/20"
+      className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 bg-surface px-5 text-sm font-semibold text-slate-500 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-slate-700 dark:hover:border-red-800 dark:hover:bg-red-950/20"
     >
       <span className="material-symbols-outlined text-lg leading-none">restart_alt</span>
       {label}
+    </motion.button>
+  );
+}
+
+function StateChip({ state, label }: { state: TimerState; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider",
+        STATE_CHIP_CLASS[state],
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ExtendChip({ minutes, onClick }: { minutes: number; onClick: () => void }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileTap={{ scale: 0.94 }}
+      transition={SPRING_SNAPPY}
+      className="inline-flex min-h-9 items-center rounded-xl border border-primary/30 bg-primary/10 px-3 text-xs font-black text-primary transition-colors hover:bg-primary/15"
+    >
+      +{minutes} min
     </motion.button>
   );
 }
@@ -193,6 +242,7 @@ export default function TimeView() {
   const countdownStart = useStore((s) => s.countdownStart);
   const countdownPause = useStore((s) => s.countdownPause);
   const countdownReset = useStore((s) => s.countdownReset);
+  const countdownExtend = useStore((s) => s.countdownExtend);
   const setCountryClock = useStore((s) => s.setCountryClock);
 
   // Single 1 s tick drives every display; all values derive from Date.now().
@@ -257,6 +307,31 @@ export default function TimeView() {
   const countdownCanStart = canResume || configuredMs > 0;
   const pausedStopwatch = !stopwatch.running && stopwatchElapsedMs > 0;
 
+  // Ring reflects the remaining fraction of the last configured duration:
+  // frozen while paused, empty when finished, full when idle/ready.
+  const countdownProgress =
+    countdown.totalMs > 0
+      ? Math.min(
+          1,
+          Math.max(
+            0,
+            (countdownFinished ? 0 : runningRemainingMs ?? countdown.remainingMs) / countdown.totalMs,
+          ),
+        )
+      : 1;
+  const stopwatchState: TimerState = stopwatch.running
+    ? "running"
+    : stopwatchElapsedMs > 0
+      ? "paused"
+      : "ready";
+  const countdownState: TimerState = countdown.running
+    ? "running"
+    : countdownFinished
+      ? "finished"
+      : canResume
+        ? "paused"
+        : "ready";
+
   // Mutual exclusion: while the floating pill is open it "presents" one
   // clock — starting or floating a different one is blocked until it is
   // closed (×). Controlling the presented timer itself stays enabled.
@@ -306,6 +381,9 @@ export default function TimeView() {
   const floatClock = () => {
     setWidgetMode("clock");
     setWidgetVisible(true);
+  };
+  const repeatCountdown = () => {
+    if (countdown.totalMs > 0) countdownStart(countdown.totalMs);
   };
   const selectPreset = (min: number) => {
     setPresetMin(min);
@@ -387,6 +465,7 @@ export default function TimeView() {
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">timer</span>
           {t("time.stopwatch")}
+          <StateChip state={stopwatchState} label={t(STATE_LABEL_KEY[stopwatchState])} />
           <button
             type="button"
             onClick={() => setFullscreenMode("stopwatch")}
@@ -396,19 +475,20 @@ export default function TimeView() {
             <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
           </button>
         </h3>
-        <p className={TIME_TEXT_CLASS} suppressHydrationWarning>
+        <p className={STOPWATCH_TIME_CLASS} suppressHydrationWarning>
           {fmtHMS(stopwatchElapsedMs)}
         </p>
         {stopwatchBusy && (
           <p className="mt-1 text-center text-xs font-bold text-amber-500">{t("time.timerBusy")}</p>
         )}
-        <div className="mt-4 flex items-center justify-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
           <ActionButton
             onClick={toggleStopwatch}
             active={stopwatch.running}
             icon={stopwatch.running ? "pause" : "play_arrow"}
             label={stopwatchActionLabel}
             disabled={stopwatchBlocked || stopwatchBusy}
+            size="lg"
           />
           <ResetButton onClick={stopwatchReset} label={t("time.reset")} />
         </div>
@@ -419,6 +499,7 @@ export default function TimeView() {
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">hourglass_bottom</span>
           {t("time.countdown")}
+          <StateChip state={countdownState} label={t(STATE_LABEL_KEY[countdownState])} />
           <button
             type="button"
             onClick={() => setFullscreenMode("countdown")}
@@ -428,73 +509,100 @@ export default function TimeView() {
             <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
           </button>
         </h3>
-        <p
-          className={cn(TIME_TEXT_CLASS, countdownFinished && "text-red-500 animate-pulse")}
-          suppressHydrationWarning
-        >
-          {fmtHMS(displayMs)}
-        </p>
+        <div className="mt-4 flex justify-center">
+          <TimerRing progress={countdownProgress} className="w-48 h-48 md:w-52 md:h-52">
+            <p
+              className={cn(
+                "font-mono tabular-nums text-3xl md:text-4xl font-black text-slate-800 dark:text-slate-100",
+                countdownFinished && "text-red-500 animate-pulse",
+              )}
+              suppressHydrationWarning
+            >
+              {fmtHMS(displayMs)}
+            </p>
+          </TimerRing>
+        </div>
         {countdownFinished && (
-          <p className="mt-1 text-center text-xs font-bold text-red-500">{t("time.done")}</p>
+          <div className="mt-3 flex flex-col items-center gap-2">
+            <p className="text-xs font-bold text-red-500">{t("time.done")}</p>
+            <ActionButton
+              onClick={repeatCountdown}
+              icon="replay"
+              label={t("time.repeat")}
+              disabled={countdownBlocked || countdownBusy || countdown.totalMs <= 0}
+              size="lg"
+            />
+          </div>
+        )}
+        {countdown.running && (
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            <ExtendChip minutes={1} onClick={() => countdownExtend(60_000)} />
+            <ExtendChip minutes={5} onClick={() => countdownExtend(300_000)} />
+          </div>
         )}
         {countdownBusy && (
           <p className="mt-1 text-center text-xs font-bold text-amber-500">{t("time.timerBusy")}</p>
         )}
-        <p className="mt-4 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-          {t("time.presets")}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {COUNTDOWN_PRESETS_MIN.map((min) => (
-            <OptionChip key={min} selected={!hasCustom && presetMin === min} onClick={() => selectPreset(min)}>
-              {min} min
-            </OptionChip>
-          ))}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {t("time.minutes")}
-            </span>
-            <input
-              type="number"
-              min={0}
-              max={999}
-              inputMode="numeric"
-              placeholder="0"
-              value={customMin}
-              onChange={(event) => {
-                setCustomMin(event.target.value.replace(/\D/g, "").slice(0, 3));
-                setPresetMin(null);
-              }}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {t("time.seconds")}
-            </span>
-            <input
-              type="number"
-              min={0}
-              max={59}
-              inputMode="numeric"
-              placeholder="0"
-              value={customSec}
-              onChange={(event) => {
-                setCustomSec(event.target.value.replace(/\D/g, "").slice(0, 2));
-                setPresetMin(null);
-              }}
-              className={INPUT_CLASS}
-            />
-          </label>
-        </div>
-        <div className="mt-4 flex items-center justify-center gap-3">
+        {!countdown.running && (
+          <>
+            <p className="mt-4 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              {t("time.presets")}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {COUNTDOWN_PRESETS_MIN.map((min) => (
+                <OptionChip key={min} selected={!hasCustom && presetMin === min} onClick={() => selectPreset(min)}>
+                  {min} min
+                </OptionChip>
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {t("time.minutes")}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={999}
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={customMin}
+                  onChange={(event) => {
+                    setCustomMin(event.target.value.replace(/\D/g, "").slice(0, 3));
+                    setPresetMin(null);
+                  }}
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {t("time.seconds")}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={customSec}
+                  onChange={(event) => {
+                    setCustomSec(event.target.value.replace(/\D/g, "").slice(0, 2));
+                    setPresetMin(null);
+                  }}
+                  className={INPUT_CLASS}
+                />
+              </label>
+            </div>
+          </>
+        )}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
           <ActionButton
             onClick={toggleCountdown}
             active={countdown.running}
             icon={countdown.running ? "pause" : "play_arrow"}
             label={countdownActionLabel}
             disabled={!countdownCanStart || countdownBlocked || countdownBusy}
+            size="lg"
           />
           <ResetButton onClick={countdownReset} label={t("time.reset")} />
         </div>

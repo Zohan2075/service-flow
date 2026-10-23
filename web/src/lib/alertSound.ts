@@ -39,3 +39,30 @@ export function playAlertBeep(): void {
     // Audio is a progressive enhancement; never let it break the UI.
   }
 }
+
+/**
+ * Plays a single short warning pulse (used at the 10 s countdown mark).
+ * Same best-effort contract as `playAlertBeep`: never throws.
+ */
+export function playWarningBeep(): void {
+  if (typeof window === "undefined" || typeof AudioContext === "undefined") return;
+  try {
+    audioContext ??= new AudioContext();
+    const ctx = audioContext;
+    if (ctx.state === "suspended") void ctx.resume();
+
+    const start = ctx.currentTime + 0.02;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(660, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.05, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.12);
+    oscillator.connect(gain).connect(ctx.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.16);
+  } catch {
+    // Audio is a progressive enhancement; never let it break the UI.
+  }
+}

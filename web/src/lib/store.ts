@@ -356,6 +356,8 @@ resetPresidingConfig: () => void;
   countdownPause: () => void;
   countdownReset: () => void;
   finishCountdown: () => void;
+  countdownExtend: (extraMs: number) => void;
+  markCountdownWarning: (which: 60 | 10) => void;
   setCountryClock: (tz: string | null, label: string | null) => void;
   setWidgetVisible: (visible: boolean) => void;
   setWidgetSize: (w: number | null, h: number | null) => void;
@@ -790,7 +792,15 @@ const TIME_WIDGET_SIZE_MAX = 4000;
 function getDefaultTimeTools(): TimeToolsState {
   return {
     stopwatch: { running: false, startedAtMs: null, accumulatedMs: 0 },
-    countdown: { running: false, endsAtMs: null, remainingMs: 0, totalMs: 0, finishedAtMs: null },
+    countdown: {
+      running: false,
+      endsAtMs: null,
+      remainingMs: 0,
+      totalMs: 0,
+      finishedAtMs: null,
+      warned60: false,
+      warned10: false,
+    },
     countryTz: null,
     countryLabel: null,
     widgetVisible: false,
@@ -842,6 +852,8 @@ function normalizeTimeTools(raw?: PersistedTimeTools | null): TimeToolsState {
       remainingMs: positiveMs(countdown.remainingMs),
       totalMs: positiveMs(countdown.totalMs),
       finishedAtMs: typeof countdown.finishedAtMs === "number" ? countdown.finishedAtMs : null,
+      warned60: Boolean(countdown.warned60),
+      warned10: Boolean(countdown.warned10),
     },
     countryTz: typeof raw?.countryTz === "string" ? raw.countryTz : null,
     countryLabel: typeof raw?.countryLabel === "string" ? raw.countryLabel : null,
@@ -1971,6 +1983,8 @@ resetPresidingConfig: () =>
                 remainingMs: 0,
                 totalMs: total,
                 finishedAtMs: null,
+                warned60: false,
+                warned10: false,
               },
             },
           };
@@ -1995,7 +2009,15 @@ resetPresidingConfig: () =>
         set((s) => ({
           timeTools: {
             ...s.timeTools,
-            countdown: { running: false, endsAtMs: null, remainingMs: 0, totalMs: 0, finishedAtMs: null },
+            countdown: {
+              running: false,
+              endsAtMs: null,
+              remainingMs: 0,
+              totalMs: 0,
+              finishedAtMs: null,
+              warned60: false,
+              warned10: false,
+            },
           },
         })),
       finishCountdown: () =>
@@ -2006,6 +2028,56 @@ resetPresidingConfig: () =>
             timeTools: {
               ...s.timeTools,
               countdown: { ...cd, running: false, endsAtMs: null, remainingMs: 0, finishedAtMs: Date.now() },
+            },
+          };
+        }),
+      countdownExtend: (extraMs) =>
+        set((s) => {
+          const cd = s.timeTools.countdown;
+          const extra = Math.max(0, Math.floor(extraMs));
+          if (extra <= 0) return {};
+          if (cd.running && cd.endsAtMs != null) {
+            const endsAtMs = cd.endsAtMs + extra;
+            const remaining = Math.max(0, endsAtMs - Date.now());
+            return {
+              timeTools: {
+                ...s.timeTools,
+                countdown: {
+                  ...cd,
+                  endsAtMs,
+                  totalMs: cd.totalMs + extra,
+                  warned60: remaining > 60_000 ? false : cd.warned60,
+                  warned10: remaining > 10_000 ? false : cd.warned10,
+                },
+              },
+            };
+          }
+          if (!cd.running && cd.remainingMs > 0) {
+            const remainingMs = cd.remainingMs + extra;
+            return {
+              timeTools: {
+                ...s.timeTools,
+                countdown: {
+                  ...cd,
+                  remainingMs,
+                  totalMs: cd.totalMs + extra,
+                  warned60: remainingMs > 60_000 ? false : cd.warned60,
+                  warned10: remainingMs > 10_000 ? false : cd.warned10,
+                },
+              },
+            };
+          }
+          return {};
+        }),
+      markCountdownWarning: (which) =>
+        set((s) => {
+          const cd = s.timeTools.countdown;
+          if (!cd.running) return {};
+          if (which === 60 ? cd.warned60 : cd.warned10) return {};
+          return {
+            timeTools: {
+              ...s.timeTools,
+              countdown: which === 60 ? { ...cd, warned60: true } : { ...cd, warned10: true },
             },
           };
         }),

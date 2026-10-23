@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/i18n";
-import { playAlertBeep } from "@/lib/alertSound";
+import { playAlertBeep, playWarningBeep } from "@/lib/alertSound";
+import { useWakeLock } from "@/lib/wakeLock";
 
 /* ---------- constants + helpers ---------- */
 
@@ -40,6 +41,17 @@ function fmtHMS(ms: number): string {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+/** Compact timer text for the tab title: MM:SS, or H:MM:SS past the hour. */
+function fmtTitleTime(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function fmtClock(now: Date, timeZone: string, hour12: boolean, locale: string): string {
@@ -77,16 +89,40 @@ function useCountdownAlert(): void {
   const running = useStore((s) => s.timeTools.countdown.running);
   const endsAtMs = useStore((s) => s.timeTools.countdown.endsAtMs);
   const finishCountdown = useStore((s) => s.finishCountdown);
+  const markCountdownWarning = useStore((s) => s.markCountdownWarning);
   const { t } = useT();
 
   useEffect(() => {
     if (!running || endsAtMs == null) return;
     const check = () => {
-      if (Date.now() < endsAtMs) return;
       // Read the fresh store state: skip the alert when another watcher
       // already completed this countdown, and skip when the user
       // reset/paused before this check ran.
       const { countdown } = useStore.getState().timeTools;
+      if (!countdown.running || countdown.endsAtMs == null) return;
+      const remaining = Math.max(0, countdown.endsAtMs - Date.now());
+
+      // Warnings only while the countdown still has time left (a finish tick
+      // must not fire the 10 s warning on top of the completion beep). Both
+      // are guarded by totalMs so short countdowns never warn immediately.
+      if (remaining > 0) {
+        if (
+          remaining <= 60_000 &&
+          remaining > 10_000 &&
+          countdown.totalMs > 60_000 &&
+          !countdown.warned60
+        ) {
+          markCountdownWarning(60);
+          toast(t("time.warning1m"));
+        }
+        if (remaining <= 10_000 && countdown.totalMs > 10_000 && !countdown.warned10) {
+          markCountdownWarning(10);
+          toast(t("time.warning10s"));
+          playWarningBeep();
+        }
+        return;
+      }
+
       const alreadyFinished = countdown.finishedAtMs != null;
       finishCountdown();
       if (alreadyFinished || !countdown.running) return;
@@ -96,7 +132,7 @@ function useCountdownAlert(): void {
     check();
     const interval = window.setInterval(check, 1000);
     return () => window.clearInterval(interval);
-  }, [running, endsAtMs, finishCountdown, t]);
+  }, [running, endsAtMs, finishCountdown, markCountdownWarning, t]);
 }
 
 /* ---------- main component ---------- */
@@ -191,6 +227,36 @@ export default function TimeWidget() {
       : focus === "stopwatch"
         ? fmtHMS(stopwatchElapsedMs)
         : fmtClock(now, focus === "country" ? (countryTz ?? deviceTz) : deviceTz, hour12, locale);
+
+  /* ----- global timer affordances: keep the screen awake + tab title ----- */
+
+  // Best-effort screen wake lock while either timer runs (also runs while the
+  // pill is hidden, since these hooks sit above the `!widgetVisible` return).
+  useWakeLock(stopwatch.running || countdown.running);
+
+  // Base title captured once on mount so the timer text can be restored.
+  const baseTitleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (baseTitleRef.current == null) baseTitleRef.current = document.title;
+  }, []);
+
+  useEffect(() => {
+    const base = baseTitleRef.current ?? document.title;
+    if (!stopwatch.running && !countdown.running) {
+      document.title = base;
+      return;
+    }
+    const runningMs = countdown.running ? countdownRemainingMs : stopwatchElapsedMs;
+    const label = countdown.running ? t("time.countdown") : t("time.stopwatch");
+    document.title = `${fmtTitleTime(runningMs)} · ${label} · ${base}`;
+  }, [stopwatch.running, countdown.running, stopwatchElapsedMs, countdownRemainingMs, t]);
+
+  useEffect(
+    () => () => {
+      if (baseTitleRef.current != null) document.title = baseTitleRef.current;
+    },
+    [],
+  );
 
   // Toggle button: "pause" while the focused timer runs; otherwise a play
   // button to resume/start. A clock focus (forced or auto) shows no toggle.

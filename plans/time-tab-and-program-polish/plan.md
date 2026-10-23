@@ -74,6 +74,7 @@ updated: "2026-10-17"
 | 5 | Fullscreen display + timer mutual exclusion | Big landscape display (clock/timers); stopwatch↔countdown exclusivity | completed |
 | 6 | Pill close-stop + paused focus + dedicated fullscreens | X pauses; paused timers keep the pill; no timer buttons on clock; per-card locked fullscreen (overlay-only) | completed |
 | 7 | Crop-style resize + fullscreen exit pauses | TL handle resizes like a crop box (px window, undistorted content); leaving fullscreen pauses the timer | completed |
+| 8 | Timer refurbish (ring, states, extend/warn/repeat, title, wake lock) | Refined stopwatch/countdown cards; countdown ring in accent color; new logic | completed |
 
 ## Risks & Open Questions
 
@@ -105,3 +106,4 @@ updated: "2026-10-17"
 - Phase 6 completed (user batch): pill X = close + pause (time kept); paused timers keep the pill with frozen time + ▶; clock pill shows no timer buttons; **zero native Fullscreen API** (no browser notice) with per-card LOCKED dedicated fullscreens; independent X/Y widget sizing (square-able, per-axis caps, persisted, legacy migration). All five live-verified; type-check + build green.
 - Phase 7 completed (user): **crop-style resize** — TL handle drags 1:1 with the pointer while the bottom-right stays fixed; the widget is a real px-sized `rounded-3xl` window (content undistorted, live px badge, auto reset on double-click, persists, window-resize re-clamp); legacy sizes reset to auto. **Leaving fullscreen pauses** the running timer. All live-verified; type-check + build green.
 - Phase 7 follow-up (user): handle kept at the BR (TL fixed) with **grab-follows-pointer** behavior (offset adjusts with the size, persisted); the **whole content zooms uniformly** with the window (bigger numbers/icons/buttons, no distortion; content-natural baseline fixes a preview-pollution bug); double-click resets size + position. Live-verified; type-check + build green.
+- Phase 8 completed (user): timer refurbish — **progress ring in the user's accent color** (card + fullscreen), state chips (Ready/Running/Paused/Finished), unified controls; countdown **extend +1/+5 min**, **warnings at 1 min and 10 s** (toast; short beep at 10 s), **Repeat**; **tab title** shows the running time; **wake lock** while running. All live-verified; type-check + build green. Note: Repeat respects the user's floating-pill exclusivity (close the pill first).
