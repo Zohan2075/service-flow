@@ -162,8 +162,8 @@ export default function TimeWidget() {
   const timeFormat = useStore((s) => s.presidingPrefs.timeFormat);
   const stopwatchStart = useStore((s) => s.stopwatchStart);
   const stopwatchPause = useStore((s) => s.stopwatchPause);
-  const countdownStart = useStore((s) => s.countdownStart);
   const countdownPause = useStore((s) => s.countdownPause);
+  const countdownResume = useStore((s) => s.countdownResume);
   const setWidgetVisible = useStore((s) => s.setWidgetVisible);
   const setWidgetSize = useStore((s) => s.setWidgetSize);
   const setWidgetOffset = useStore((s) => s.setWidgetOffset);
@@ -279,9 +279,9 @@ export default function TimeWidget() {
     }
     if (toggleTarget !== "resume") return;
     if (focus === "stopwatch") stopwatchStart();
-    else if (focus === "countdown") countdownStart(countdown.remainingMs);
+    else if (focus === "countdown") countdownResume();
     else if (pausedStopwatch) stopwatchStart();
-    else if (pausedCountdown) countdownStart(countdown.remainingMs);
+    else if (pausedCountdown) countdownResume();
   };
 
   // X = close + pause the shown timer (value kept; resumable later with ▶).

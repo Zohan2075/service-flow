@@ -88,6 +88,7 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   const stopwatchReset = useStore((s) => s.stopwatchReset);
   const countdownStart = useStore((s) => s.countdownStart);
   const countdownPause = useStore((s) => s.countdownPause);
+  const countdownResume = useStore((s) => s.countdownResume);
   const countdownReset = useStore((s) => s.countdownReset);
 
   // Single 1 s tick drives every displayed value (same pattern as TimeView).
@@ -121,7 +122,6 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
     !countdown.running && countdown.remainingMs > 0 && countdown.finishedAtMs == null;
   const countdownQuickStart = !countdown.running && countdown.totalMs === 0;
   const countdownStartDisabled =
-    countdown.running ||
     countdownBlocked ||
     countdown.finishedAtMs != null ||
     (!countdownResumable && countdown.totalMs === 0);
@@ -210,8 +210,8 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
       return;
     }
     if (countdownBlocked || countdown.finishedAtMs != null) return;
-    const ms = countdownResumable ? countdown.remainingMs : countdown.totalMs;
-    countdownStart(ms);
+    if (countdownResumable) countdownResume();
+    else countdownStart(countdown.totalMs);
   };
 
   const displayTz = mode === "country" ? (countryTz ?? deviceTz) : deviceTz;

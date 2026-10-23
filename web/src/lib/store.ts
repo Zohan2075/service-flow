@@ -354,6 +354,7 @@ resetPresidingConfig: () => void;
   stopwatchReset: () => void;
   countdownStart: (totalMs: number) => void;
   countdownPause: () => void;
+  countdownResume: () => void;
   countdownReset: () => void;
   finishCountdown: () => void;
   countdownExtend: (extraMs: number) => void;
@@ -2001,6 +2002,25 @@ resetPresidingConfig: () =>
                 running: false,
                 endsAtMs: null,
                 remainingMs: Math.max(0, cd.endsAtMs - Date.now()),
+              },
+            },
+          };
+        }),
+      countdownResume: () =>
+        set((s) => {
+          const cd = s.timeTools.countdown;
+          if (cd.running || cd.remainingMs <= 0 || cd.finishedAtMs != null) return {};
+          // Mutual exclusion: never resume the countdown while the stopwatch runs.
+          if (s.timeTools.stopwatch.running) return {};
+          return {
+            timeTools: {
+              ...s.timeTools,
+              widgetVisible: true,
+              countdown: {
+                ...cd,
+                running: true,
+                endsAtMs: Date.now() + cd.remainingMs,
+                remainingMs: 0,
               },
             },
           };

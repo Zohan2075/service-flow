@@ -241,6 +241,7 @@ export default function TimeView() {
   const stopwatchReset = useStore((s) => s.stopwatchReset);
   const countdownStart = useStore((s) => s.countdownStart);
   const countdownPause = useStore((s) => s.countdownPause);
+  const countdownResume = useStore((s) => s.countdownResume);
   const countdownReset = useStore((s) => s.countdownReset);
   const countdownExtend = useStore((s) => s.countdownExtend);
   const setCountryClock = useStore((s) => s.setCountryClock);
@@ -376,7 +377,8 @@ export default function TimeView() {
       return;
     }
     if (!widgetVisible && (widgetMode === "clock" || widgetMode === "stopwatch")) setWidgetMode("auto");
-    countdownStart(canResume ? countdown.remainingMs : configuredMs);
+    if (canResume) countdownResume();
+    else countdownStart(configuredMs);
   };
   const floatClock = () => {
     setWidgetMode("clock");
@@ -601,7 +603,7 @@ export default function TimeView() {
             active={countdown.running}
             icon={countdown.running ? "pause" : "play_arrow"}
             label={countdownActionLabel}
-            disabled={!countdownCanStart || countdownBlocked || countdownBusy}
+            disabled={countdownBlocked || countdownBusy || (!countdown.running && !countdownCanStart)}
             size="lg"
           />
           <ResetButton onClick={countdownReset} label={t("time.reset")} />

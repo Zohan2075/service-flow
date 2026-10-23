@@ -100,3 +100,9 @@ Refurbish the two Time-tab timers (stopwatch + countdown) with more logic and a 
   - Wake lock spy: 1 request while running, 1 release after reset
   - Fullscreen countdown: ring present with the accent stroke
 - `type-check` + `build` green.
+
+## Follow-up fixes (2026-10-23)
+
+- **Ring continuity on resume**: resuming used `countdownStart(remaining)`, which re-baselined `totalMs` to the remaining time → the ring restarted full ("went back"). Added `countdownResume()` (keeps `totalMs`, sets `endsAtMs = now + remainingMs`, respects mutual exclusion, re-shows the pill); wired in TimeView, TimeWidget and FullscreenClock. Verified: paused offset 29.6 → resumed 30.7 → 40.4 (continues from the same point, no jump).
+- **Pause in fullscreen**: `countdownStartDisabled` included `countdown.running` → the Start/Pause button was disabled while running. Removed; also fixed the TimeView action button to allow pausing when started without a preset (`disabled = blocked || busy || (!running && !canStart)`). Verified: pause button enabled while running in both places; click freezes the time and flips the button to Resume.
+- `type-check` + `build` green.
