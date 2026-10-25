@@ -301,15 +301,15 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
         {t("time.exitFullscreen")}
       </button>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6">
         <p className="text-xs font-black uppercase tracking-[0.35em] text-white/45">{modeLabel}</p>
         {mode === "countdown" ? (
           <TimerRing
             progress={countdownProgress}
-            className="w-[min(72vw,58vh)] h-[min(72vw,58vh)]"
+            className="w-[min(72vw,50dvh)] h-[min(72vw,50dvh)] landscape:w-[min(60vw,32dvh)] landscape:h-[min(60vw,32dvh)]"
             trackClassName="stroke-white/10"
           >
-            <div className="font-mono text-[clamp(2rem,min(10vw,8vh),8rem)] font-black leading-none tabular-nums">
+            <div className="font-mono text-[clamp(2rem,min(10vw,6.5dvh),8rem)] landscape:text-[clamp(1rem,min(7vw,5dvh),8rem)] font-black leading-none tabular-nums">
               <span suppressHydrationWarning>{displayText}</span>
             </div>
           </TimerRing>
@@ -328,8 +328,12 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
         )}
       </div>
 
-      {controlsVisible && (showStopwatchControls || showCountdownControls) && (
-        <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-center gap-4 p-6 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]">
+      {(showStopwatchControls || showCountdownControls) && (
+        <div
+          className={`shrink-0 flex flex-wrap items-center justify-center gap-4 p-6 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] transition-opacity ${
+            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
           {showStopwatchControls && (
             <>
               <button
