@@ -275,6 +275,9 @@ export default function TimeView() {
 
   /* ----- countdown ----- */
   const [presetMin, setPresetMin] = useState<number | null>(5);
+  // True when the user picked a preset/custom time after a pause: the primary
+  // action becomes Start with that time instead of Resume of the old run.
+  const [selectionTouched, setSelectionTouched] = useState(false);
   const [customMin, setCustomMin] = useState("");
   const [customSec, setCustomSec] = useState("");
   const hasCustom = customMin.trim() !== "" || customSec.trim() !== "";
@@ -293,15 +296,17 @@ export default function TimeView() {
   const displayMs =
     runningRemainingMs != null
       ? runningRemainingMs
-      : countdown.remainingMs > 0
-        ? countdown.remainingMs
-        : countdown.finishedAtMs != null
-          ? 0
-          : configuredMs;
+      : selectionTouched
+        ? configuredMs
+        : countdown.remainingMs > 0
+          ? countdown.remainingMs
+          : countdown.finishedAtMs != null
+            ? 0
+            : configuredMs;
   const countdownFinished = !countdown.running && countdown.finishedAtMs != null;
   const countdownActionLabel = countdown.running
     ? t("time.pause")
-    : canResume
+    : canResume && !selectionTouched
       ? t("time.resume")
       : t("time.start");
   const countdownCanStart = canResume || configuredMs > 0;
@@ -310,7 +315,7 @@ export default function TimeView() {
   // Ring reflects the remaining fraction of the last configured duration:
   // frozen while paused, empty when finished, full when idle/ready.
   const countdownProgress =
-    countdown.totalMs > 0
+    countdown.totalMs > 0 && !selectionTouched
       ? Math.min(
           1,
           Math.max(
@@ -326,11 +331,18 @@ export default function TimeView() {
       : "ready";
   const countdownState: TimerState = countdown.running
     ? "running"
-    : countdownFinished
-      ? "finished"
-      : canResume
-        ? "paused"
-        : "ready";
+    : selectionTouched
+      ? "ready"
+      : countdownFinished
+        ? "finished"
+        : canResume
+          ? "paused"
+          : "ready";
+
+  // A new run (from any surface: card, pill or fullscreen) ends the pending selection.
+  useEffect(() => {
+    if (countdown.running) setSelectionTouched(false);
+  }, [countdown.running]);
 
   // Mutual exclusion: while the floating pill is open it "presents" one
   // clock — starting or floating a different one is blocked until it is
@@ -376,7 +388,7 @@ export default function TimeView() {
       return;
     }
     if (!widgetVisible && (widgetMode === "clock" || widgetMode === "stopwatch")) setWidgetMode("auto");
-    if (canResume) countdownResume();
+    if (canResume && !selectionTouched) countdownResume();
     else countdownStart(configuredMs);
   };
   const floatClock = () => {
@@ -390,6 +402,7 @@ export default function TimeView() {
     setPresetMin(min);
     setCustomMin("");
     setCustomSec("");
+    setSelectionTouched(true);
   };
 
   /* ----- country clock ----- */
@@ -571,6 +584,7 @@ export default function TimeView() {
                   onChange={(event) => {
                     setCustomMin(event.target.value.replace(/\D/g, "").slice(0, 3));
                     setPresetMin(null);
+                    setSelectionTouched(true);
                   }}
                   className={INPUT_CLASS}
                 />
@@ -589,6 +603,7 @@ export default function TimeView() {
                   onChange={(event) => {
                     setCustomSec(event.target.value.replace(/\D/g, "").slice(0, 2));
                     setPresetMin(null);
+                    setSelectionTouched(true);
                   }}
                   className={INPUT_CLASS}
                 />
@@ -605,7 +620,13 @@ export default function TimeView() {
             disabled={countdownBlocked || countdownBusy || (!countdown.running && !countdownCanStart)}
             size="lg"
           />
-          <ResetButton onClick={countdownReset} label={t("time.reset")} />
+          <ResetButton
+            onClick={() => {
+              countdownReset();
+              setSelectionTouched(false);
+            }}
+            label={t("time.reset")}
+          />
         </div>
       </section>
 

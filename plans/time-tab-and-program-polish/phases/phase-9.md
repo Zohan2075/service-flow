@@ -3,7 +3,7 @@ type: planning
 entity: phase
 plan: "time-tab-and-program-polish"
 phase: 9
-status: in-progress
+status: completed
 created: "2026-10-25"
 updated: "2026-10-25"
 ---
@@ -100,3 +100,18 @@ The instant-start behavior was the opposite of the requested one. Corrections:
 - **Fullscreen countdown selection is set-only**: local `presetMin` / `customMin` / `customSec`; a preset click selects (highlight + `aria-pressed`), typing custom clears the preset selection; one **Start** runs the configured time (custom → preset → existing `totalMs`); nothing starts on selection.
 - **While running, the fullscreen shows only Pause** — Reset, presets and custom inputs are hidden (auto-hide after 4 s stays). Not running: `Resume` (if paused) + `Start` + `Reset` (only when a duration exists) above the preset/custom rows.
 - Fullscreen idle display mirrors the card: shows the selected/configured time with a full ring until started.
+
+## Final behavior (verified 2026-10-25)
+
+- Presets/custom only **select** (card + fullscreen); **Start** runs the selected time.
+- **Card nuance**: with a paused countdown, choosing a time turns the primary action into **Start** for that time (state "Ready", full ring); without touching the selection the primary stays **Resume** (continues the paused run). Implemented with local `selectionTouched` (cleared when a run starts from any surface: card, pill or fullscreen).
+- **Fullscreen**: running → **only Pause**; paused/idle → Resume + Start + Reset (only when a duration exists) + presets + custom; idle display shows the selected time with a full ring.
+- Closing fullscreen pauses the timer (value kept) and never shows the floating pill; the pill is suppressed on every fullscreen start/resume.
+- Live verification (headless Chrome, 390×720):
+  - Card: select "5 min" → Ready `00:05:00` (no start) → Start → Running `00:04:59`
+  - Paused → select "3 min" → Ready `00:03:00`, Start enabled → Running `00:02:59`
+  - Paused → custom `0:20` → Ready `00:00:20` → Start → Running `00:00:19`
+  - Pause without touching the selection → primary is Resume and continues (`00:00:19 → 00:00:18`)
+  - Fullscreen running → only `pausePause` (0 presets, 0 inputs, no pill); paused → Resume + Start + Reset + 8 presets + 2 inputs
+  - Close fullscreen → paused (value kept) + **no floating pill** (countdown and stopwatch)
+- `type-check` + `build` green.
