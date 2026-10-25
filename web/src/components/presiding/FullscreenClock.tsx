@@ -158,6 +158,13 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [requestClose]);
 
+  /* ----- hide the global sync pill while this fullscreen is open ----- */
+
+  useEffect(() => {
+    document.body.setAttribute("data-timer-fullscreen", "");
+    return () => document.body.removeAttribute("data-timer-fullscreen");
+  }, []);
+
   /* ----- orientation lock (best-effort; silently no-ops without native fullscreen) ----- */
 
   useEffect(() => {
@@ -306,7 +313,7 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
         {mode === "countdown" ? (
           <TimerRing
             progress={countdownProgress}
-            className="w-[min(88vw,64dvh)] h-[min(88vw,64dvh)] landscape:w-[min(60vw,36dvh)] landscape:h-[min(60vw,36dvh)]"
+            className="w-[min(92vw,67dvh)] h-[min(92vw,67dvh)] landscape:w-[min(60vw,36dvh)] landscape:h-[min(60vw,36dvh)]"
             trackClassName="stroke-white/10"
           >
             <div className="font-mono text-[clamp(2rem,min(10vw,6.5dvh),8rem)] landscape:text-[clamp(1rem,min(7vw,5dvh),8rem)] font-black leading-none tabular-nums">

@@ -43,7 +43,7 @@ export default function SyncGuard() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[70] -translate-x-1/2"
+      className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[70] -translate-x-1/2 [[data-timer-fullscreen]_&]:hidden"
     >
       <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-surface/95 px-4 py-2 text-xs font-semibold text-slate-600 shadow-lg backdrop-blur dark:border-slate-700 dark:text-slate-200">
         <span className="material-symbols-outlined animate-spin text-base text-primary">sync</span>
