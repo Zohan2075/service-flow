@@ -630,39 +630,6 @@ export default function TimeView() {
         </div>
       </section>
 
-      {/* ===== Reloj local ===== */}
-      <section className={CARD_CLASS}>
-        <h3 className={CARD_HEADER_CLASS}>
-          <span className="material-symbols-outlined text-base">schedule</span>
-          {t("time.localClock")}
-          <button
-            type="button"
-            onClick={() => setFullscreenMode("local")}
-            aria-label={t("time.fullscreen")}
-            className={CARD_FULLSCREEN_BUTTON_CLASS}
-          >
-            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
-          </button>
-        </h3>
-        <p className={TIME_TEXT_CLASS} suppressHydrationWarning>
-          {fmtZoneTime(now, deviceTz, hour12, locale)}
-        </p>
-        <p
-          className="mt-1 text-center text-sm font-semibold text-slate-500 dark:text-slate-400"
-          suppressHydrationWarning
-        >
-          {fmtZoneDate(now, deviceTz, locale)}
-        </p>
-        <div className="mt-4 flex items-center justify-center">
-          <ActionButton
-            onClick={floatClock}
-            icon="pip"
-            label={t("time.float")}
-            disabled={widgetVisible}
-          />
-        </div>
-      </section>
-
       {/* ===== Hora del país ===== */}
       <section className={CARD_CLASS}>
         <h3 className={CARD_HEADER_CLASS}>

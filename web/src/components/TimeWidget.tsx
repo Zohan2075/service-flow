@@ -137,13 +137,12 @@ function useCountdownAlert(): void {
 
 /* ---------- main component ---------- */
 
-type FocusClock = "countdown" | "stopwatch" | "country" | "local";
+type FocusClock = "countdown" | "stopwatch" | "country";
 
 const FOCUS_ICON: Record<FocusClock, string> = {
   countdown: "hourglass_bottom",
   stopwatch: "timer",
   country: "public",
-  local: "schedule",
 };
 
 const ICON_BUTTON_CLASS =
@@ -190,7 +189,7 @@ export default function TimeWidget() {
   const pausedStopwatch = !stopwatch.running && stopwatch.accumulatedMs > 0;
   const pausedCountdown = !countdown.running && countdown.remainingMs > 0 && countdown.finishedAtMs == null;
 
-  const clockFocus: FocusClock = countryTz ? "country" : "local";
+  const clockFocus: FocusClock = "country";
   const focus: FocusClock =
     widgetMode === "clock"
       ? clockFocus

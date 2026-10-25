@@ -11,7 +11,7 @@ import TimerRing from "@/components/presiding/TimerRing";
 
 const AUTO_HIDE_MS = 4000;
 
-export type FullscreenMode = "stopwatch" | "countdown" | "local" | "country";
+export type FullscreenMode = "stopwatch" | "countdown" | "country";
 
 /* Local API shapes: optional so the app still compiles (and runs) on DOM
  * libs / browsers without the Screen Orientation lock API (iOS Safari ships
@@ -279,9 +279,7 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
       ? t("time.stopwatch")
       : mode === "countdown"
         ? t("time.countdown")
-        : mode === "country"
-          ? t("time.countryClock")
-          : t("time.localClock");
+        : t("time.countryClock");
 
   const showStopwatchControls = mode === "stopwatch";
   const showCountdownControls = mode === "countdown";
@@ -329,7 +327,7 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
             <span suppressHydrationWarning>{displayText}</span>
           </div>
         )}
-        {(mode === "local" || mode === "country") && (
+        {mode === "country" && (
           <p className="text-sm font-semibold text-white/60" suppressHydrationWarning>
             {fmtDate(now, displayTz, locale)}
           </p>
