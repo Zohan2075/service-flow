@@ -75,7 +75,7 @@ updated: "2026-10-17"
 | 6 | Pill close-stop + paused focus + dedicated fullscreens | X pauses; paused timers keep the pill; no timer buttons on clock; per-card locked fullscreen (overlay-only) | completed |
 | 7 | Crop-style resize + fullscreen exit pauses | TL handle resizes like a crop box (px window, undistorted content); leaving fullscreen pauses the timer | completed |
 | 8 | Timer refurbish (ring, states, extend/warn/repeat, title, wake lock) | Refined stopwatch/countdown cards; countdown ring in accent color; new logic | completed |
-| 9 | Fullscreen time selection + no pill from fullscreen + instant presets | Presets/custom time in fullscreen; closing fullscreen stops without a floating pill; card presets start immediately | completed |
+| 9 | Fullscreen time selection + no pill from fullscreen + set-only presets | Presets/custom time in fullscreen (select, then Start); closing fullscreen stops without a floating pill; only Pause visible while running | in-progress |
 
 ## Risks & Open Questions
 

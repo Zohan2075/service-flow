@@ -11,7 +11,6 @@ interface OptionChipProps {
   color?: string;
   icon?: string;
   className?: string;
-  disabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -22,7 +21,6 @@ export default function OptionChip({
   color,
   icon,
   className,
-  disabled = false,
   children,
 }: OptionChipProps) {
   const solid = variant === "solid" && selected;
@@ -31,15 +29,13 @@ export default function OptionChip({
     <motion.button
       type="button"
       onClick={onClick}
-      disabled={disabled}
       aria-pressed={selected}
-      whileHover={disabled ? undefined : { scale: 1.02 }}
-      whileTap={disabled ? undefined : { scale: 0.96 }}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.96 }}
       transition={SPRING_SNAPPY}
       style={solid && color ? { backgroundColor: color, borderColor: color } : undefined}
       className={cn(
         "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition-colors",
-        "disabled:cursor-not-allowed disabled:opacity-50",
         selected
           ? variant === "solid"
             ? "border-transparent text-white"

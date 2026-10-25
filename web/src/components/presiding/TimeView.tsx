@@ -390,9 +390,6 @@ export default function TimeView() {
     setPresetMin(min);
     setCustomMin("");
     setCustomSec("");
-    if (countdownBlocked || countdownBusy) return;
-    if (!widgetVisible && (widgetMode === "clock" || widgetMode === "stopwatch")) setWidgetMode("auto");
-    countdownStart(min * 60_000);
   };
 
   /* ----- country clock ----- */
@@ -554,12 +551,7 @@ export default function TimeView() {
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {COUNTDOWN_PRESETS_MIN.map((min) => (
-                <OptionChip
-                  key={min}
-                  selected={!hasCustom && presetMin === min}
-                  onClick={() => selectPreset(min)}
-                  disabled={countdownBlocked || countdownBusy}
-                >
+                <OptionChip key={min} selected={!hasCustom && presetMin === min} onClick={() => selectPreset(min)}>
                   {min} min
                 </OptionChip>
               ))}

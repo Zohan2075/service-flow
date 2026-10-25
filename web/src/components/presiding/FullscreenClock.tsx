@@ -100,7 +100,8 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   }, []);
   const now = useMemo(() => new Date(nowMs), [nowMs]);
 
-  // Custom fullscreen countdown time (digit-only strings; same sanitizing as the card).
+  // Fullscreen countdown selection (set-only; Start runs the configured time).
+  const [presetMin, setPresetMin] = useState<number | null>(null);
   const [customMin, setCustomMin] = useState("");
   const [customSec, setCustomSec] = useState("");
 
@@ -125,9 +126,14 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
 
   const countdownResumable =
     !countdown.running && countdown.remainingMs > 0 && countdown.finishedAtMs == null;
-  const customMinNum = Math.max(0, parseInt(customMin || "0", 10) || 0);
+  const hasCustom = customMin !== "" || customSec !== "";
+  const customMinNum = Math.min(999, Math.max(0, parseInt(customMin || "0", 10) || 0));
   const customSecNum = Math.min(59, Math.max(0, parseInt(customSec || "0", 10) || 0));
-  const customTotalMs = (customMinNum * 60 + customSecNum) * 1000;
+  const customMs = (customMinNum * 60 + customSecNum) * 1000;
+  const configuredMs = hasCustom ? customMs : presetMin != null ? presetMin * 60_000 : countdown.totalMs;
+  const countdownIdle =
+    !countdown.running && countdown.remainingMs === 0 && countdown.finishedAtMs == null;
+  const countdownFinished = !countdown.running && countdown.finishedAtMs != null;
 
   /* ----- exit handling (single close owner; closes via onClose) ----- */
 
@@ -204,9 +210,15 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
 
   /* ----- actions ----- */
 
-  const startCountdown = (ms: number) => {
-    if (ms <= 0 || countdownBlocked) return;
-    countdownStart(ms);
+  const selectPreset = (min: number) => {
+    setPresetMin(min);
+    setCustomMin("");
+    setCustomSec("");
+  };
+
+  const startConfigured = () => {
+    if (configuredMs <= 0 || countdownBlocked) return;
+    countdownStart(configuredMs);
     // The card's start action reveals the pill; fullscreen keeps it hidden.
     setWidgetVisible(false);
   };
@@ -233,18 +245,27 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   };
 
   const displayTz = mode === "country" ? (countryTz ?? deviceTz) : deviceTz;
+  const countdownDisplayMs = countdown.running
+    ? countdownRemainingMs
+    : countdownIdle
+      ? configuredMs
+      : countdown.remainingMs;
   const displayText =
     mode === "stopwatch"
       ? fmtHMS(stopwatchElapsedMs)
       : mode === "countdown"
-        ? fmtHMS(countdownRemainingMs)
+        ? fmtHMS(countdownDisplayMs)
         : fmtClock(now, displayTz, hour12, locale);
 
-  // Countdown ring: remaining fraction of the last configured duration.
-  const countdownProgress =
-    countdown.totalMs > 0
-      ? Math.min(1, Math.max(0, countdownRemainingMs / countdown.totalMs))
-      : 1;
+  // Idle shows the configured selection with a full ring; paused keeps the
+  // remaining fraction; finished empties the ring.
+  const countdownProgress = countdownFinished
+    ? 0
+    : countdownIdle
+      ? 1
+      : countdown.totalMs > 0
+        ? Math.min(1, Math.max(0, countdownRemainingMs / countdown.totalMs))
+        : 1;
 
   const modeLabel =
     mode === "stopwatch"
@@ -342,30 +363,20 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
           )}
 
           {showCountdownControls && countdown.running && (
-            <>
-              <button
-                type="button"
-                onClick={toggleCountdown}
-                className={`${BIG_BUTTON_BASE} bg-amber-500 text-black`}
-              >
-                <span className="material-symbols-outlined text-2xl leading-none">pause</span>
-                {t("time.pause")}
-              </button>
-              <button
-                type="button"
-                onClick={countdownReset}
-                className={`${BIG_BUTTON_BASE} border border-white/15 bg-white/5 text-white/80 hover:bg-white/10`}
-              >
-                <span className="material-symbols-outlined text-2xl leading-none">restart_alt</span>
-                {t("time.reset")}
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={toggleCountdown}
+              className={`${BIG_BUTTON_BASE} bg-amber-500 text-black`}
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">pause</span>
+              {t("time.pause")}
+            </button>
           )}
 
           {showCountdownControls && !countdown.running && (
             <div className="flex w-full max-w-2xl flex-col items-center gap-3">
-              {countdownResumable ? (
-                <div className="flex flex-wrap items-center justify-center gap-3">
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                {countdownResumable && (
                   <button
                     type="button"
                     onClick={toggleCountdown}
@@ -375,6 +386,17 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
                     <span className="material-symbols-outlined text-2xl leading-none">play_arrow</span>
                     {t("time.resume")}
                   </button>
+                )}
+                <button
+                  type="button"
+                  onClick={startConfigured}
+                  disabled={configuredMs <= 0 || countdownBlocked}
+                  className={`${BIG_BUTTON_BASE} bg-primary text-white`}
+                >
+                  <span className="material-symbols-outlined text-2xl leading-none">play_arrow</span>
+                  {t("time.start")}
+                </button>
+                {countdown.totalMs > 0 && (
                   <button
                     type="button"
                     onClick={countdownReset}
@@ -383,34 +405,32 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
                     <span className="material-symbols-outlined text-2xl leading-none">restart_alt</span>
                     {t("time.reset")}
                   </button>
-                </div>
-              ) : countdown.totalMs > 0 ? (
-                <button
-                  type="button"
-                  onClick={countdownReset}
-                  className={`${BIG_BUTTON_BASE} border border-white/15 bg-white/5 text-white/80 hover:bg-white/10`}
-                >
-                  <span className="material-symbols-outlined text-2xl leading-none">restart_alt</span>
-                  {t("time.reset")}
-                </button>
-              ) : null}
+                )}
+              </div>
 
               <div
                 role="group"
                 aria-label={t("time.presets")}
                 className="flex flex-wrap items-center justify-center gap-2"
               >
-                {COUNTDOWN_PRESETS_MIN.map((min) => (
-                  <button
-                    key={min}
-                    type="button"
-                    onClick={() => startCountdown(min * 60_000)}
-                    disabled={countdownBlocked}
-                    className="min-h-9 rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-bold text-white/90 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {min} min
-                  </button>
-                ))}
+                {COUNTDOWN_PRESETS_MIN.map((min) => {
+                  const selected = presetMin === min;
+                  return (
+                    <button
+                      key={min}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => selectPreset(min)}
+                      className={`min-h-9 rounded-xl border px-3 text-sm font-bold transition-colors ${
+                        selected
+                          ? "border-primary bg-primary/20 text-white"
+                          : "border-white/15 bg-white/5 text-white/90 hover:bg-white/10"
+                      }`}
+                    >
+                      {min} min
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="flex flex-wrap items-center justify-center gap-2">
@@ -421,7 +441,10 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
                   maxLength={3}
                   aria-label={t("time.minutes")}
                   value={customMin}
-                  onChange={(event) => setCustomMin(event.target.value.replace(/\D/g, "").slice(0, 3))}
+                  onChange={(event) => {
+                    setCustomMin(event.target.value.replace(/\D/g, "").slice(0, 3));
+                    setPresetMin(null);
+                  }}
                   className="h-11 w-16 rounded-xl border border-white/15 bg-white/5 text-center font-mono text-lg font-bold text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <span className="font-mono text-lg font-black text-white/60">:</span>
@@ -432,18 +455,12 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
                   maxLength={2}
                   aria-label={t("time.seconds")}
                   value={customSec}
-                  onChange={(event) => setCustomSec(event.target.value.replace(/\D/g, "").slice(0, 2))}
+                  onChange={(event) => {
+                    setCustomSec(event.target.value.replace(/\D/g, "").slice(0, 2));
+                    setPresetMin(null);
+                  }}
                   className="h-11 w-16 rounded-xl border border-white/15 bg-white/5 text-center font-mono text-lg font-bold text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-primary"
                 />
-                <button
-                  type="button"
-                  onClick={() => startCountdown(customTotalMs)}
-                  disabled={customTotalMs <= 0 || countdownBlocked}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-base font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span className="material-symbols-outlined text-lg leading-none">play_arrow</span>
-                  {t("time.start")}
-                </button>
               </div>
             </div>
           )}

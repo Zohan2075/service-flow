@@ -3,7 +3,7 @@ type: planning
 entity: phase
 plan: "time-tab-and-program-polish"
 phase: 9
-status: completed
+status: in-progress
 created: "2026-10-25"
 updated: "2026-10-25"
 ---
@@ -90,3 +90,13 @@ Fix the timer logic around fullscreen and presets:
   - Close fullscreen (Exit) → timer **paused** (value kept), **no floating pill**, tab title restored to `ServiceFlow`
   - Stopwatch fullscreen: start → close → paused, no pill
 - `type-check` + `build` green.
+
+## Correction (user, 2026-10-25)
+
+The instant-start behavior was the opposite of the requested one. Corrections:
+
+- **Presets are set-only, never auto-start** (Time card **and** fullscreen): clicking a preset selects/highlights the time; **Start** runs it.
+  - `TimeView.selectPreset` reverts to setting `presetMin` + clearing the custom fields (no `countdownStart`, no blocked guard); preset chips lose `disabled`; the additive `OptionChip` `disabled` prop is reverted (no longer needed).
+- **Fullscreen countdown selection is set-only**: local `presetMin` / `customMin` / `customSec`; a preset click selects (highlight + `aria-pressed`), typing custom clears the preset selection; one **Start** runs the configured time (custom → preset → existing `totalMs`); nothing starts on selection.
+- **While running, the fullscreen shows only Pause** — Reset, presets and custom inputs are hidden (auto-hide after 4 s stays). Not running: `Resume` (if paused) + `Start` + `Reset` (only when a duration exists) above the preset/custom rows.
+- Fullscreen idle display mirrors the card: shows the selected/configured time with a full ring until started.
