@@ -313,7 +313,11 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
         {mode === "countdown" ? (
           <TimerRing
             progress={countdownProgress}
-            className="w-[min(92vw,67dvh)] h-[min(92vw,67dvh)] landscape:w-[min(60vw,36dvh)] landscape:h-[min(60vw,36dvh)]"
+            className={
+              countdown.running
+                ? "w-[min(96vw,76dvh)] h-[min(96vw,76dvh)] landscape:w-[min(66vw,44dvh)] landscape:h-[min(66vw,44dvh)]"
+                : "w-[min(92vw,67dvh)] h-[min(92vw,67dvh)] landscape:w-[min(60vw,36dvh)] landscape:h-[min(60vw,36dvh)]"
+            }
             trackClassName="stroke-white/10"
           >
             <div className="font-mono text-[clamp(2rem,min(10vw,6.5dvh),8rem)] landscape:text-[clamp(1rem,min(7vw,5dvh),8rem)] font-black leading-none tabular-nums">
