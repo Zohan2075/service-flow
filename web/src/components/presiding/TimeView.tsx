@@ -6,14 +6,13 @@ import toast from "react-hot-toast";
 import { useStore } from "@/lib/store";
 import { useT, type TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { COUNTDOWN_PRESETS_MIN } from "@/lib/timePresets";
 import OptionChip from "@/components/ui/OptionChip";
 import { SPRING_SNAPPY } from "@/components/ui/motion";
 import FullscreenClock, { type FullscreenMode } from "@/components/presiding/FullscreenClock";
 import TimerRing from "@/components/presiding/TimerRing";
 
 /* ---------- constants + helpers ---------- */
-
-const COUNTDOWN_PRESETS_MIN = [1, 3, 5, 10, 15, 30, 45, 60];
 
 const FALLBACK_TIMEZONES = [
   "UTC",
@@ -391,6 +390,9 @@ export default function TimeView() {
     setPresetMin(min);
     setCustomMin("");
     setCustomSec("");
+    if (countdownBlocked || countdownBusy) return;
+    if (!widgetVisible && (widgetMode === "clock" || widgetMode === "stopwatch")) setWidgetMode("auto");
+    countdownStart(min * 60_000);
   };
 
   /* ----- country clock ----- */
@@ -552,7 +554,12 @@ export default function TimeView() {
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {COUNTDOWN_PRESETS_MIN.map((min) => (
-                <OptionChip key={min} selected={!hasCustom && presetMin === min} onClick={() => selectPreset(min)}>
+                <OptionChip
+                  key={min}
+                  selected={!hasCustom && presetMin === min}
+                  onClick={() => selectPreset(min)}
+                  disabled={countdownBlocked || countdownBusy}
+                >
                   {min} min
                 </OptionChip>
               ))}

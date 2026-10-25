@@ -75,6 +75,7 @@ updated: "2026-10-17"
 | 6 | Pill close-stop + paused focus + dedicated fullscreens | X pauses; paused timers keep the pill; no timer buttons on clock; per-card locked fullscreen (overlay-only) | completed |
 | 7 | Crop-style resize + fullscreen exit pauses | TL handle resizes like a crop box (px window, undistorted content); leaving fullscreen pauses the timer | completed |
 | 8 | Timer refurbish (ring, states, extend/warn/repeat, title, wake lock) | Refined stopwatch/countdown cards; countdown ring in accent color; new logic | completed |
+| 9 | Fullscreen time selection + no pill from fullscreen + instant presets | Presets/custom time in fullscreen; closing fullscreen stops without a floating pill; card presets start immediately | completed |
 
 ## Risks & Open Questions
 
@@ -108,3 +109,4 @@ updated: "2026-10-17"
 - Phase 7 follow-up (user): handle kept at the BR (TL fixed) with **grab-follows-pointer** behavior (offset adjusts with the size, persisted); the **whole content zooms uniformly** with the window (bigger numbers/icons/buttons, no distortion; content-natural baseline fixes a preview-pollution bug); double-click resets size + position. Live-verified; type-check + build green.
 - Phase 8 completed (user): timer refurbish — **progress ring in the user's accent color** (card + fullscreen), state chips (Ready/Running/Paused/Finished), unified controls; countdown **extend +1/+5 min**, **warnings at 1 min and 10 s** (toast; short beep at 10 s), **Repeat**; **tab title** shows the running time; **wake lock** while running. All live-verified; type-check + build green. Note: Repeat respects the user's floating-pill exclusivity (close the pill first).
 - Phase 8 fixes (user report): `countdownResume()` preserves `totalMs` (ring continues from the exact paused point instead of restarting); the Start/Pause control is no longer disabled while running (pause now works in the Time card and in fullscreen). Both live-verified; type-check + build green.
+- Phase 9 completed (user): fullscreen countdown now offers **presets + custom min:sec + Start** (runs directly there; Resume/Reset when paused); **closing fullscreen stops the timer and never leaves a floating pill** (pill suppressed on every fullscreen start/resume and on close); **Time card presets start immediately** instead of only selecting. Shared preset list (`lib/timePresets.ts`), additive `OptionChip` `disabled`. All live-verified; type-check + build green.
