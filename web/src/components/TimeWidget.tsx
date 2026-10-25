@@ -146,7 +146,7 @@ const FOCUS_ICON: Record<FocusClock, string> = {
 };
 
 const ICON_BUTTON_CLASS =
-  "flex size-8 md:size-10 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
+  "flex size-10 md:size-12 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
 
 export default function TimeWidget() {
   const router = useRouter();
@@ -569,12 +569,12 @@ export default function TimeWidget() {
             type="button"
             onClick={() => router.push("/presiding?tab=time")}
             title={t("time.title")}
-            className="flex items-center gap-1.5 md:gap-2 rounded-full px-2 md:px-3 py-1.5 md:py-2 text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700/60"
+            className="flex items-center gap-2 md:gap-2.5 rounded-full px-3 md:px-4 py-2 md:py-2.5 text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700/60"
           >
-            <span className="material-symbols-outlined text-base md:text-xl leading-none text-primary">
+            <span className="material-symbols-outlined text-xl md:text-2xl leading-none text-primary">
               {FOCUS_ICON[focus]}
             </span>
-            <span className="font-mono text-sm md:text-base font-bold leading-none tabular-nums" suppressHydrationWarning>
+            <span className="font-mono text-xl md:text-3xl font-black leading-none tabular-nums" suppressHydrationWarning>
               {displayText}
             </span>
           </button>
@@ -586,7 +586,7 @@ export default function TimeWidget() {
               aria-label={toggleTarget === "pause" ? t("time.pause") : t("time.resume")}
               className={ICON_BUTTON_CLASS}
             >
-              <span className="material-symbols-outlined text-base leading-none">
+              <span className="material-symbols-outlined text-xl md:text-2xl leading-none">
                 {toggleTarget === "pause" ? "pause" : "play_arrow"}
               </span>
             </button>
@@ -600,7 +600,7 @@ export default function TimeWidget() {
             onDoubleClick={resetOffset}
             className={`${ICON_BUTTON_CLASS} cursor-move touch-none`}
           >
-            <span className="material-symbols-outlined text-base leading-none">drag_indicator</span>
+            <span className="material-symbols-outlined text-xl md:text-2xl leading-none">drag_indicator</span>
           </button>
 
           <button
@@ -609,7 +609,7 @@ export default function TimeWidget() {
             aria-label={t("time.hide")}
             className={ICON_BUTTON_CLASS}
           >
-            <span className="material-symbols-outlined text-base leading-none">close</span>
+            <span className="material-symbols-outlined text-xl md:text-2xl leading-none">close</span>
           </button>
         </div>
 
