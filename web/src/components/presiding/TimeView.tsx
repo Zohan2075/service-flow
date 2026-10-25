@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
+import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useStore } from "@/lib/store";
 import { useT, type TranslationKey } from "@/lib/i18n";
@@ -698,7 +699,13 @@ export default function TimeView() {
         </label>
       </section>
 
-      {fullscreenMode && <FullscreenClock mode={fullscreenMode} onClose={() => setFullscreenMode(null)} />}
+      {/* Portal to <body>: a transformed ancestor would otherwise turn `fixed` into a
+          box offset from the window top, leaving a strip of page visible above it. */}
+      {fullscreenMode &&
+        createPortal(
+          <FullscreenClock mode={fullscreenMode} onClose={() => setFullscreenMode(null)} />,
+          document.body,
+        )}
     </div>
   );
 }
