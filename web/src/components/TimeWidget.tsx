@@ -13,6 +13,8 @@ import { useStore } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import { playAlertBeep, playWarningBeep } from "@/lib/alertSound";
 import { useWakeLock } from "@/lib/wakeLock";
+import { subscribeDisplayClock, useDisplayNow } from "@/lib/displayClock";
+import { formatClock, formatDuration, formatTitleTime, getDeviceTimeZone } from "@/lib/timeFormat";
 
 /* ---------- constants + helpers ---------- */
 
@@ -35,47 +37,6 @@ function clampResizeAxis(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-function fmtHMS(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-/** Compact timer text for the tab title: MM:SS, or H:MM:SS past the hour. */
-function fmtTitleTime(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
-    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function fmtClock(now: Date, timeZone: string, hour12: boolean, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12,
-      ...(timeZone ? { timeZone } : {}),
-    }).format(now);
-  } catch {
-    return "--:--:--";
-  }
-}
-
-function getDeviceTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-  } catch {
-    return "";
-  }
-}
-
 /* ---------- global countdown completion alert ---------- */
 
 /**
@@ -90,6 +51,7 @@ function useCountdownAlert(): void {
   const endsAtMs = useStore((s) => s.timeTools.countdown.endsAtMs);
   const finishCountdown = useStore((s) => s.finishCountdown);
   const markCountdownWarning = useStore((s) => s.markCountdownWarning);
+  const prefs = useStore((s) => s.timeTools.timerPrefs);
   const { t } = useT();
 
   useEffect(() => {
@@ -118,7 +80,7 @@ function useCountdownAlert(): void {
         if (remaining <= 10_000 && countdown.totalMs > 10_000 && !countdown.warned10) {
           markCountdownWarning(10);
           toast(t("time.warning10s"));
-          playWarningBeep();
+          if (prefs.sound) playWarningBeep();
         }
         return;
       }
@@ -126,13 +88,21 @@ function useCountdownAlert(): void {
       const alreadyFinished = countdown.finishedAtMs != null;
       finishCountdown();
       if (alreadyFinished || !countdown.running) return;
-      playAlertBeep();
+      if (prefs.sound) playAlertBeep();
+      if (prefs.haptics) {
+        try {
+          navigator.vibrate?.([200, 100, 200]);
+        } catch {
+          // Vibration unsupported — the sound/toast still fire.
+        }
+      }
       toast.success(t("time.done"));
     };
     check();
-    const interval = window.setInterval(check, 1000);
-    return () => window.clearInterval(interval);
-  }, [running, endsAtMs, finishCountdown, markCountdownWarning, t]);
+    // The shared display clock also recomputes on visibility/focus wake, so a
+    // throttled background tab completes the countdown as soon as it returns.
+    return subscribeDisplayClock(check);
+  }, [running, endsAtMs, finishCountdown, markCountdownWarning, prefs, t]);
 }
 
 /* ---------- main component ---------- */
@@ -167,16 +137,13 @@ export default function TimeWidget() {
   const setWidgetSize = useStore((s) => s.setWidgetSize);
   const setWidgetOffset = useStore((s) => s.setWidgetOffset);
   const widgetMode = useStore((s) => s.timeTools.widgetMode);
+  const timerPrefs = useStore((s) => s.timeTools.timerPrefs);
 
   // Global countdown alert: must tick even while the pill is hidden.
   useCountdownAlert();
 
-  // Single 1 s tick drives every displayed value (same pattern as TimeView).
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+  // Shared display clock: the pill and the page always show the same instant.
+  const nowMs = useDisplayNow();
   const now = useMemo(() => new Date(nowMs), [nowMs]);
 
   const locale = language === "es" ? "es-ES" : "en-US";
@@ -222,16 +189,21 @@ export default function TimeWidget() {
 
   const displayText =
     focus === "countdown"
-      ? fmtHMS(countdownRemainingMs)
+      ? formatDuration(countdownRemainingMs)
       : focus === "stopwatch"
-        ? fmtHMS(stopwatchElapsedMs)
-        : fmtClock(now, focus === "country" ? (countryTz ?? deviceTz) : deviceTz, hour12, locale);
+        ? formatDuration(stopwatchElapsedMs, timerPrefs.precision)
+        : formatClock(now, {
+            timeZone: focus === "country" ? (countryTz ?? deviceTz) : deviceTz,
+            hour12,
+            locale,
+            showSeconds: timerPrefs.showSeconds,
+          });
 
   /* ----- global timer affordances: keep the screen awake + tab title ----- */
 
   // Best-effort screen wake lock while either timer runs (also runs while the
   // pill is hidden, since these hooks sit above the `!widgetVisible` return).
-  useWakeLock(stopwatch.running || countdown.running);
+  useWakeLock((stopwatch.running || countdown.running) && timerPrefs.keepAwake);
 
   // Base title captured once on mount so the timer text can be restored.
   const baseTitleRef = useRef<string | null>(null);
@@ -247,7 +219,7 @@ export default function TimeWidget() {
     }
     const runningMs = countdown.running ? countdownRemainingMs : stopwatchElapsedMs;
     const label = countdown.running ? t("time.countdown") : t("time.stopwatch");
-    document.title = `${fmtTitleTime(runningMs)} · ${label} · ${base}`;
+    document.title = `${formatTitleTime(runningMs)} · ${label} · ${base}`;
   }, [stopwatch.running, countdown.running, stopwatchElapsedMs, countdownRemainingMs, t]);
 
   useEffect(

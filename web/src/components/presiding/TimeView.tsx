@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
@@ -8,49 +8,35 @@ import { useStore } from "@/lib/store";
 import { useT, type TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { COUNTDOWN_PRESETS_MIN } from "@/lib/timePresets";
+import { useDisplayNow } from "@/lib/displayClock";
+import {
+  formatClock,
+  formatClockDate,
+  formatDuration,
+  getDeviceTimeZone,
+  getTimeZoneOptions,
+  humanizeTimeZone,
+} from "@/lib/timeFormat";
 import OptionChip from "@/components/ui/OptionChip";
 import { SPRING_SNAPPY } from "@/components/ui/motion";
 import FullscreenClock, { type FullscreenMode } from "@/components/presiding/FullscreenClock";
 import TimerRing from "@/components/presiding/TimerRing";
+import TimerOptionsMenu, { type TimerMenuMode } from "@/components/presiding/TimerOptionsMenu";
+import { useTimerShortcuts } from "@/components/presiding/useTimerShortcuts";
 
 /* ---------- constants + helpers ---------- */
-
-const FALLBACK_TIMEZONES = [
-  "UTC",
-  "America/Mexico_City",
-  "America/Santo_Domingo",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Bogota",
-  "America/Lima",
-  "America/Caracas",
-  "America/Santiago",
-  "America/Argentina/Buenos_Aires",
-  "America/Sao_Paulo",
-  "Europe/Madrid",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Africa/Johannesburg",
-  "Asia/Tokyo",
-  "Asia/Shanghai",
-  "Asia/Kolkata",
-  "Australia/Sydney",
-  "Pacific/Auckland",
-];
 
 const CARD_CLASS =
   "bg-surface rounded-2xl border border-slate-200 dark:border-slate-800 shadow-card p-4 md:p-5";
 const CARD_HEADER_CLASS =
   "flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400";
+const CARD_HEADER_ACTIONS_CLASS = "ml-auto -my-1 flex items-center gap-1";
 const CARD_FULLSCREEN_BUTTON_CLASS =
-  "ml-auto -my-1 flex size-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
+  "flex size-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700/60 dark:hover:text-slate-300";
 const TIME_TEXT_CLASS =
-  "mt-4 text-center font-mono tabular-nums text-4xl font-black text-slate-800 dark:text-slate-100";
+  "mt-4 text-center font-mono tabular-nums font-black text-slate-800 dark:text-slate-100";
 const STOPWATCH_TIME_CLASS =
-  "mt-4 text-center font-mono tabular-nums text-5xl font-black text-slate-800 dark:text-slate-100";
+  "mt-4 text-center font-mono tabular-nums font-black text-slate-800 dark:text-slate-100";
 const INPUT_CLASS =
   "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-lg text-center font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary";
 
@@ -70,42 +56,6 @@ const STATE_LABEL_KEY: Record<TimerState, TranslationKey> = {
   finished: "time.stateFinished",
 };
 
-function fmtHMS(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function fmtZoneTime(now: Date, timeZone: string, hour12: boolean, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12,
-      ...(timeZone ? { timeZone } : {}),
-    }).format(now);
-  } catch {
-    return "--:--:--";
-  }
-}
-
-function fmtZoneDate(now: Date, timeZone: string, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      ...(timeZone ? { timeZone } : {}),
-    }).format(now);
-  } catch {
-    return "";
-  }
-}
-
 function tzOffsetLabel(now: Date, timeZone: string): string {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -117,31 +67,6 @@ function tzOffsetLabel(now: Date, timeZone: string): string {
   } catch {
     return "";
   }
-}
-
-function humanizeTimeZone(tz: string): string {
-  const segment = tz.split("/").pop() ?? tz;
-  return segment.replace(/_/g, " ");
-}
-
-function getDeviceTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function getTimeZoneOptions(): string[] {
-  try {
-    if (typeof Intl.supportedValuesOf === "function") {
-      const values = Intl.supportedValuesOf("timeZone");
-      if (values.length > 0) return values;
-    }
-  } catch {
-    // Fall through to the curated list.
-  }
-  return FALLBACK_TIMEZONES;
 }
 
 /* ---------- shared pieces ---------- */
@@ -245,17 +170,19 @@ export default function TimeView() {
   const countdownReset = useStore((s) => s.countdownReset);
   const countdownExtend = useStore((s) => s.countdownExtend);
   const setCountryClock = useStore((s) => s.setCountryClock);
+  const stopwatchLap = useStore((s) => s.stopwatchLap);
+  const timerPrefs = useStore((s) => s.timeTools.timerPrefs);
 
-  // Single 1 s tick drives every display; all values derive from Date.now().
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+  // Shared display clock: every view repaints the same timestamp-derived value.
+  const nowMs = useDisplayNow();
   const now = useMemo(() => new Date(nowMs), [nowMs]);
 
   // Fullscreen display overlay, locked to one option at a time.
   const [fullscreenMode, setFullscreenMode] = useState<FullscreenMode | null>(null);
+  // Shared options menu + the card that keyboard shortcuts target.
+  const [menuMode, setMenuMode] = useState<TimerMenuMode | null>(null);
+  const [activeTimer, setActiveTimer] = useState<"stopwatch" | "countdown">("stopwatch");
+  const [announcement, setAnnouncement] = useState("");
 
   const locale = language === "es" ? "es-ES" : "en-US";
   const hour12 = prefsTimeFormat === "12h";
@@ -273,6 +200,18 @@ export default function TimeView() {
     : stopwatchElapsedMs > 0
       ? t("time.resume")
       : t("time.start");
+
+  // Display size shared by both views (compact / normal / large).
+  const stopwatchTimeSize =
+    timerPrefs.fontScale === "compact" ? "text-4xl" : timerPrefs.fontScale === "large" ? "text-6xl" : "text-5xl";
+  const countdownTimeSize =
+    timerPrefs.fontScale === "compact"
+      ? "text-2xl md:text-3xl"
+      : timerPrefs.fontScale === "large"
+        ? "text-4xl md:text-5xl"
+        : "text-3xl md:text-4xl";
+  const clockTimeSize =
+    timerPrefs.fontScale === "compact" ? "text-3xl" : timerPrefs.fontScale === "large" ? "text-5xl" : "text-4xl";
 
   /* ----- countdown ----- */
   const [presetMin, setPresetMin] = useState<number | null>(5);
@@ -345,6 +284,31 @@ export default function TimeView() {
     if (countdown.running) setSelectionTouched(false);
   }, [countdown.running]);
 
+  // Throttled screen-reader announcements: state transitions only, never ticks.
+  const a11yPrevRef = useRef({
+    stopwatch: stopwatch.running,
+    countdown: countdown.running,
+    finished: countdown.finishedAtMs != null,
+    laps: stopwatch.laps.length,
+  });
+  useEffect(() => {
+    const prev = a11yPrevRef.current;
+    let message = "";
+    if (stopwatch.laps.length > prev.laps) message = t("time.a11yLap");
+    else if (countdown.finishedAtMs != null && !prev.finished) message = t("time.a11yFinished");
+    else if (stopwatch.running && !prev.stopwatch) message = t("time.a11yStarted");
+    else if (!stopwatch.running && prev.stopwatch) message = t("time.a11yPaused");
+    else if (countdown.running && !prev.countdown) message = t("time.a11yStarted");
+    else if (!countdown.running && prev.countdown) message = t("time.a11yPaused");
+    a11yPrevRef.current = {
+      stopwatch: stopwatch.running,
+      countdown: countdown.running,
+      finished: countdown.finishedAtMs != null,
+      laps: stopwatch.laps.length,
+    };
+    if (message) setAnnouncement(message);
+  }, [stopwatch.running, countdown.running, stopwatch.laps.length, countdown.finishedAtMs, t]);
+
   // Mutual exclusion: while the floating pill is open it "presents" one
   // clock — starting or floating a different one is blocked until it is
   // closed (×). Controlling the presented timer itself stays enabled.
@@ -405,6 +369,20 @@ export default function TimeView() {
     setCustomSec("");
     setSelectionTouched(true);
   };
+  const resetCountdown = () => {
+    countdownReset();
+    setSelectionTouched(false);
+  };
+
+  useTimerShortcuts({
+    mode: activeTimer,
+    enabled: fullscreenMode === null && menuMode === null,
+    onToggleTimer: activeTimer === "stopwatch" ? toggleStopwatch : toggleCountdown,
+    onLap: stopwatchLap,
+    onReset: activeTimer === "stopwatch" ? stopwatchReset : resetCountdown,
+    onToggleFullscreen: () => setFullscreenMode(activeTimer),
+    onToggleMenu: () => setMenuMode(activeTimer),
+  });
 
   /* ----- country clock ----- */
   const [detecting, setDetecting] = useState(false);
@@ -475,23 +453,40 @@ export default function TimeView() {
       aria-label={t("time.title")}
       className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 overscroll-contain"
     >
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </p>
       {/* ===== Cronómetro ===== */}
-      <section className={CARD_CLASS}>
+      <section
+        className={CARD_CLASS}
+        onPointerDownCapture={() => setActiveTimer("stopwatch")}
+        onFocusCapture={() => setActiveTimer("stopwatch")}
+      >
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">timer</span>
           {t("time.stopwatch")}
           <StateChip state={stopwatchState} label={t(STATE_LABEL_KEY[stopwatchState])} />
-          <button
-            type="button"
-            onClick={() => setFullscreenMode("stopwatch")}
-            aria-label={t("time.fullscreen")}
-            className={CARD_FULLSCREEN_BUTTON_CLASS}
-          >
-            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
-          </button>
+          <div className={CARD_HEADER_ACTIONS_CLASS}>
+            <button
+              type="button"
+              onClick={() => setMenuMode("stopwatch")}
+              aria-label={t("time.options")}
+              className={CARD_FULLSCREEN_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined text-base leading-none">tune</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFullscreenMode("stopwatch")}
+              aria-label={t("time.fullscreen")}
+              className={CARD_FULLSCREEN_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
+            </button>
+          </div>
         </h3>
-        <p className={STOPWATCH_TIME_CLASS} suppressHydrationWarning>
-          {fmtHMS(stopwatchElapsedMs)}
+        <p className={cn(STOPWATCH_TIME_CLASS, stopwatchTimeSize)} suppressHydrationWarning>
+          {formatDuration(stopwatchElapsedMs, timerPrefs.precision)}
         </p>
         {stopwatchBusy && (
           <p className="mt-1 text-center text-xs font-bold text-amber-500">{t("time.timerBusy")}</p>
@@ -505,35 +500,84 @@ export default function TimeView() {
             disabled={stopwatchBlocked || stopwatchBusy}
             size="lg"
           />
+          <ActionButton
+            onClick={stopwatchLap}
+            icon="flag"
+            label={t("time.lap")}
+            disabled={!stopwatch.running}
+            size="lg"
+          />
           <ResetButton onClick={stopwatchReset} label={t("time.reset")} />
         </div>
+        {stopwatch.laps.length > 0 && (
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <span>{t("time.laps")}</span>
+              <span>{stopwatch.laps.length}</span>
+            </div>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {stopwatch.laps
+                .slice(-5)
+                .reverse()
+                .map((lapMs, index) => {
+                  const number = stopwatch.laps.length - index;
+                  const previous = stopwatch.laps[number - 2] ?? 0;
+                  return (
+                    <li
+                      key={number}
+                      className="flex items-center justify-between gap-2 px-3 py-1.5 font-mono text-xs tabular-nums text-slate-600 dark:text-slate-300"
+                    >
+                      <span className="font-sans font-bold text-slate-400">#{number}</span>
+                      <span>{formatDuration(lapMs, timerPrefs.precision)}</span>
+                      <span className="text-primary">+{formatDuration(lapMs - previous, timerPrefs.precision)}</span>
+                    </li>
+                  );
+                })}
+            </ul>
+          </div>
+        )}
       </section>
 
       {/* ===== Cuenta regresiva ===== */}
-      <section className={CARD_CLASS}>
+      <section
+        className={CARD_CLASS}
+        onPointerDownCapture={() => setActiveTimer("countdown")}
+        onFocusCapture={() => setActiveTimer("countdown")}
+      >
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">hourglass_bottom</span>
           {t("time.countdown")}
           <StateChip state={countdownState} label={t(STATE_LABEL_KEY[countdownState])} />
-          <button
-            type="button"
-            onClick={() => setFullscreenMode("countdown")}
-            aria-label={t("time.fullscreen")}
-            className={CARD_FULLSCREEN_BUTTON_CLASS}
-          >
-            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
-          </button>
+          <div className={CARD_HEADER_ACTIONS_CLASS}>
+            <button
+              type="button"
+              onClick={() => setMenuMode("countdown")}
+              aria-label={t("time.options")}
+              className={CARD_FULLSCREEN_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined text-base leading-none">tune</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFullscreenMode("countdown")}
+              aria-label={t("time.fullscreen")}
+              className={CARD_FULLSCREEN_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
+            </button>
+          </div>
         </h3>
         <div className="mt-4 flex justify-center">
           <TimerRing progress={countdownProgress} className="w-48 h-48 md:w-52 md:h-52">
             <p
               className={cn(
-                "font-mono tabular-nums text-3xl md:text-4xl font-black text-slate-800 dark:text-slate-100",
+                "font-mono tabular-nums font-black text-slate-800 dark:text-slate-100",
+                countdownTimeSize,
                 countdownFinished && "text-red-500 animate-pulse",
               )}
               suppressHydrationWarning
             >
-              {fmtHMS(displayMs)}
+              {formatDuration(displayMs)}
             </p>
           </TimerRing>
         </div>
@@ -621,13 +665,7 @@ export default function TimeView() {
             disabled={countdownBlocked || countdownBusy || (!countdown.running && !countdownCanStart)}
             size="lg"
           />
-          <ResetButton
-            onClick={() => {
-              countdownReset();
-              setSelectionTouched(false);
-            }}
-            label={t("time.reset")}
-          />
+          <ResetButton onClick={resetCountdown} label={t("time.reset")} />
         </div>
       </section>
 
@@ -636,24 +674,36 @@ export default function TimeView() {
         <h3 className={CARD_HEADER_CLASS}>
           <span className="material-symbols-outlined text-base">public</span>
           {t("time.countryClock")}
-          <button
-            type="button"
-            onClick={() => setFullscreenMode("country")}
-            aria-label={t("time.fullscreen")}
-            className={CARD_FULLSCREEN_BUTTON_CLASS}
-          >
-            <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
-          </button>
+          <div className={CARD_HEADER_ACTIONS_CLASS}>
+            <button
+              type="button"
+              onClick={() => setMenuMode("clock")}
+              aria-label={t("time.options")}
+              className={CARD_FULLSCREEN_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined text-base leading-none">tune</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFullscreenMode("country")}
+              aria-label={t("time.fullscreen")}
+              className={CARD_FULLSCREEN_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined text-base leading-none">fullscreen</span>
+            </button>
+          </div>
         </h3>
-        <p className={TIME_TEXT_CLASS} suppressHydrationWarning>
-          {fmtZoneTime(now, effectiveTz, hour12, locale)}
+        <p className={cn(TIME_TEXT_CLASS, clockTimeSize)} suppressHydrationWarning>
+          {formatClock(now, { timeZone: effectiveTz, hour12, locale, showSeconds: timerPrefs.showSeconds })}
         </p>
-        <p
-          className="mt-1 text-center text-sm font-semibold text-slate-500 dark:text-slate-400"
-          suppressHydrationWarning
-        >
-          {fmtZoneDate(now, effectiveTz, locale)}
-        </p>
+        {timerPrefs.showDate && (
+          <p
+            className="mt-1 text-center text-sm font-semibold text-slate-500 dark:text-slate-400"
+            suppressHydrationWarning
+          >
+            {formatClockDate(now, { timeZone: effectiveTz, locale })}
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-400 dark:text-slate-500">
           <span className="text-slate-500 dark:text-slate-400">
             {countryLabel ?? (countryTz ? humanizeTimeZone(countryTz) : t("time.deviceZone"))}
@@ -699,11 +749,24 @@ export default function TimeView() {
         </label>
       </section>
 
+      <TimerOptionsMenu
+        open={menuMode !== null}
+        onClose={() => setMenuMode(null)}
+        mode={menuMode ?? "stopwatch"}
+        onOpenFullscreen={() => {
+          if (menuMode) setFullscreenMode(menuMode === "clock" ? "country" : menuMode);
+        }}
+      />
+
       {/* Portal to <body>: a transformed ancestor would otherwise turn `fixed` into a
           box offset from the window top, leaving a strip of page visible above it. */}
       {fullscreenMode &&
         createPortal(
-          <FullscreenClock mode={fullscreenMode} onClose={() => setFullscreenMode(null)} />,
+          <FullscreenClock
+            mode={fullscreenMode}
+            onClose={() => setFullscreenMode(null)}
+            initialCountdownMs={configuredMs}
+          />,
           document.body,
         )}
     </div>

@@ -162,8 +162,26 @@ export interface CalendarDay {
 
 // ─── Time tools (Tiempo tab — persisted locally) ─────────────────────────────
 
+export type TimerPrecision = "s" | "cs" | "ms";
+export type TimerFontScale = "compact" | "normal" | "large";
+
+export interface TimerPrefs {
+  showSeconds: boolean;
+  showDate: boolean;
+  precision: TimerPrecision;
+  fontScale: TimerFontScale;
+  keepAwake: boolean;
+  sound: boolean;
+  haptics: boolean;
+}
+
 export interface TimeToolsState {
-  stopwatch: { running: boolean; startedAtMs: number | null; accumulatedMs: number };
+  stopwatch: {
+    running: boolean;
+    startedAtMs: number | null;
+    accumulatedMs: number;
+    laps: number[];
+  };
   countdown: {
     running: boolean;
     endsAtMs: number | null;
@@ -179,6 +197,7 @@ export interface TimeToolsState {
   widgetSize: { w: number | null; h: number | null }; // px, each 40–4000; null = auto/natural
   widgetOffset: { x: number; y: number }; // px away from the default right/bottom anchor
   widgetMode: "auto" | "clock" | "stopwatch" | "countdown"; // what the floating pill shows
+  timerPrefs: TimerPrefs;
 }
 
 // ─── Backup file schema ──────────────────────────────────────────────────────

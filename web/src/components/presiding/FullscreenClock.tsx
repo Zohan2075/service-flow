@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import { useWakeLock } from "@/lib/wakeLock";
 import { COUNTDOWN_PRESETS_MIN } from "@/lib/timePresets";
+import { useDisplayNow } from "@/lib/displayClock";
+import { formatClock, formatClockDate, formatDuration, getDeviceTimeZone } from "@/lib/timeFormat";
 import TimerRing from "@/components/presiding/TimerRing";
+import TimerOptionsMenu from "@/components/presiding/TimerOptionsMenu";
+import { useTimerShortcuts } from "@/components/presiding/useTimerShortcuts";
 
 /* ---------- constants + helpers ---------- */
 
@@ -26,49 +30,6 @@ function getOrientationLock(): OrientationLockLike | null {
   return screen.orientation as ScreenOrientation & OrientationLockLike;
 }
 
-function fmtHMS(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function fmtClock(now: Date, timeZone: string, hour12: boolean, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12,
-      ...(timeZone ? { timeZone } : {}),
-    }).format(now);
-  } catch {
-    return "--:--:--";
-  }
-}
-
-function fmtDate(now: Date, timeZone: string, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      ...(timeZone ? { timeZone } : {}),
-    }).format(now);
-  } catch {
-    return "";
-  }
-}
-
-function getDeviceTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-  } catch {
-    return "";
-  }
-}
-
 /* ---------- big fullscreen controls ---------- */
 
 const BIG_BUTTON_BASE =
@@ -76,7 +37,15 @@ const BIG_BUTTON_BASE =
 
 /* ---------- main component ---------- */
 
-export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMode; onClose: () => void }) {
+export default function FullscreenClock({
+  mode,
+  onClose,
+  initialCountdownMs = 0,
+}: {
+  mode: FullscreenMode;
+  onClose: () => void;
+  initialCountdownMs?: number;
+}) {
   const { t, language } = useT();
 
   const stopwatch = useStore((s) => s.timeTools.stopwatch);
@@ -91,19 +60,19 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   const countdownResume = useStore((s) => s.countdownResume);
   const countdownReset = useStore((s) => s.countdownReset);
   const setWidgetVisible = useStore((s) => s.setWidgetVisible);
+  const stopwatchLap = useStore((s) => s.stopwatchLap);
+  const timerPrefs = useStore((s) => s.timeTools.timerPrefs);
 
-  // Single 1 s tick drives every displayed value (same pattern as TimeView).
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+  // Shared display clock: same instant as the card and the pill.
+  const nowMs = useDisplayNow();
   const now = useMemo(() => new Date(nowMs), [nowMs]);
 
   // Fullscreen countdown selection (set-only; Start runs the configured time).
   const [presetMin, setPresetMin] = useState<number | null>(null);
   const [customMin, setCustomMin] = useState("");
   const [customSec, setCustomSec] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
 
   const locale = language === "es" ? "es-ES" : "en-US";
   const hour12 = timeFormat === "12h";
@@ -130,7 +99,13 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   const customMinNum = Math.min(999, Math.max(0, parseInt(customMin || "0", 10) || 0));
   const customSecNum = Math.min(59, Math.max(0, parseInt(customSec || "0", 10) || 0));
   const customMs = (customMinNum * 60 + customSecNum) * 1000;
-  const configuredMs = hasCustom ? customMs : presetMin != null ? presetMin * 60_000 : countdown.totalMs;
+  const configuredMs = hasCustom
+    ? customMs
+    : presetMin != null
+      ? presetMin * 60_000
+      : initialCountdownMs > 0
+        ? initialCountdownMs
+        : countdown.totalMs;
   const countdownIdle =
     !countdown.running && countdown.remainingMs === 0 && countdown.finishedAtMs == null;
   const countdownFinished = !countdown.running && countdown.finishedAtMs != null;
@@ -141,22 +116,21 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   const requestClose = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
-    // Leaving fullscreen pauses the running timer (value kept) — same as the
-    // pill's X. Single exit owner covers X, Escape and any other path.
-    if (stopwatch.running) stopwatchPause();
-    else if (countdown.running) countdownPause();
+    // Opening/closing the view must not touch the timer: it keeps running from
+    // the same timestamps and the card behind shows the identical value.
     // Fullscreen never leaves a floating clock behind.
     setWidgetVisible(false);
     onClose();
-  }, [onClose, stopwatch.running, countdown.running, stopwatchPause, countdownPause, setWidgetVisible]);
+  }, [onClose, setWidgetVisible]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") requestClose();
+      // While the options sheet is open, Escape closes the sheet only.
+      if (event.key === "Escape" && !menuOpen) requestClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [requestClose]);
+  }, [requestClose, menuOpen]);
 
   /* ----- hide the global sync pill while this fullscreen is open ----- */
 
@@ -202,13 +176,13 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
   const wakeControls = useCallback(() => {
     setControlsVisible(true);
     clearHideTimer();
-    if (anyTimerRunning) {
+    if (anyTimerRunning && !menuOpen) {
       hideTimerRef.current = window.setTimeout(() => {
         hideTimerRef.current = null;
         setControlsVisible(false);
       }, AUTO_HIDE_MS);
     }
-  }, [anyTimerRunning, clearHideTimer]);
+  }, [anyTimerRunning, clearHideTimer, menuOpen]);
 
   useEffect(() => {
     wakeControls();
@@ -251,6 +225,41 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
     setWidgetVisible(false);
   };
 
+  useTimerShortcuts({
+    mode: mode === "country" ? "clock" : mode,
+    enabled: !menuOpen,
+    onToggleTimer: mode === "stopwatch" ? toggleStopwatch : mode === "countdown" ? toggleCountdown : undefined,
+    onLap: mode === "stopwatch" ? stopwatchLap : undefined,
+    onReset: mode === "stopwatch" ? stopwatchReset : mode === "countdown" ? countdownReset : undefined,
+    onToggleFullscreen: requestClose,
+    onToggleMenu: () => setMenuOpen((value) => !value),
+  });
+
+  // Throttled screen-reader announcements: state transitions only.
+  const a11yPrevRef = useRef({
+    stopwatch: stopwatch.running,
+    countdown: countdown.running,
+    finished: countdown.finishedAtMs != null,
+    laps: stopwatch.laps.length,
+  });
+  useEffect(() => {
+    const prev = a11yPrevRef.current;
+    let message = "";
+    if (stopwatch.laps.length > prev.laps) message = t("time.a11yLap");
+    else if (countdown.finishedAtMs != null && !prev.finished) message = t("time.a11yFinished");
+    else if (stopwatch.running && !prev.stopwatch) message = t("time.a11yStarted");
+    else if (!stopwatch.running && prev.stopwatch) message = t("time.a11yPaused");
+    else if (countdown.running && !prev.countdown) message = t("time.a11yStarted");
+    else if (!countdown.running && prev.countdown) message = t("time.a11yPaused");
+    a11yPrevRef.current = {
+      stopwatch: stopwatch.running,
+      countdown: countdown.running,
+      finished: countdown.finishedAtMs != null,
+      laps: stopwatch.laps.length,
+    };
+    if (message) setAnnouncement(message);
+  }, [stopwatch.running, countdown.running, stopwatch.laps.length, countdown.finishedAtMs, t]);
+
   const displayTz = mode === "country" ? (countryTz ?? deviceTz) : deviceTz;
   const countdownDisplayMs = countdown.running
     ? countdownRemainingMs
@@ -259,10 +268,13 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
       : countdown.remainingMs;
   const displayText =
     mode === "stopwatch"
-      ? fmtHMS(stopwatchElapsedMs)
+      ? formatDuration(stopwatchElapsedMs, timerPrefs.precision)
       : mode === "countdown"
-        ? fmtHMS(countdownDisplayMs)
-        : fmtClock(now, displayTz, hour12, locale);
+        ? formatDuration(countdownDisplayMs)
+        : formatClock(now, { timeZone: displayTz, hour12, locale, showSeconds: timerPrefs.showSeconds });
+
+  const fontScale =
+    timerPrefs.fontScale === "compact" ? 0.85 : timerPrefs.fontScale === "large" ? 1.15 : 1;
 
   // Idle shows the configured selection with a full ring; paused keeps the
   // remaining fraction; finished empties the ring.
@@ -294,8 +306,23 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[70] flex select-none flex-col bg-slate-950 text-white"
+      style={{ "--timer-scale": fontScale } as CSSProperties}
       onClick={wakeControls}
+      onPointerMove={wakeControls}
     >
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </p>
+      {controlsVisible && (
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          aria-label={t("time.options")}
+          className="absolute left-4 top-[calc(env(safe-area-inset-top,0px)+1rem)] z-10 flex size-12 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <span className="material-symbols-outlined text-xl leading-none">tune</span>
+        </button>
+      )}
       <button
         type="button"
         onClick={requestClose}
@@ -318,18 +345,18 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
             }
             trackClassName="stroke-white/10"
           >
-            <div className="font-mono text-[clamp(2rem,min(10vw,6.5dvh),8rem)] landscape:text-[clamp(1rem,min(7vw,5dvh),8rem)] font-black leading-none tabular-nums">
+            <div className="font-mono text-[clamp(2rem,calc(var(--timer-scale)*min(10vw,6.5dvh)),8rem)] landscape:text-[clamp(1rem,calc(var(--timer-scale)*min(7vw,5dvh)),8rem)] font-black leading-none tabular-nums">
               <span suppressHydrationWarning>{displayText}</span>
             </div>
           </TimerRing>
         ) : (
-          <div className="max-w-full font-mono text-[clamp(3.5rem,16vw,12rem)] font-black leading-none tabular-nums">
+          <div className="max-w-full font-mono text-[clamp(3.5rem,calc(var(--timer-scale)*16vw),12rem)] font-black leading-none tabular-nums">
             <span suppressHydrationWarning>{displayText}</span>
           </div>
         )}
-        {mode === "country" && (
+        {mode === "country" && timerPrefs.showDate && (
           <p className="text-sm font-semibold text-white/60" suppressHydrationWarning>
-            {fmtDate(now, displayTz, locale)}
+            {formatClockDate(now, { timeZone: displayTz, locale })}
           </p>
         )}
         {busyHint && (
@@ -363,6 +390,15 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
                   : stopwatchElapsedMs > 0
                     ? t("time.resume")
                     : t("time.start")}
+              </button>
+              <button
+                type="button"
+                onClick={stopwatchLap}
+                disabled={!stopwatch.running}
+                className={`${BIG_BUTTON_BASE} border border-white/15 bg-white/5 text-white/80 hover:bg-white/10`}
+              >
+                <span className="material-symbols-outlined text-2xl leading-none">flag</span>
+                {t("time.lap")}
               </button>
               <button
                 type="button"
@@ -479,6 +515,14 @@ export default function FullscreenClock({ mode, onClose }: { mode: FullscreenMod
           )}
         </div>
       )}
+
+      <TimerOptionsMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        mode={mode === "country" ? "clock" : mode}
+        isFullscreen
+        onExitFullscreen={requestClose}
+      />
     </div>
   );
 }

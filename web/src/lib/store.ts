@@ -13,6 +13,7 @@ import type {
   InterestedStatusConfig,
   NotificationPreferences,
   TimeToolsState,
+  TimerPrefs,
 } from "@/types/data";
 import { DEFAULT_INTERESTED_STATUSES } from "@/types/data";
 import { isoWeekKey, isInterestedPersonCompleted } from "@/lib/isoWeek";
@@ -352,6 +353,8 @@ resetPresidingConfig: () => void;
   stopwatchStart: () => void;
   stopwatchPause: () => void;
   stopwatchReset: () => void;
+  stopwatchLap: () => void;
+  setTimerPrefs: (patch: Partial<TimerPrefs>) => void;
   countdownStart: (totalMs: number) => void;
   countdownPause: () => void;
   countdownResume: () => void;
@@ -790,9 +793,35 @@ function migrateCommentsConfig(raw: unknown): CommentsConfig {
 const TIME_WIDGET_SIZE_MIN = 40;
 const TIME_WIDGET_SIZE_MAX = 4000;
 
+function getDefaultTimerPrefs(): TimerPrefs {
+  return {
+    showSeconds: true,
+    showDate: true,
+    precision: "s",
+    fontScale: "normal",
+    keepAwake: true,
+    sound: true,
+    haptics: false,
+  };
+}
+
+function normalizeTimerPrefs(raw?: Partial<TimerPrefs> | null): TimerPrefs {
+  const defaults = getDefaultTimerPrefs();
+  return {
+    showSeconds: raw?.showSeconds !== false,
+    showDate: raw?.showDate !== false,
+    precision: raw?.precision === "cs" || raw?.precision === "ms" ? raw.precision : defaults.precision,
+    fontScale:
+      raw?.fontScale === "compact" || raw?.fontScale === "large" ? raw.fontScale : defaults.fontScale,
+    keepAwake: raw?.keepAwake !== false,
+    sound: raw?.sound !== false,
+    haptics: raw?.haptics === true,
+  };
+}
+
 function getDefaultTimeTools(): TimeToolsState {
   return {
-    stopwatch: { running: false, startedAtMs: null, accumulatedMs: 0 },
+    stopwatch: { running: false, startedAtMs: null, accumulatedMs: 0, laps: [] },
     countdown: {
       running: false,
       endsAtMs: null,
@@ -808,6 +837,7 @@ function getDefaultTimeTools(): TimeToolsState {
     widgetSize: { w: null, h: null },
     widgetOffset: { x: 0, y: 0 },
     widgetMode: "auto",
+    timerPrefs: getDefaultTimerPrefs(),
   };
 }
 
@@ -846,6 +876,9 @@ function normalizeTimeTools(raw?: PersistedTimeTools | null): TimeToolsState {
       running: Boolean(stopwatch.running),
       startedAtMs: typeof stopwatch.startedAtMs === "number" ? stopwatch.startedAtMs : null,
       accumulatedMs: positiveMs(stopwatch.accumulatedMs),
+      laps: Array.isArray(stopwatch.laps)
+        ? stopwatch.laps.filter((lap): lap is number => typeof lap === "number" && Number.isFinite(lap)).map(positiveMs)
+        : [],
     },
     countdown: {
       running: Boolean(countdown.running),
@@ -864,6 +897,7 @@ function normalizeTimeTools(raw?: PersistedTimeTools | null): TimeToolsState {
       x: clampWidgetOffsetComponent(raw?.widgetOffset?.x),
       y: clampWidgetOffsetComponent(raw?.widgetOffset?.y),
     },
+    timerPrefs: normalizeTimerPrefs(raw?.timerPrefs),
     widgetMode:
       raw?.widgetMode === "clock" || raw?.widgetMode === "stopwatch" || raw?.widgetMode === "countdown"
         ? raw.widgetMode
@@ -1941,9 +1975,9 @@ resetPresidingConfig: () =>
               ...s.timeTools,
               widgetVisible: true,
               stopwatch: {
+                ...s.timeTools.stopwatch,
                 running: true,
                 startedAtMs: Date.now(),
-                accumulatedMs: s.timeTools.stopwatch.accumulatedMs,
               },
             },
           };
@@ -1956,6 +1990,7 @@ resetPresidingConfig: () =>
             timeTools: {
               ...s.timeTools,
               stopwatch: {
+                ...sw,
                 running: false,
                 startedAtMs: null,
                 accumulatedMs: sw.accumulatedMs + Math.max(0, Date.now() - sw.startedAtMs),
@@ -1967,7 +2002,26 @@ resetPresidingConfig: () =>
         set((s) => ({
           timeTools: {
             ...s.timeTools,
-            stopwatch: { running: false, startedAtMs: null, accumulatedMs: 0 },
+            stopwatch: { running: false, startedAtMs: null, accumulatedMs: 0, laps: [] },
+          },
+        })),
+      stopwatchLap: () =>
+        set((s) => {
+          const sw = s.timeTools.stopwatch;
+          if (!sw.running || sw.startedAtMs == null) return {};
+          const elapsed = sw.accumulatedMs + Math.max(0, Date.now() - sw.startedAtMs);
+          return {
+            timeTools: {
+              ...s.timeTools,
+              stopwatch: { ...sw, laps: [...sw.laps, elapsed] },
+            },
+          };
+        }),
+      setTimerPrefs: (patch) =>
+        set((s) => ({
+          timeTools: {
+            ...s.timeTools,
+            timerPrefs: normalizeTimerPrefs({ ...s.timeTools.timerPrefs, ...patch }),
           },
         })),
       countdownStart: (totalMs) =>
