@@ -379,8 +379,8 @@ export default function CalendarPage() {
                     {format(day, "d")}
                   </span>
 
-                  {/* Desktop: show entry chips */}
-                  <div className="hidden md:block" data-no-day-drag>
+                  {/* Desktop: show entry chips (dragging from them moves the whole day) */}
+                  <div className="hidden md:block">
                     {dayData?.entries.slice(0, 3).map((entry) => {
                       const st = serviceTypeMap[entry.service_type_id];
                       const isPlanned = isPlannedEntry(entry);
