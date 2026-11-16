@@ -96,6 +96,20 @@ export interface TimeEntry {
   updated_at: string;
 }
 
+/** Day-level drag result: move, copy (Alt/Ctrl) or swap (Shift). */
+export type DayMoveMode = "move" | "copy" | "swap";
+
+export interface DayMoveResult {
+  mode: DayMoveMode;
+  fromDate: string;
+  toDate: string;
+  moved: number;
+  /** IDs created by a copy (deleted on undo). */
+  createdIds: string[];
+  /** Entries as they were before the operation (restored on undo). */
+  snapshot: TimeEntry[];
+}
+
 export type GoalScope = "service" | "combined";
 
 export interface GoalDefinition {

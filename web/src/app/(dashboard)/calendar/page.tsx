@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import {
+  addDays,
   addMonths,
   addWeeks,
   eachDayOfInterval,
@@ -20,9 +22,17 @@ import {
 import { useStore } from "@/lib/store";
 import { isoWeekKey, isInterestedPersonCompleted } from "@/lib/isoWeek";
 import { calendarDateKey, computeDurationSeconds, durationDisplay, isPlannedEntry, isUnitsEntry } from "@/types/data";
-import type { TimeEntry, ServiceType, CalendarDay, InterestedPerson } from "@/types/data";
+import type {
+  TimeEntry,
+  ServiceType,
+  CalendarDay,
+  InterestedPerson,
+  DayMoveMode,
+  DayMoveResult,
+} from "@/types/data";
 import { cn, capProgressColor } from "@/lib/utils";
 import { useT, monthYear, shortDate, weekdayLabels as getWeekdayLabels } from "@/lib/i18n";
+import { useSync } from "@/lib/sync";
 import AddEntryModal from "@/components/entries/AddEntryModal";
 import toast from "react-hot-toast";
 import { motion } from "motion/react";
@@ -34,13 +44,73 @@ const InterestedPersonModal = dynamic(
   { ssr: false }
 );
 
+/* ─── Day drag & drop (desktop) ───────────────────────────────────────────── */
+
+interface DayDragSession {
+  pointerId: number;
+  fromKey: string;
+  entries: TimeEntry[];
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  active: boolean;
+  overKey: string | null;
+  mode: DayMoveMode;
+  scrollRaf: number | null;
+  moveHandler: (event: PointerEvent) => void;
+  upHandler: (event: PointerEvent) => void;
+  cancelHandler: () => void;
+  keyHandler: (event: KeyboardEvent) => void;
+  modifierHandler: (event: KeyboardEvent) => void;
+}
+
+interface DayDragView {
+  fromKey: string;
+  overKey: string | null;
+  mode: DayMoveMode;
+  count: number;
+  summary: string;
+  dateLabel: string;
+  initialX: number;
+  initialY: number;
+}
+
+interface KeyboardDrag {
+  fromKey: string;
+  overKey: string;
+}
+
+/** Parses `YYYY-MM-DD` as a local calendar date (never UTC). */
+function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export default function CalendarPage() {
   const { t, language } = useT();
+  const { syncNow, isOnline } = useSync();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [editingInterestedPerson, setEditingInterestedPerson] = useState<InterestedPerson | null>(null);
   const [viewMode, setViewMode] = useState<"monthly" | "weekly">("monthly");
+
+  // Day-level drag & drop (desktop pointer + keyboard).
+  const moveDay = useStore((s) => s.moveDay);
+  const undoDayMove = useStore((s) => s.undoDayMove);
+  const [dragView, setDragView] = useState<DayDragView | null>(null);
+  const [keyboardDrag, setKeyboardDrag] = useState<KeyboardDrag | null>(null);
+  const [justMovedKey, setJustMovedKey] = useState<string | null>(null);
+  const [liveMessage, setLiveMessage] = useState("");
+  const dragRef = useRef<DayDragSession | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const cellRefs = useRef(new Map<string, HTMLDivElement>());
+  const suppressClickRef = useRef(false);
+  const undoRef = useRef<{ result: DayMoveResult; toastId: string; timeout: number } | null>(null);
+  const liveTimerRef = useRef<number | null>(null);
+  const undoLastMoveRef = useRef<() => void>(() => {});
 
   const currentDate = useStore((s) => s.uiState.viewedMonth);
   const setViewedMonth = useStore((s) => s.setViewedMonth);
@@ -239,24 +309,64 @@ export default function CalendarPage() {
               const hasPlannedEntries = Boolean(
                 dayData && (dayData.planned_duration_seconds > 0 || dayData.planned_units > 0)
               );
+              const hasEntries = Boolean(dayData && dayData.entries.length > 0);
+              const dragSourceKey = dragView ? dragView.fromKey : keyboardDrag?.fromKey ?? null;
+              const dragTargetKey = dragView ? dragView.overKey : keyboardDrag?.overKey ?? null;
+              const isDragSource = dragSourceKey === key;
+              const isDragOver = dragTargetKey === key;
+              const isInvalidTarget = isDragOver && dragSourceKey === key;
+              const cursorClass = isInvalidTarget
+                ? "cursor-not-allowed"
+                : isDragOver
+                  ? "cursor-grabbing"
+                  : hasEntries
+                    ? "cursor-grab"
+                    : "cursor-pointer";
 
               return (
                 <div
                   key={key}
-                  onClick={() => handleSelectDay(day)}
+                  ref={(element) => {
+                    if (element) cellRefs.current.set(key, element);
+                    else cellRefs.current.delete(key);
+                  }}
+                  data-day-key={key}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${shortDate(day, language)} — ${dayData?.entries.length ?? 0} ${
+                    (dayData?.entries.length ?? 0) === 1
+                      ? t("calendar.entryWord")
+                      : t("calendar.entriesWord")
+                  }`}
+                  title={hasEntries ? t("calendar.dragHint") : undefined}
+                  onClick={() => {
+                    if (suppressClickRef.current) return;
+                    handleSelectDay(day);
+                  }}
+                  onPointerDown={(event) => startDayDrag(event, key, dayData)}
+                  onKeyDown={(event) => handleDayKeyDown(event, key, dayData)}
                   className={cn(
-                    "min-h-[4.5rem] cursor-pointer border-r border-b border-slate-100 p-1.5 transition-colors dark:border-slate-800 sm:min-h-[5.25rem] md:min-h-24 md:p-2",
-                    isSelected
-                      ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
-                      : isCurrentMonthDay
-                        ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                        : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60",
-                    hasPlannedEntries && !isSelected && "bg-amber-50/70 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)] dark:bg-amber-950/20"
+                    "min-h-[4.5rem] border-r border-b border-slate-100 p-1.5 transition-colors motion-reduce:transition-none dark:border-slate-800 sm:min-h-[5.25rem] md:min-h-24 md:p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
+                    cursorClass,
+                    isInvalidTarget
+                      ? ""
+                      : isDragOver
+                        ? "bg-amber-50/80 ring-2 ring-inset ring-amber-400 dark:bg-amber-950/30"
+                        : isSelected
+                          ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
+                          : isCurrentMonthDay
+                            ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                            : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60",
+                    hasPlannedEntries && !isSelected && !isDragOver && !isInvalidTarget && "bg-amber-50/70 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)] dark:bg-amber-950/20",
+                    isDragSource && "opacity-40",
+                    justMovedKey === key && !isDragOver && "bg-amber-100/60 dark:bg-amber-900/20"
                   )}
                 >
                   <span
+                    data-day-grip
                     className={cn(
-                      "inline-flex items-center justify-center size-6 md:size-7 rounded-full text-xs md:text-sm font-bold mb-1 md:mb-2",
+                      "inline-flex select-none items-center justify-center size-6 md:size-7 rounded-full text-xs md:text-sm font-bold mb-1 md:mb-2",
+                      hasEntries && "cursor-grab",
                       isTodayDay
                         ? "bg-primary text-white"
                         : isSelected
@@ -270,7 +380,7 @@ export default function CalendarPage() {
                   </span>
 
                   {/* Desktop: show entry chips */}
-                  <div className="hidden md:block">
+                  <div className="hidden md:block" data-no-day-drag>
                     {dayData?.entries.slice(0, 3).map((entry) => {
                       const st = serviceTypeMap[entry.service_type_id];
                       const isPlanned = isPlannedEntry(entry);
@@ -313,7 +423,7 @@ export default function CalendarPage() {
 
                   {/* Mobile: show dot indicators */}
                   {dayData && dayData.entries.length > 0 && (
-                    <div className="flex gap-0.5 md:hidden mt-0.5">
+                    <div className="flex gap-0.5 md:hidden mt-0.5" data-no-day-drag>
                       {dayData.entries.slice(0, 4).map((entry) => {
                         const st = serviceTypeMap[entry.service_type_id];
                         return (
@@ -333,7 +443,7 @@ export default function CalendarPage() {
                     if (!people || people.length === 0) return null;
                     const maxShow = viewMode === "weekly" ? 5 : 2;
                     return (
-                      <div className="mt-1 space-y-0.5">
+                      <div className="mt-1 space-y-0.5" data-no-day-drag>
                         {people.slice(0, maxShow).map((p) => {
                           const st = statusMap.get(p.status) ?? { name: p.status, color: "#94a3b8", icon: "person" };
                           return (
@@ -593,8 +703,395 @@ export default function CalendarPage() {
     }
   };
 
+  /* ─── Day drag & drop (desktop) ─────────────────────────────────────────── */
+
+  const announce = (message: string) => {
+    if (liveTimerRef.current) window.clearTimeout(liveTimerRef.current);
+    setLiveMessage("");
+    liveTimerRef.current = window.setTimeout(() => setLiveMessage(message), 30);
+  };
+
+  const entriesSummary = (entries: TimeEntry[]) => {
+    const seconds = entries
+      .filter((entry) => !isUnitsEntry(entry))
+      .reduce((sum, entry) => sum + computeDurationSeconds(entry), 0);
+    const units = entries
+      .filter((entry) => isUnitsEntry(entry))
+      .reduce((sum, entry) => sum + (entry.units_quantity ?? 0), 0);
+    const entryWord =
+      entries.length === 1 ? t("calendar.entryWord") : t("calendar.entriesWord");
+    const parts = [`${entries.length} ${entryWord}`];
+    if (seconds > 0) parts.push(durationDisplay(seconds));
+    else if (units > 0) parts.push(`${units} ${t("calendar.units")}`);
+    return parts.join(" · ");
+  };
+
+  const modeFromModifiers = (event: {
+    shiftKey: boolean;
+    altKey: boolean;
+    ctrlKey: boolean;
+  }): DayMoveMode => (event.shiftKey ? "swap" : event.altKey || event.ctrlKey ? "copy" : "move");
+
+  const positionPreview = (x: number, y: number) => {
+    const element = previewRef.current;
+    if (element) element.style.transform = `translate3d(${x + 16}px, ${y + 16}px, 0)`;
+  };
+
+  const autoScroll = (clientY: number) => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const edge = 60;
+    if (clientY < rect.top + edge) container.scrollTop -= 14;
+    else if (clientY > rect.bottom - edge) container.scrollTop += 14;
+  };
+
+  const endDayDrag = useCallback(() => {
+    const session = dragRef.current;
+    if (!session) return;
+    window.removeEventListener("pointermove", session.moveHandler);
+    window.removeEventListener("pointerup", session.upHandler);
+    window.removeEventListener("pointercancel", session.cancelHandler);
+    window.removeEventListener("keydown", session.keyHandler);
+    window.removeEventListener("keydown", session.modifierHandler);
+    window.removeEventListener("keyup", session.modifierHandler);
+    if (session.scrollRaf != null) cancelAnimationFrame(session.scrollRaf);
+    dragRef.current = null;
+    setDragView(null);
+    document.body.style.cursor = "";
+  }, []);
+
+  const updateDragHover = (session: DayDragSession, x: number, y: number) => {
+    const element = document.elementFromPoint(x, y) as HTMLElement | null;
+    const cell = element?.closest<HTMLElement>("[data-day-key]");
+    const overKey = cell?.dataset.dayKey ?? null;
+    if (overKey !== session.overKey) {
+      session.overKey = overKey;
+      setDragView((view) => (view ? { ...view, overKey } : view));
+      document.body.style.cursor =
+        overKey && overKey !== session.fromKey ? "grabbing" : "not-allowed";
+    }
+  };
+
+  const activateDayDrag = (event?: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean }) => {
+    const session = dragRef.current;
+    if (!session || session.active) return;
+    session.active = true;
+    if (event) session.mode = modeFromModifiers(event);
+    window.getSelection()?.removeAllRanges();
+    document.body.style.cursor = "grabbing";
+    const dateLabel = shortDate(parseDateKey(session.fromKey), language);
+    setDragView({
+      fromKey: session.fromKey,
+      overKey: null,
+      mode: session.mode,
+      count: session.entries.length,
+      summary: entriesSummary(session.entries),
+      dateLabel,
+      initialX: session.lastX,
+      initialY: session.lastY,
+    });
+    announce(`${t("calendar.pickedUp")} ${dateLabel}. ${t("calendar.dragKeyboardHint")}`);
+    const scrollLoop = () => {
+      const current = dragRef.current;
+      if (!current?.active) return;
+      const container = scrollRef.current;
+      const before = container?.scrollTop ?? 0;
+      autoScroll(current.lastY);
+      // The grid moved under a still pointer: re-evaluate the hovered cell.
+      if (container && container.scrollTop !== before) {
+        updateDragHover(current, current.lastX, current.lastY);
+      }
+      current.scrollRaf = requestAnimationFrame(scrollLoop);
+    };
+    session.scrollRaf = requestAnimationFrame(scrollLoop);
+  };
+
+  const startDayDrag = (
+    event: React.PointerEvent<HTMLDivElement>,
+    dayKey: string,
+    dayData?: CalendarDay,
+  ) => {
+    // Desktop only: touch keeps the existing swipe gesture.
+    if (event.pointerType === "touch") return;
+    if (event.button !== 0 || dragRef.current) return;
+    if (!dayData || dayData.entries.length === 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-no-day-drag], button, a, input, select, textarea")) return;
+
+    const session: DayDragSession = {
+      pointerId: event.pointerId,
+      fromKey: dayKey,
+      entries: dayData.entries,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      active: false,
+      overKey: null,
+      mode: "move",
+      scrollRaf: null,
+      moveHandler: () => {},
+      upHandler: () => {},
+      cancelHandler: () => {},
+      keyHandler: () => {},
+      modifierHandler: () => {},
+    };
+    dragRef.current = session;
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (!session.active) {
+        const distance = Math.hypot(
+          moveEvent.clientX - session.startX,
+          moveEvent.clientY - session.startY,
+        );
+        if (distance < 5) return;
+        activateDayDrag(moveEvent);
+      }
+      moveEvent.preventDefault();
+      session.lastX = moveEvent.clientX;
+      session.lastY = moveEvent.clientY;
+      positionPreview(session.lastX, session.lastY);
+      const nextMode = modeFromModifiers(moveEvent);
+      if (nextMode !== session.mode) {
+        session.mode = nextMode;
+        setDragView((view) => (view ? { ...view, mode: nextMode } : view));
+      }
+      updateDragHover(session, moveEvent.clientX, moveEvent.clientY);
+    };
+
+    const onUp = (upEvent: PointerEvent) => {
+      const wasActive = session.active;
+      const fromKey = session.fromKey;
+      const overKey = session.overKey;
+      const mode = modeFromModifiers(upEvent);
+      endDayDrag();
+      if (!wasActive) return;
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 150);
+      if (!overKey) return;
+      if (overKey === fromKey) {
+        announce(t("calendar.sameDay"));
+        return;
+      }
+      performDayMove(fromKey, overKey, mode);
+    };
+
+    const onCancel = () => endDayDrag();
+    const onKey = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.key === "Escape") {
+        endDayDrag();
+        announce(t("calendar.cancelled"));
+      }
+    };
+    const onModifier = (keyEvent: KeyboardEvent) => {
+      const nextMode = modeFromModifiers(keyEvent);
+      if (nextMode !== session.mode) {
+        session.mode = nextMode;
+        setDragView((view) => (view ? { ...view, mode: nextMode } : view));
+      }
+    };
+
+    session.moveHandler = onMove;
+    session.upHandler = onUp;
+    session.cancelHandler = onCancel;
+    session.keyHandler = onKey;
+    session.modifierHandler = onModifier;
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onModifier);
+    window.addEventListener("keyup", onModifier);
+  };
+
+  const undoLastMove = () => {
+    const current = undoRef.current;
+    if (!current) return;
+    window.clearTimeout(current.timeout);
+    toast.dismiss(current.toastId);
+    undoDayMove(current.result);
+    undoRef.current = null;
+    setJustMovedKey(null);
+    toast.success(t("calendar.undone"));
+    announce(t("calendar.undone"));
+  };
+  undoLastMoveRef.current = undoLastMove;
+
+  const showUndoToast = (result: DayMoveResult, message: string) => {
+    const previous = undoRef.current;
+    if (previous) {
+      toast.dismiss(previous.toastId);
+      window.clearTimeout(previous.timeout);
+    }
+    const toastId = toast(
+      (item) => (
+        <span className="flex items-center gap-3">
+          <span className="text-sm font-semibold">{message}</span>
+          <button
+            type="button"
+            onClick={() => {
+              undoLastMove();
+              toast.dismiss(item.id);
+            }}
+            className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-black text-black"
+          >
+            {t("calendar.undo")}
+          </button>
+        </span>
+      ),
+      { duration: 6000 },
+    );
+    const timeout = window.setTimeout(() => {
+      if (undoRef.current?.toastId === toastId) undoRef.current = null;
+    }, 6000);
+    undoRef.current = { result, toastId, timeout };
+  };
+
+  const performDayMove = (fromKey: string, toKey: string, mode: DayMoveMode) => {
+    if (fromKey === toKey) {
+      announce(t("calendar.sameDay"));
+      return;
+    }
+    const source = calendarMap[fromKey];
+    if (!source || source.entries.length === 0) return;
+    const target = calendarMap[toKey];
+    const result = moveDay(
+      fromKey,
+      toKey,
+      mode,
+      source.entries.map((entry) => entry.id),
+      mode === "swap" ? (target?.entries.map((entry) => entry.id) ?? []) : undefined,
+    );
+    if (!result) return;
+
+    const label =
+      mode === "copy"
+        ? t("calendar.copiedTo")
+        : mode === "swap"
+          ? t("calendar.swappedWith")
+          : t("calendar.movedTo");
+    const movedWord =
+      result.moved === 1 ? t("calendar.entryWord") : t("calendar.entriesWord");
+    const message = `${label} ${result.moved} ${movedWord} → ${shortDate(parseDateKey(toKey), language)}`;
+    announce(message);
+    setJustMovedKey(toKey);
+    window.setTimeout(() => setJustMovedKey(null), 700);
+    showUndoToast(result, message);
+
+    // Flush the pending sync; if the server rejects it, restore the previous
+    // dates so the optimistic UI never diverges from the backend.
+    if (isOnline) {
+      void syncNow().catch(() => {
+        undoDayMove(result);
+        const current = undoRef.current;
+        if (current) {
+          toast.dismiss(current.toastId);
+          window.clearTimeout(current.timeout);
+          undoRef.current = null;
+        }
+        setJustMovedKey(null);
+        toast.error(t("calendar.saveFailed"));
+        announce(t("calendar.saveFailed"));
+      });
+    }
+  };
+
+  const handleDayKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    dayKey: string,
+    dayData?: CalendarDay,
+  ) => {
+    if (event.key === "Escape") {
+      if (keyboardDrag) {
+        event.preventDefault();
+        setKeyboardDrag(null);
+        announce(t("calendar.cancelled"));
+      }
+      return;
+    }
+
+    if (keyboardDrag) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const { fromKey, overKey } = keyboardDrag;
+        const mode = modeFromModifiers(event);
+        setKeyboardDrag(null);
+        if (overKey === fromKey) {
+          announce(t("calendar.sameDay"));
+          return;
+        }
+        performDayMove(fromKey, overKey, mode);
+        return;
+      }
+      const delta =
+        event.key === "ArrowLeft"
+          ? -1
+          : event.key === "ArrowRight"
+            ? 1
+            : event.key === "ArrowUp"
+              ? -7
+              : event.key === "ArrowDown"
+                ? 7
+                : 0;
+      if (delta !== 0) {
+        event.preventDefault();
+        const current = parseDateKey(keyboardDrag.overKey);
+        const next = addDays(current, delta);
+        const min = viewMode === "weekly" ? weekStart : calendarStart;
+        const max = viewMode === "weekly" ? weekEnd : calendarEnd;
+        if (next < min || next > max) return;
+        const nextKey = format(next, "yyyy-MM-dd");
+        setKeyboardDrag((drag) => (drag ? { ...drag, overKey: nextKey } : drag));
+        cellRefs.current.get(nextKey)?.focus();
+        announce(`${shortDate(next, language)} — ${t("calendar.dropHere")}`);
+      }
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (dayData && dayData.entries.length > 0) {
+        setKeyboardDrag({ fromKey: dayKey, overKey: dayKey });
+        announce(
+          `${t("calendar.pickedUp")} ${shortDate(parseDateKey(dayKey), language)}. ${t("calendar.dragKeyboardHint")}`,
+        );
+      } else {
+        handleSelectDay(parseDateKey(dayKey));
+      }
+    }
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.key.toLowerCase() !== "z") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (!undoRef.current) return;
+      event.preventDefault();
+      undoLastMoveRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => () => endDayDrag(), [endDayDrag]);
+
+  useEffect(
+    () => () => {
+      if (liveTimerRef.current) window.clearTimeout(liveTimerRef.current);
+      if (undoRef.current) window.clearTimeout(undoRef.current.timeout);
+    },
+    [],
+  );
+
   return (
     <div className="flex flex-col h-full md:min-h-0">
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveMessage}
+      </p>
       {/* Top Header */}
       <header className="border-b border-slate-200 bg-surface/80 px-4 py-3 backdrop-blur-md dark:border-slate-800 md:px-6 md:py-4">
         <div className="flex flex-col gap-3">
@@ -737,7 +1234,10 @@ export default function CalendarPage() {
       </header>
 
       {/* Calendar & Day View */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas"
+      >
         {/* Calendar Grid — swipeable carousel on mobile */}
         <div
           ref={gridRef}
@@ -920,6 +1420,32 @@ export default function CalendarPage() {
           onClose={() => setEditingInterestedPerson(null)}
         />
       )}
+
+      {dragView &&
+        createPortal(
+          <div
+            ref={previewRef}
+            className="pointer-events-none fixed left-0 top-0 z-[100] flex max-w-[17rem] flex-col gap-0.5 rounded-xl border border-slate-200 bg-surface px-3 py-2 shadow-xl dark:border-slate-700"
+            style={{
+              transform: `translate3d(${dragView.initialX + 16}px, ${dragView.initialY + 16}px, 0)`,
+            }}
+          >
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {dragView.dateLabel}
+            </span>
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-100">
+              {dragView.summary}
+            </span>
+            <span className="mt-0.5 inline-flex w-fit items-center rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black">
+              {dragView.mode === "copy"
+                ? t("calendar.dragCopy")
+                : dragView.mode === "swap"
+                  ? t("calendar.dragSwap")
+                  : t("calendar.dragMove")}
+            </span>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

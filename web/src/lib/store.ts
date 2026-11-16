@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { addMonths, startOfMonth } from "date-fns";
+import { addDays, addMonths, differenceInCalendarDays, startOfMonth } from "date-fns";
 import type {
   ServiceType,
   TimeEntry,
@@ -14,8 +14,10 @@ import type {
   NotificationPreferences,
   TimeToolsState,
   TimerPrefs,
+  DayMoveMode,
+  DayMoveResult,
 } from "@/types/data";
-import { DEFAULT_INTERESTED_STATUSES } from "@/types/data";
+import { calendarDateKey, DEFAULT_INTERESTED_STATUSES } from "@/types/data";
 import { isoWeekKey, isInterestedPersonCompleted } from "@/lib/isoWeek";
 import type {
   PresidingConfig,
@@ -304,6 +306,15 @@ interface AppState {
   addTimeEntry: (entry: Omit<TimeEntry, "id" | "created_at" | "updated_at">) => void;
   updateTimeEntry: (id: string, patch: Partial<TimeEntry>) => void;
   deleteTimeEntry: (id: string) => void;
+  /** Moves/copies/swaps every (or the given) entry of one local day to another. */
+  moveDay: (
+    fromDate: string,
+    toDate: string,
+    mode: DayMoveMode,
+    sourceIds?: string[],
+    targetIds?: string[],
+  ) => DayMoveResult | null;
+  undoDayMove: (result: DayMoveResult) => void;
 
   // goal actions
   addGoal: (goal: Omit<GoalDefinition, "id" | "created_at" | "updated_at">) => void;
@@ -490,6 +501,37 @@ function withPendingSync<T extends object>(state: T): T & { syncMetadata: SyncMe
   return {
     ...state,
     syncMetadata: createPendingSyncMetadata(),
+  };
+}
+
+const LOCAL_DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Parses `YYYY-MM-DD` as a local calendar date (never UTC, so no day shift). */
+function parseLocalDateKey(dateKey: string): Date | null {
+  if (!LOCAL_DATE_KEY_PATTERN.test(dateKey)) return null;
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Shifts an entry by whole local calendar days, preserving its wall-clock
+ * times (so it lands on the target day in every time zone). Only the dates
+ * change: ID, type, title, duration, notes, location and units are kept.
+ */
+function shiftEntryDate(entry: TimeEntry, deltaDays: number): TimeEntry {
+  if (deltaDays === 0) return entry;
+  const shift = (iso: string | null): string | null => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return addDays(date, deltaDays).toISOString();
+  };
+  return {
+    ...entry,
+    start_time: shift(entry.start_time) ?? entry.start_time,
+    end_time: shift(entry.end_time),
+    updated_at: now(),
   };
 }
 
@@ -1431,6 +1473,82 @@ presidingConfig: getDefaultPresidingConfig(),
             timeEntries: s.timeEntries.filter((te) => te.id !== id),
           })
         ),
+
+      moveDay: (fromDate, toDate, mode, sourceIds, targetIds) => {
+        const from = parseLocalDateKey(fromDate);
+        const to = parseLocalDateKey(toDate);
+        if (!from || !to || fromDate === toDate) return null;
+        const deltaDays = differenceInCalendarDays(to, from);
+        if (deltaDays === 0) return null;
+
+        const state = get();
+        const sourceFilter = sourceIds ? new Set(sourceIds) : null;
+        const targetFilter = targetIds ? new Set(targetIds) : null;
+        const sourceEntries = state.timeEntries.filter(
+          (entry) =>
+            calendarDateKey(entry.start_time) === fromDate &&
+            (!sourceFilter || sourceFilter.has(entry.id)),
+        );
+        if (sourceEntries.length === 0) return null;
+
+        const targetEntries =
+          mode === "swap"
+            ? state.timeEntries.filter(
+                (entry) =>
+                  calendarDateKey(entry.start_time) === toDate &&
+                  (!targetFilter || targetFilter.has(entry.id)),
+              )
+            : [];
+
+        const movedSource = sourceEntries.map((entry) => shiftEntryDate(entry, deltaDays));
+        const movedTarget = targetEntries.map((entry) => shiftEntryDate(entry, -deltaDays));
+        const createdIds: string[] = [];
+        let nextEntries: TimeEntry[];
+
+        if (mode === "copy") {
+          const copies = sourceEntries.map((entry) => {
+            const copy: TimeEntry = {
+              ...shiftEntryDate(entry, deltaDays),
+              id: uuid(),
+              created_at: now(),
+              updated_at: now(),
+            };
+            createdIds.push(copy.id);
+            return copy;
+          });
+          nextEntries = [...state.timeEntries, ...copies];
+        } else {
+          const shiftedById = new Map(
+            [...movedSource, ...movedTarget].map((entry) => [entry.id, entry]),
+          );
+          nextEntries = state.timeEntries.map((entry) => shiftedById.get(entry.id) ?? entry);
+        }
+
+        const snapshot =
+          mode === "swap"
+            ? [...sourceEntries, ...targetEntries]
+            : mode === "move"
+              ? sourceEntries
+              : [];
+
+        set(withPendingSync({ timeEntries: nextEntries }));
+        return { mode, fromDate, toDate, moved: sourceEntries.length, createdIds, snapshot };
+      },
+
+      undoDayMove: (result) =>
+        set((s) => {
+          const removed = new Set(result.createdIds);
+          const restored = new Set(result.snapshot.map((entry) => entry.id));
+          const kept = s.timeEntries.filter(
+            (entry) => !removed.has(entry.id) && !restored.has(entry.id),
+          );
+          return withPendingSync({
+            timeEntries: [
+              ...kept,
+              ...result.snapshot.map((entry) => ({ ...entry, updated_at: now() })),
+            ],
+          });
+        }),
 
       // â”€â”€ Goals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       addGoal: (goal) =>
