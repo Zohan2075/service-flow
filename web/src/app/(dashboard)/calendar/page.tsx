@@ -93,7 +93,7 @@ function DayPlanBadge({
   state,
   regularCount,
 }: {
-  state: "plan" | "mixed" | "none";
+  state: "plan" | "mixed";
   regularCount: number;
 }) {
   const { t } = useT();
@@ -113,30 +113,18 @@ function DayPlanBadge({
     );
   }
 
-  if (state === "mixed") {
-    return (
-      <span
-        title={t("calendar.planMixed")}
-        className={cn(base, "bg-amber-500/10 text-slate-600 dark:text-slate-300")}
-      >
-        <span className="flex items-center gap-0.5">
-          <span className="size-1.5 rounded-full bg-amber-400" />
-          <span className="size-1.5 rounded-full bg-primary" />
-        </span>
-        <span className={labelClass}>
-          {t("calendar.plannedShort")} +{regularCount}
-        </span>
-      </span>
-    );
-  }
-
   return (
     <span
-      title={t("calendar.noPlan")}
-      className={cn(base, "bg-slate-500/10 text-slate-500 dark:text-slate-400")}
+      title={t("calendar.planMixed")}
+      className={cn(base, "bg-amber-500/10 text-slate-600 dark:text-slate-300")}
     >
-      <span className="material-symbols-outlined text-[11px] leading-none">remove</span>
-      <span className={labelClass}>{t("calendar.noPlan")}</span>
+      <span className="flex items-center gap-0.5">
+        <span className="size-1.5 rounded-full bg-amber-400" />
+        <span className="size-1.5 rounded-full bg-primary" />
+      </span>
+      <span className={labelClass}>
+        {t("calendar.plannedShort")} +{regularCount}
+      </span>
     </span>
   );
 }
@@ -373,9 +361,10 @@ export default function CalendarPage() {
                     : regularCount === 0
                       ? "plan"
                       : "mixed";
-              const showPlanState = planModeEnabled && planState !== "empty";
-              const badgeState: "plan" | "mixed" | "none" =
-                planState === "plan" ? "plan" : planState === "mixed" ? "mixed" : "none";
+              // "No plan" is the neutral default: no badge, rail or tint.
+              const showPlanState =
+                planModeEnabled && (planState === "plan" || planState === "mixed");
+              const badgeState: "plan" | "mixed" = planState === "plan" ? "plan" : "mixed";
               const stateSurface = !showPlanState
                 ? ""
                 : planState === "plan"
@@ -458,14 +447,7 @@ export default function CalendarPage() {
                           <span className="h-1/2 w-full bg-primary" />
                         </>
                       ) : (
-                        <span
-                          className={cn(
-                            "h-full w-full",
-                            planState === "plan"
-                              ? "bg-amber-400"
-                              : "bg-slate-300/80 dark:bg-slate-600/70",
-                          )}
-                        />
+                        <span className="h-full w-full bg-amber-400" />
                       )}
                     </span>
                   )}
@@ -1362,10 +1344,6 @@ export default function CalendarPage() {
                 <span className="h-1/2 w-full bg-primary" />
               </span>
               {t("calendar.planMixed")}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-3 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-              {t("calendar.noPlan")}
             </span>
           </div>
         )}
