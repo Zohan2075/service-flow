@@ -87,6 +87,60 @@ function parseDateKey(dateKey: string): Date {
   return new Date(year, month - 1, day);
 }
 
+/* ─── Day plan-state badge (plan / mixed / no plan) ──────────────────────── */
+
+function DayPlanBadge({
+  state,
+  regularCount,
+}: {
+  state: "plan" | "mixed" | "none";
+  regularCount: number;
+}) {
+  const { t } = useT();
+  const base =
+    "inline-flex shrink-0 items-center justify-center gap-0.5 rounded-full px-0.5 py-0.5 text-[9px] font-black uppercase tracking-wide md:gap-1 md:px-1.5";
+  const labelClass = "hidden md:inline";
+
+  if (state === "plan") {
+    return (
+      <span
+        title={t("calendar.planOnly")}
+        className={cn(base, "bg-amber-500/15 text-amber-700 dark:text-amber-300")}
+      >
+        <span className="material-symbols-outlined text-[11px] leading-none">flag</span>
+        <span className={labelClass}>{t("calendar.plannedShort")}</span>
+      </span>
+    );
+  }
+
+  if (state === "mixed") {
+    return (
+      <span
+        title={t("calendar.planMixed")}
+        className={cn(base, "bg-amber-500/10 text-slate-600 dark:text-slate-300")}
+      >
+        <span className="flex items-center gap-0.5">
+          <span className="size-1.5 rounded-full bg-amber-400" />
+          <span className="size-1.5 rounded-full bg-primary" />
+        </span>
+        <span className={labelClass}>
+          {t("calendar.plannedShort")} +{regularCount}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      title={t("calendar.noPlan")}
+      className={cn(base, "bg-slate-500/10 text-slate-500 dark:text-slate-400")}
+    >
+      <span className="material-symbols-outlined text-[11px] leading-none">remove</span>
+      <span className={labelClass}>{t("calendar.noPlan")}</span>
+    </span>
+  );
+}
+
 export default function CalendarPage() {
   const { t, language } = useT();
   const { syncNow, isOnline } = useSync();
@@ -306,10 +360,41 @@ export default function CalendarPage() {
               const isSelected = isSameDay(day, selectedDate);
               const isTodayDay = isToday(day);
               const isCurrentMonthDay = isSameMonth(day, monthDate);
-              const hasPlannedEntries = Boolean(
-                dayData && (dayData.planned_duration_seconds > 0 || dayData.planned_units > 0)
-              );
-              const hasEntries = Boolean(dayData && dayData.entries.length > 0);
+              const entriesCount = dayData?.entries.length ?? 0;
+              const plannedCount = dayData
+                ? dayData.entries.filter((entry) => isPlannedEntry(entry)).length
+                : 0;
+              const regularCount = entriesCount - plannedCount;
+              const planState: "empty" | "plan" | "mixed" | "none" =
+                entriesCount === 0
+                  ? "empty"
+                  : plannedCount === 0
+                    ? "none"
+                    : regularCount === 0
+                      ? "plan"
+                      : "mixed";
+              const showPlanState = planModeEnabled && planState !== "empty";
+              const badgeState: "plan" | "mixed" | "none" =
+                planState === "plan" ? "plan" : planState === "mixed" ? "mixed" : "none";
+              const stateSurface = !showPlanState
+                ? ""
+                : planState === "plan"
+                  ? "bg-amber-50/70 dark:bg-amber-950/20"
+                  : planState === "mixed"
+                    ? "bg-gradient-to-br from-amber-500/15 via-transparent to-primary/15"
+                    : "";
+              const hasEntries = entriesCount > 0;
+              const countLabel = (count: number) =>
+                `${count} ${count === 1 ? t("calendar.entryWord") : t("calendar.entriesWord")}`;
+              const stateAria = !planModeEnabled
+                ? countLabel(entriesCount)
+                : planState === "empty"
+                  ? countLabel(0)
+                  : planState === "plan"
+                    ? `${t("calendar.planOnly")} · ${countLabel(plannedCount)}`
+                    : planState === "mixed"
+                      ? `${t("calendar.planMixed")} · ${plannedCount} ${t("calendar.plannedShort")}, ${countLabel(regularCount)}`
+                      : `${t("calendar.noPlan")} · ${countLabel(regularCount)}`;
               const dragSourceKey = dragView ? dragView.fromKey : keyboardDrag?.fromKey ?? null;
               const dragTargetKey = dragView ? dragView.overKey : keyboardDrag?.overKey ?? null;
               const isDragSource = dragSourceKey === key;
@@ -333,11 +418,7 @@ export default function CalendarPage() {
                   data-day-key={key}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${shortDate(day, language)} — ${dayData?.entries.length ?? 0} ${
-                    (dayData?.entries.length ?? 0) === 1
-                      ? t("calendar.entryWord")
-                      : t("calendar.entriesWord")
-                  }`}
+                  aria-label={`${shortDate(day, language)} — ${stateAria}`}
                   title={hasEntries ? t("calendar.dragHint") : undefined}
                   onClick={() => {
                     if (suppressClickRef.current) return;
@@ -346,7 +427,7 @@ export default function CalendarPage() {
                   onPointerDown={(event) => startDayDrag(event, key, dayData)}
                   onKeyDown={(event) => handleDayKeyDown(event, key, dayData)}
                   className={cn(
-                    "min-h-[4.5rem] border-r border-b border-slate-100 p-1.5 transition-colors motion-reduce:transition-none dark:border-slate-800 sm:min-h-[5.25rem] md:min-h-24 md:p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
+                    "relative min-h-[4.5rem] border-r border-b border-slate-100 p-1.5 transition-colors motion-reduce:transition-none dark:border-slate-800 sm:min-h-[5.25rem] md:min-h-24 md:p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
                     cursorClass,
                     isInvalidTarget
                       ? ""
@@ -354,30 +435,61 @@ export default function CalendarPage() {
                         ? "bg-amber-50/80 ring-2 ring-inset ring-amber-400 dark:bg-amber-950/30"
                         : isSelected
                           ? "bg-primary/10 ring-2 ring-inset ring-primary/40"
-                          : isCurrentMonthDay
-                            ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                            : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60",
-                    hasPlannedEntries && !isSelected && !isDragOver && !isInvalidTarget && "bg-amber-50/70 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)] dark:bg-amber-950/20",
+                          : cn(
+                              stateSurface ||
+                                (isCurrentMonthDay
+                                  ? "hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                                  : "bg-slate-50/70 dark:bg-slate-800/30 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"),
+                              (planState === "plan" || planState === "mixed") &&
+                                "hover:bg-amber-100/40 dark:hover:bg-amber-950/25",
+                            ),
                     isDragSource && "opacity-40",
                     justMovedKey === key && !isDragOver && "bg-amber-100/60 dark:bg-amber-900/20"
                   )}
                 >
-                  <span
-                    data-day-grip
-                    className={cn(
-                      "inline-flex select-none items-center justify-center size-6 md:size-7 rounded-full text-xs md:text-sm font-bold mb-1 md:mb-2",
-                      hasEntries && "cursor-grab",
-                      isTodayDay
-                        ? "bg-primary text-white"
-                        : isSelected
-                          ? "text-primary font-extrabold"
-                          : isCurrentMonthDay
-                            ? "text-slate-700 dark:text-slate-200"
-                            : "text-slate-400 dark:text-slate-500"
+                  {showPlanState && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-0 left-0 flex w-1 flex-col overflow-hidden"
+                    >
+                      {planState === "mixed" ? (
+                        <>
+                          <span className="h-1/2 w-full bg-amber-400" />
+                          <span className="h-1/2 w-full bg-primary" />
+                        </>
+                      ) : (
+                        <span
+                          className={cn(
+                            "h-full w-full",
+                            planState === "plan"
+                              ? "bg-amber-400"
+                              : "bg-slate-300/80 dark:bg-slate-600/70",
+                          )}
+                        />
+                      )}
+                    </span>
+                  )}
+                  <div className="mb-1 flex items-center justify-between gap-0.5 md:mb-2 md:gap-1">
+                    <span
+                      data-day-grip
+                      className={cn(
+                        "inline-flex shrink-0 select-none items-center justify-center size-6 md:size-7 rounded-full text-xs md:text-sm font-bold",
+                        hasEntries && "cursor-grab",
+                        isTodayDay
+                          ? "bg-primary text-white"
+                          : isSelected
+                            ? "text-primary font-extrabold"
+                            : isCurrentMonthDay
+                              ? "text-slate-700 dark:text-slate-200"
+                              : "text-slate-400 dark:text-slate-500"
+                      )}
+                    >
+                      {format(day, "d")}
+                    </span>
+                    {showPlanState && (
+                      <DayPlanBadge state={badgeState} regularCount={regularCount} />
                     )}
-                  >
-                    {format(day, "d")}
-                  </span>
+                  </div>
 
                   {/* Desktop: show entry chips (dragging from them moves the whole day) */}
                   <div className="hidden md:block">
@@ -1238,6 +1350,26 @@ export default function CalendarPage() {
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-3 md:p-6 pb-[calc(env(safe-area-inset-bottom,_0px)+6.75rem)] md:pb-6 bg-canvas"
       >
+        {planModeEnabled && (
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-3 w-1 rounded-full bg-amber-400" />
+              {t("calendar.planOnly")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="flex h-3 w-1 flex-col overflow-hidden rounded-full">
+                <span className="h-1/2 w-full bg-amber-400" />
+                <span className="h-1/2 w-full bg-primary" />
+              </span>
+              {t("calendar.planMixed")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-3 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+              {t("calendar.noPlan")}
+            </span>
+          </div>
+        )}
+
         {/* Calendar Grid — swipeable carousel on mobile */}
         <div
           ref={gridRef}
